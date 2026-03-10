@@ -8,6 +8,27 @@
 
 **Tech Stack:** Next.js 15, React 19, Three.js, FastAPI, WebSocket, Playwright, Vitest, pytest
 
+## Execution Status
+
+As of 2026-03-10:
+
+- Lane A `Avatar Catalog and Selector UX`: done
+- Lane B `Local Avatar Assets and Runtime Adapters`: done
+- Lane C `Lesson Session UX and Text-Only Flow`: done
+- Lane D `Offline Browser Smoke Matrix`: done
+- Lane E `Live Provider Bakeoff and Latency Closure`: done
+- Lane F `Pedagogy, Eval, Demo, Acceptance`: done
+- Lane G `Provider Cost and Asset Licensing Guardrails`: done
+- Lane H `UI Polish and Usability Pass`: done
+
+Parallel-agent handoff contract:
+
+1. pull latest
+2. read the assigned lane doc
+3. do only that doc
+4. do not rename avatar ids, latency event names, or `session.reset`
+5. run lane-local verification before handoff
+
 ---
 
 ## Recommended Product Shape
@@ -209,6 +230,24 @@ Sources:
 3. Define when Simli / HeyGen are allowed in testing.
 4. Add a reviewer-facing note separating placeholder originals from licensed third-party assets.
 
+### Lane H: UI Polish and Usability Pass
+
+**Goal:** Make the lesson flow obvious, readable, and demo-ready once the core UX is implemented.
+
+**Files:**
+- Modify: `frontend/components/TutorSession.tsx`
+- Modify: `frontend/components/AvatarSelector.tsx`
+- Modify: `frontend/components/ConversationHistory.tsx`
+- Modify: `frontend/components/MicCapture.tsx`
+- Modify: `frontend/app/globals.css`
+- Test: `frontend/e2e/*.spec.ts`
+
+**Steps:**
+1. Improve page hierarchy so lesson state, transcript/history, and tutor output read in a clear order.
+2. Make `Send Text Turn`, mic controls, `Interrupt`, and `New Lesson` visually distinct.
+3. Tighten mobile layout, keyboard access, and labels.
+4. Polish empty, loading, and error states for reviewer-facing quality.
+
 ## Parallelization
 
 Can run in parallel now:
@@ -217,6 +256,7 @@ Can run in parallel now:
 - Lane B and Lane D once Lane A manifest shape lands
 - Lane F can start on eval fixtures immediately
 - Lane G can start immediately
+- Lane H should start after Lane A and Lane C land their core UX
 
 Do not parallelize yet:
 
@@ -225,6 +265,7 @@ Do not parallelize yet:
 - session reset semantics
 - live provider benchmark contract
 - asset licensing exceptions
+- major layout reshuffles before lesson UX settles
 
 ## My 3 Steps
 

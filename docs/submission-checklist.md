@@ -2,17 +2,28 @@
 
 Complete this checklist before submitting the Nerdy MVP.
 
+## Closure Lane Status
+
+- [x] Lane A / Task 23 complete
+- [x] Lane B / Task 24 complete
+- [x] Lane C / Task 25 complete
+- [x] Lane D / Task 26 complete
+- [x] Lane E / Task 27 complete
+- [x] Lane F / Task 28 complete
+- [x] Lane G / Task 29 complete
+- [x] Lane H / Task 30 complete
+
 ## Code Quality
 
 ### Backend
-- [ ] All tests pass: `python -m pytest -q` (54 tests)
+- [ ] All tests pass: `python -m pytest -q` (76 tests)
 - [ ] No lint errors
 - [ ] Environment variables documented in `.env.example`
 - [ ] Provider architecture complete with registry
 - [ ] STT → LLM → TTS → Avatar pipeline working
 
 ### Frontend
-- [ ] All tests pass: `pnpm test` (18 tests)
+- [ ] All tests pass: `pnpm test` (53 tests)
 - [ ] Typecheck passes: `pnpm typecheck`
 - [ ] Build succeeds: `pnpm build`
 - [ ] No console errors during demo flow
@@ -24,10 +35,12 @@ Complete this checklist before submitting the Nerdy MVP.
 ### Core Docs
 - [ ] `README.md` - installation, startup, usage
 - [ ] `docs/cost-performance.md` - provider choices, cost analysis
+- [ ] `docs/avatar-costs-and-licensing.md` - demo-safe asset policy
 - [ ] `docs/requirements-trace.md` - complete with current status
 - [ ] `docs/demo-script.md` - rehearsed and timed
 - [ ] `docs/demo-operator-notes.md` - startup and recovery steps
 - [ ] `docs/reviewer-checklist.md` - quality gates
+- [ ] `docs/eval-summary.md` - multi-turn scorecard
 
 ### Supporting Docs
 - [ ] `docs/ARCHITECTURE.md` - system design
@@ -46,6 +59,22 @@ Complete this checklist before submitting the Nerdy MVP.
 - [ ] Latency is under 1 second end-to-end
 - [ ] Avatar mouth syncs with speech
 - [ ] Interruption works instantly
+
+### Multi-Turn Session
+- [ ] Conversation history persists across turns
+- [ ] Tutor uses context from previous turns
+- [ ] Follow-up questions advance understanding
+- [ ] Learning arc visible across 3+ turns
+- [ ] `New Lesson` button clears history properly
+
+### Avatar and Provider Lock (Demo Day Configuration)
+- [ ] Default avatar: `human-css-2d` (2D CSS human)
+- [ ] Alternative avatars available: `human-threejs-3d`, `robot-css-2d`
+- [ ] STT provider: Deepgram (production baseline)
+- [ ] Primary LLM: MiniMax-M2.5
+- [ ] Fallback LLM: Gemini 3.1 Flash-Lite Preview (eval only)
+- [ ] Primary TTS: Cartesia Sonic-3
+- [ ] Avatar providers: CSS (2D), Three.js (3D)
 
 ### Subject Coverage
 - [ ] Math prompts work (algebra, solving for x)
@@ -75,10 +104,11 @@ Complete this checklist before submitting the Nerdy MVP.
 
 ### Demo Flow
 - [ ] Rehearsed the demo script (4-5 minutes target)
-- [ ] Avatar switching demonstrated (2D → 3D → 2D)
+- [ ] Avatar switching demonstrated (`human-css-2d` → `human-threejs-3d` → `robot-css-2d`)
 - [ ] Interruption demonstrated during speech
 - [ ] All 3 subjects shown (Math, Science, English)
 - [ ] Grade band change demonstrated
+- [ ] Multi-turn lesson arc shown before switching concepts
 
 ### Recording
 - [ ] Demo video recorded (1-5 minutes)
@@ -105,10 +135,17 @@ Complete this checklist before submitting the Nerdy MVP.
 ## Test Evidence
 
 ### Automated Tests
-- [ ] Backend tests passing (54/54)
-- [ ] Frontend tests passing (18/18)
+- [ ] Backend tests passing (`76` current target)
+- [ ] Frontend tests passing (`53` current frontend verify target)
 - [ ] Typecheck passing (no TS errors)
 - [ ] Build succeeds (production bundle)
+
+### Multi-Turn Evaluation
+- [ ] Math lesson fixture: `eval/fixtures/multi_turn/math-linear-equations.json`
+- [ ] Science lesson fixture: `eval/fixtures/multi_turn/science_photosynthesis.json`
+- [ ] English lesson fixture: `eval/fixtures/multi_turn/english_subject_verb.json`
+- [ ] Socratic quality measured across follow-up turns
+- [ ] Learning arc verified (diagnose → practice → verify → summarize)
 
 ### Manual Verification
 - [ ] Full demo runs without errors
@@ -117,6 +154,17 @@ Complete this checklist before submitting the Nerdy MVP.
 - [ ] Subject switching works
 - [ ] Grade band switching works
 - [ ] Avatar switching works
+- [ ] `New Lesson` clears transcript and tutor reply
+- [ ] Conversation history proves lesson continuity
+
+## Acceptance Evidence
+
+- [ ] `docs/EVAL.md` updated with multi-turn scoring and locked presets
+- [ ] `docs/eval-summary.md` linked in reviewer handoff
+- [ ] `docs/demo-script.md` rehearsed against the locked concept order
+- [ ] `docs/demo-operator-notes.md` updated with reset and preset notes
+- [ ] Task 27 benchmark report linked once live numbers land
+- [ ] Task 27 requirements-trace update linked once live numbers land
 
 ## Submission Package
 
@@ -187,8 +235,8 @@ pnpm typecheck
 
 ## Version Info
 
-- **Date**: 2025-03-10
-- **Python tests**: 54 passing
-- **Frontend tests**: 18 passing
+- **Date**: 2026-03-10
+- **Python tests**: `76` current target after Tasks 28-30
+- **Frontend tests**: `53` current frontend verify target
 - **Typecheck**: Passing
 - **Build**: Success

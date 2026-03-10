@@ -1,158 +1,88 @@
-# Requirements Trace
+# Requirements Trace Matrix
 
-Maps each requirement to implementation tasks, evidence, and review focus.
+## Overview
 
-Supporting docs:
+This document traces the hard latency requirements from the original spec through to implementation status.
 
-- `docs/testing-plan.md`
-- `docs/reviewer-checklist.md`
-- `docs/cost-performance.md`
+| ID | Requirement | Threshold | Source | Implementation | Status |
+|----|-------------|-----------|--------|----------------|--------|
+| LR-1 | `speech_end -> stt_final` p95 | < 350 ms | Task 03 spec | `latency_tracker.py` stage calculation | FAIL (`live`), PASS (`fixture`) |
+| LR-2 | `speech_end -> tts_first_audio` p50 | < 500 ms | Task 03 spec | `latency_tracker.py` stage calculation | FAIL (`live`), PASS (`fixture`) |
+| LR-3 | `speech_end -> tts_first_audio` p95 | < 900 ms | Task 03 spec | `latency_tracker.py` stage calculation | FAIL (`live`), PASS (`fixture`) |
 
-## Latency
+## Event Trace Requirements
 
-| ID | Requirement | Tasks | Evidence / Tests | Review |
-| --- | --- | --- | --- | --- |
-| L1 | End-to-end response under `1s` | 1, 7, 10, 12, 16 | benchmark runner, benchmark report, live timing UI | review p50 and p95, not one-off wins |
-| L2 | Ideal end-to-end under `500ms` | 1, 12, 16, 21 | benchmark report trend line | review whether ideal bar is real or synthetic |
-| L3 | First audio under `500ms` | 6, 7, 10, 12, 16 | TTS timing events, benchmark report | review commit mode and first audio path |
-| L4 | Lip-sync within `+/-80ms` | 7, 9, 10, 16, 12 | avatar timing tests, sync instrumentation | review visible sync by eye and metric |
-| L5 | Full response under `3s` | 4, 6, 7, 10, 12 | benchmark runs, response policy tests | review long-turn behavior |
-| L6 | Per-stage latency measurement | 1, 12, 16 | latency tracker tests, live UI metrics | review missing frontend events |
-| L7 | Full pipeline streaming, not sequential | 2, 3, 4, 6, 7, 15 | session pipeline tests, demo-turn smoke | review any fake batching or hard-coded delays |
+| Event | Required By | Captured In | Fixture Status | Live Status |
+|-------|-------------|-------------|----------------|-------------|
+| `speech_end` | All STT metrics | `session/server.py` | Yes | Yes |
+| `stt_partial_stable` | Interim transcript | `deepgram_client.py` + live benchmark runner | No in checked-in fixture report | Yes, proxy from prerecorded completion |
+| `stt_final` | STT latency | `deepgram_client.py` + live benchmark runner | Yes | Yes, measured with live Deepgram |
+| `llm_first_token` | LLM latency | `gemini_fallback_client.py` + live benchmark runner | Yes | Yes, measured with live Gemini in runtime and benchmark paths |
+| `tts_first_audio` | TTS latency | `cartesia_client.py` + live benchmark runner | Yes | Yes, measured with live Cartesia in runtime and benchmark paths |
+| `first_viseme` | Avatar sync | `TutorSession.tsx` + `session_metrics.ts` + live benchmark runner | Surfaced in frontend latency UI | Yes, playback-start proxy in benchmark path |
+| `audio_done` | Turn lifecycle | `TutorSession.tsx` + `session_metrics.ts` + live benchmark runner | Surfaced in frontend latency UI | Yes, WAV-duration proxy in benchmark path |
 
-## Video Interaction
+## Provider Implementation Status
 
-| ID | Requirement | Tasks | Evidence / Tests | Review |
-| --- | --- | --- | --- | --- |
-| V1 | Video-based tutor interaction | 8, 9, 13, 22 | runnable UI, demo video | review whether it reads as a tutor, not a panel demo |
-| V2 | Voice input | 8, 15, 18 | browser mic smoke tests | review permission UX and browser support |
-| V3 | Voice output | 7, 10, 18 | playback tests, demo-turn smoke | review interruption and queued audio behavior |
-| V4 | Real-time avatar / visual tutor | 8, 9, 16 | avatar renderer tests, live UI | review state clarity: idle/listening/thinking/speaking |
-| V5 | Smooth lip-sync | 7, 9, 16, 12 | avatar timing tests, benchmark note | review mouth motion quality by eye |
-| V6 | Natural conversational flow | 4, 10, 13, 18 | prompt-policy tests, smoke flow | review pause length and interruption feel |
+| Provider | Type | Live Code | Test Coverage | API Key Variable |
+|----------|------|-----------|---------------|------------------|
+| Deepgram | STT | Yes (WebSocket + benchmark HTTP path) | Yes | `DEEPGRAM_API_KEY` |
+| MiniMax | LLM | Stub fallback only | Yes | `MINIMAX_API_KEY` |
+| Gemini | LLM | Yes in app runtime and benchmark CLI | Yes | `GEMINI_API_KEY` or `GOOGLE_AI_API_KEY` |
+| Cartesia | TTS | Yes in app runtime and benchmark CLI | Yes | `CARTESIA_API_KEY` |
+| MiniMax | TTS | No in app runtime | Yes | `MINIMAX_SPEECH_API_KEY` |
 
-### Avatar Implementation (NEW)
+## Test Coverage
 
-| ID | Feature | Implementation | Evidence | Review |
-| --- | --- | --- | --- | --- |
-| V4.1 | 2D CSS avatar | `AvatarRenderer.tsx` | component tests, visual review | review state transitions |
-| V4.2 | 3D Three.js avatar | `Avatar3D.tsx` (lazy-loaded) | typecheck, render loop correctness | review 3D rendering quality |
-| V4.3 | Provider switching | `backend/providers/avatar/*` | registry tests, UI toggle | review switching hot-reloads correctly |
-| V4.4 | Lip-sync (2D) | `getMouthOpenAmount()` | avatar timing tests | review vowel/consonant weighting |
-| V4.5 | Lip-sync (3D) | render loop reads timestamps | visual review, state refresh | review mouth motion matches timing |
-| V5.1 | Stale props fix | refs for state/timestamps/nowMs/energy | regression avoided | review props flow correctly to render loop |
-| V5.2 | Lazy loading | `next/dynamic` import | bundle size check, loading UI | review 2D path doesn't pay 3D cost |
+| Test File | Coverage | Type |
+|-----------|----------|------|
+| `backend/benchmarks/run_latency_benchmark.py` | Fixture CLI, live execution entrypoint, event-log analysis, comparison helpers | Unit |
+| `backend/benchmarks/live_provider_benchmark.py` | Real live stack: Deepgram + Gemini + Cartesia | Integration |
+| `tests/benchmarks/test_run_latency_benchmark.py` | Required event coverage + fixture/live comparison | Unit |
+| `tests/benchmarks/test_live_provider_benchmark.py` | Gemini SSE parsing + WAV duration parsing | Unit |
+| `tests/session/test_server.py` | Session flow | Integration |
+| `tests/session/test_server_pipeline.py` | End-to-end | E2E |
 
-## Educational Quality
+## Gaps to Production
 
-| ID | Requirement | Tasks | Evidence / Tests | Review |
-| --- | --- | --- | --- | --- |
-| E1 | Ask guiding questions | 4, 11 | prompt policy tests, Socratic checks | review direct-answer leakage |
-| E2 | Scaffold with smaller questions | 4, 11 | eval fixtures, scoring helpers | review whether follow-ups build logically |
-| E3 | Adapt to student responses | 4, 17, 11 | prompt-builder tests, eval runs | review multi-turn behavior, not just first turn |
-| E4 | Redirect wrong answers gently | 4, 11 | rubric, Socratic checks | review tone and correction style |
-| E5 | Ask students to explain why when right | 4, 11 | eval set, scoring helpers | review strong-answer follow-up path |
-| E6 | Grade-appropriate for `6-12` | 4, 17, 11 | prompt-builder tests, eval rubric | review grade-band controls in UI and prompt |
-| E7 | Maintain subject correctness | 4, 11, 20 | eval runs, reviewer checklist | review domain correctness on demo concepts |
-| E8 | Encouraging and engaging | 4, 11 | Socratic checks, demo script | review tone drift |
-| E9 | Cover `1-3` concepts per session | 13, 22 | demo script, demo video | review concept scope in final demo |
-| E10 | Clear learning arc in demo | 13, 22 | demo script, demo recording | review beginning, middle, end arc |
-| E11 | Most tutor turns end with a question | 4, 11 | response policy tests, scoring helpers | review percentage across eval turns |
+1. **Proxy Stages:** `stt_partial_stable`, `first_viseme`, and `audio_done` are still benchmark proxies, not native frontend-live captures
+2. **Cost Controls:** no per-request spend limits in the benchmark CLI yet
+3. **CI Integration:** live benchmarks are not automated in CI
+4. **Performance Gap:** live stack misses the hard latency budget by a large margin
 
-## Architecture and System
+## Requirement Validation
 
-| ID | Requirement | Tasks | Evidence / Tests | Review |
-| --- | --- | --- | --- | --- |
-| A1 | Clear pipeline stages | 1, 2, 20 | architecture docs, requirement trace | review event and message boundaries |
-| A2 | Efficient serving strategy | 2, 12, 21 | benchmark report, cost/perf note | review whether current baseline is enough for demo |
-| A3 | Streaming architecture | 2, 3, 4, 7, 15 | pipeline tests, smoke tests | review no fake sync gaps |
-| A4 | Benchmark hooks at every stage | 1, 12, 16 | latency tracker, benchmark report | review missing `first_viseme` / `audio_done` |
-| A5 | Cost / performance tradeoff analysis | 21, 12 | cost/performance note | review whether provider choices are justified |
+### LR-1: `speech_end -> stt_final` p95 < 350 ms
 
-### Provider Architecture (NEW)
+- **Fixture Result:** 120 ms (PASS)
+- **Live Result:** 924.1 ms p95 on 2026-03-10 (FAIL)
+- **Validation Path:** `python -m backend.benchmarks.run_latency_benchmark --mode live --runs-per-prompt 1`
 
-| ID | Feature | Implementation | Evidence | Review |
-| --- | --- | --- | --- | --- |
-| A1.1 | STT provider registry | `backend/providers/stt/*` | factory tests, Deepgram wrapper | review hot-swap works |
-| A1.2 | LLM provider registry | `backend/providers/llm/*` | factory tests, MiniMax/Gemini wrappers | review fallback triggers correctly |
-| A1.3 | TTS provider registry | `backend/providers/tts/*` | factory tests, Cartesia wrapper | review voice config merges |
-| A1.4 | Avatar provider registry | `backend/providers/avatar/*` | factory tests, Three.js provider | review 2D/3D switching |
+### LR-2: `speech_end -> tts_first_audio` p50 < 500 ms
 
-## Inputs and Outputs
+- **Fixture Result:** 440 ms (PASS)
+- **Live Result:** 3407.9 ms p50 on 2026-03-10 (FAIL)
+- **Validation Path:** real live benchmark runner now exists
 
-| ID | Requirement | Tasks | Evidence / Tests | Review |
-| --- | --- | --- | --- | --- |
-| IO1 | Text or audio student input | 8, 15, 18 | typed flow + mic smoke | review typed fallback and live mic both work |
-| IO2 | Subject and grade-level context | 17 | prompt-builder and session tests | review UI affordance and prompt contract |
-| IO3 | Conversation history | 17 | session pipeline tests | review multi-turn memory |
-| IO4 | Student pacing / preferences when available | 17 | prompt-builder tests | review whether this is MVP or optional |
-| IO5 | Streamed tutor text | 4, 6, 18 | session tests, smoke tests | review committed text path |
-| IO6 | Synthesized tutor voice | 7, 10, 18 | playback tests, smoke tests | review audio artifact rate |
-| IO7 | Avatar / video output | 9, 16, 22 | UI proof, demo video | review final visual quality |
-| IO8 | Optional diagrams / visual aids | deferred | none yet | decide if truly optional for MVP |
-| IO9 | Latency and quality metrics | 1, 11, 12, 16, 20 | benchmark + eval docs | review whether metrics are reviewer-friendly |
+### LR-3: `speech_end -> tts_first_audio` p95 < 900 ms
 
-### Audio Transport (NEW)
+- **Fixture Result:** 480 ms (PASS)
+- **Live Result:** 3829.3 ms p95 on 2026-03-10 (FAIL)
+- **Validation Path:** real live benchmark runner now exists
 
-| ID | Feature | Implementation | Evidence | Review |
-| --- | --- | --- | --- | --- |
-| IO1.1 | Mic capture records bytes | `BrowserAudioCapture` | audio capture tests | review bytes_b64 populated |
-| IO1.2 | Chunk shape with bytes_b64 | WebSocket message schema | session pipeline tests | review bytes sent over socket |
-| IO1.3 | Typed prompt fallback | server.py message handling | typed turn smoke | review graceful fallback when no mic |
+## Mitigation for Live Failures
 
-## Deliverables and Packaging
+If live benchmarks fail the hard requirements:
 
-| ID | Requirement | Tasks | Evidence / Tests | Review |
-| --- | --- | --- | --- | --- |
-| P1 | Working low-latency prototype | 2 through 19 | unit, integration, smoke, manual run | review full loop on clean machine |
-| P2 | Latency benchmarking framework | 1, 12 | benchmark tests and report | review synthetic vs live-provider gaps |
-| P3 | Educational evaluation pack | 11, 20 | eval fixtures, rubric, scoring | review coverage across math/science/English |
-| P4 | `1-5` minute demo video | 13, 22 | recorded artifact | review pacing and visual clarity |
-| P5 | App runs from small setup | 19, 22 | README, startup script, smoke command | review from zero-context setup |
-| P6 | README and usage docs | 19, 20, 22 | docs review | review exact commands and env vars |
-| P7 | Explicit limitations and recommendations | 12, 21, 22 | benchmark report, cost/perf note | review honesty and next-step clarity |
+1. **Parallelization:** Start LLM prefetch during STT finalization
+2. **Streaming TTS:** Begin TTS as soon as first tokens arrive (not full phrase)
+3. **Provider Selection:** Use faster regional endpoints
+4. **Budget Adjustment:** Re-evaluate thresholds based on pedagogy value vs cost
 
-## Test Status (2025-03-10)
+## References
 
-### Backend
-- **54 tests passing** (`pytest`)
-- STT, LLM, TTS, session, metrics all covered
-- Provider architecture fully tested
-
-### Frontend
-- **18 tests passing** (`pnpm test`)
-- Avatar timing, playback, session metrics, audio capture covered
-- AvatarRenderer, AudioPlayer, TutorSession components tested
-- Avatar registry, driver, timing utilities tested
-
-### Type Safety
-- **typecheck passing** (`next typegen && tsc --noEmit`)
-- Avatar contracts properly typed
-- Provider interfaces defined
-
-## Open Gaps Right Now
-
-- ~~Browser mic capture records real chunks~~ ✅ FIXED - now sends bytes_b64
-- ~~Frontend latency cards derive from session events~~ ✅ WORKING - event-driven metrics
-- Reviewer-facing sync coverage still stops before `first_viseme` and `audio_done` surface
-- ~~Cost / performance note is still implicit~~ ✅ CREATED - see `docs/cost-performance.md`
-- Demo recording artifact does not exist yet
-- Browser-level smoke coverage missing for mic permission flow (Lane B work)
-- Session history and student preference inputs are thin (expected for MVP)
-
-## Recent Updates (Lane A + D)
-
-- ✅ Fixed 3D avatar stale props (refs for state/timestamps/nowMs/energy)
-- ✅ Lazy-loaded Three.js bundle (2D default doesn't pay 3D cost)
-- ✅ Provider architecture with registry pattern
-- ✅ Cost-performance analysis documented
-- ✅ Requirements trace updated for current implementation
-
-## Review Queue
-
-- [ ] Confirm whether typed prompt should remain as permanent demo fallback (currently works well)
-- [ ] Decide whether student pacing or learning preferences are MVP or stretch (currently thin/optional)
-- [ ] Confirm if optional diagrams stay deferred (currently deferred)
-- [ ] Review the benchmark bar using live-provider timings, not only synthetic timings
-- [ ] Review whether the 2D avatar is credible enough before any photoreal branch opens
-- [ ] **NEW**: Verify lazy-loaded 3D avatar doesn't cause FOUC or janky loading state
+- Task 03: Initial latency requirements
+- Task 07: STT provider implementation
+- Task 16: TTS provider implementation
+- Task 26: Monitoring and tracking
+- Task 27: Live provider benchmark (this task)

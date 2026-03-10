@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import os
 from uuid import uuid4
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -8,6 +9,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from backend.llm.draft_policy import build_draft_tutor_reply
 from backend.llm.prompt_builder import build_tutor_messages
 from backend.llm.provider_switch import ProviderSwitch
+from backend.providers import create_provider
+from backend.session.registry import clear_session_snapshot, load_session_snapshot, save_session_snapshot
 from backend.stt.provider import STTProviderFactory, StreamingSTTProvider, StreamingSTTSession
 from backend.tts.commit_manager import CommitManager
 from backend.tts.provider import TTSProviderFactory
@@ -23,7 +26,11 @@ def create_stt_provider() -> StreamingSTTProvider:
 @app.websocket("/ws/session")
 async def session_websocket(websocket: WebSocket) -> None:
     await websocket.accept()
-    controller = SessionController(session_id=str(uuid4()))
+    session_id = websocket.query_params.get("session_id") or str(uuid4())
+    controller = SessionController(session_id=session_id)
+    snapshot = load_session_snapshot(session_id)
+    if snapshot is not None:
+        controller.restore(snapshot)
     stt_provider = create_stt_provider()
     stt_session: StreamingSTTSession | None = None
 
@@ -101,6 +108,7 @@ async def _handle_message(
             )
 
         tracker = controller.latency_tracker
+        speech_end_ts_ms = float(message["ts_ms"])
         messages = build_tutor_messages(
             subject=controller.subject,
             grade_band=controller.grade_band,
@@ -108,7 +116,10 @@ async def _handle_message(
             history=controller.history,
             student_profile=controller.student_profile,
         )
-        provider_switch = ProviderSwitch()
+        provider_switch = ProviderSwitch(
+            primary=create_provider("llm", os.getenv("NERDY_RUNTIME_LLM_PROVIDER", "gemini")),
+            fallback=create_provider("llm", os.getenv("NERDY_RUNTIME_LLM_FALLBACK_PROVIDER", "minimax")),
+        )
         llm_result = provider_switch.stream_response(
             messages=messages,
             token_stream=[
@@ -120,7 +131,7 @@ async def _handle_message(
                 )
             ],
             tracker=tracker,
-            first_token_ts_ms=float(message["ts_ms"]) + 260,
+            first_token_ts_ms=speech_end_ts_ms,
             use_fallback=bool(message.get("use_fallback", False)),
         )
         turn_id = str(uuid4())
@@ -154,7 +165,7 @@ async def _handle_message(
                 tts_provider.send_phrase(
                     chunk,
                     tracker=tracker,
-                    first_audio_ts_ms=float(message["ts_ms"]) + 380,
+                    first_audio_ts_ms=speech_end_ts_ms,
                     is_final=index == len(committed_chunks) - 1,
                 )
             )
@@ -165,6 +176,7 @@ async def _handle_message(
                 {"role": "assistant", "content": llm_result["text"]},
             ]
         )
+        save_session_snapshot(controller.session_id, controller.snapshot())
         return events, stt_session
     if message_type == "tutor.turn.start":
         return controller.begin_tutor_turn(turn_id=str(message["turn_id"])), stt_session
@@ -172,7 +184,43 @@ async def _handle_message(
         return controller.complete_tutor_turn(turn_id=str(message["turn_id"])), stt_session
     if message_type == "interrupt":
         return controller.interrupt(), stt_session
+    if message_type == "session.restore":
+        raw_history = message.get("history")
+        raw_student_profile = message.get("student_profile")
+        history = []
+        if isinstance(raw_history, list):
+            history = [
+                {
+                    "content": str(item.get("content", "")),
+                    "role": str(item.get("role", "")),
+                }
+                for item in raw_history
+                if isinstance(item, dict)
+            ]
+        student_profile: dict[str, str] = {}
+        if isinstance(raw_student_profile, dict):
+            student_profile = {
+                str(key): str(value)
+                for key, value in raw_student_profile.items()
+                if value is not None and str(value).strip()
+            }
+        snapshot = {
+            "grade_band": str(message.get("grade_band") or "6-8"),
+            "history": history,
+            "student_profile": student_profile,
+            "subject": str(message.get("subject") or "general"),
+        }
+        save_session_snapshot(controller.session_id, snapshot)
+        return controller.restore(snapshot), stt_session
+    if message_type == "session.reset":
+        if stt_session is not None:
+            await stt_session.close()
+            stt_session = None
+        clear_session_snapshot(controller.session_id)
+        return controller.reset(), stt_session
     return [{"type": "session.error", "detail": f"unknown message type: {message_type}"}], stt_session
+
+
 def _latest_final_transcript(events: list[dict[str, object]]) -> str:
     for event in reversed(events):
         if event.get("type") == "transcript.final":

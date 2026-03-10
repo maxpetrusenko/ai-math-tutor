@@ -4,6 +4,33 @@
 
 Planning baseline accepted. Task area now tracks execution work for the MVP prototype.
 
+## Closure Lane Status
+
+As of 2026-03-10:
+
+- Lane A / Task 23: done
+- Lane B / Task 24: done
+- Lane C / Task 25: done
+- Lane D / Task 26: done
+- Lane E / Task 27: done
+- Lane F / Task 28: done
+- Lane G / Task 29: done
+- Lane H / Task 30: done
+
+## Agent Handoff Rules
+
+Tell each agent:
+
+1. pull latest
+2. read their lane task doc
+3. do only that doc
+4. do not rename avatar ids, latency event names, or `session.reset`
+5. run lane-local verification before handoff
+
+Open lane prompt:
+
+- Agent 1: `Take Lane E. Read 27-live-provider-benchmark-closure.md. Goal: live latency proof.`
+
 Source docs:
 
 - `docs/requirements.md`
@@ -46,6 +73,7 @@ Source docs:
 27. [`27-live-provider-benchmark-closure.md`](./27-live-provider-benchmark-closure.md)
 28. [`28-pedagogy-demo-and-acceptance-pack.md`](./28-pedagogy-demo-and-acceptance-pack.md)
 29. [`29-provider-cost-and-asset-licensing-guardrails.md`](./29-provider-cost-and-asset-licensing-guardrails.md)
+30. [`30-ui-polish-and-usability-pass.md`](./30-ui-polish-and-usability-pass.md)
 
 ## Phase Mapping
 
@@ -59,7 +87,7 @@ Source docs:
 - Phase 7: Tasks 11, 12, 20, 21
 - Phase 8: Tasks 13, 22
 - Phase 9: Tasks 14
-- Phase 10: Tasks 23, 24, 25, 26, 27, 28, 29
+- Phase 10: Tasks 23, 24, 25, 26, 27, 28, 29, 30
 
 ## Parallelization
 
@@ -158,6 +186,12 @@ Task 28 can start fixtures early, but final lock waits on Task 27 evidence.
 
 Task 29 should land before any premium-avatar bakeoff or final demo packaging.
 
+### Wave 13
+
+- Task 30: UI Polish and Usability Pass
+
+Task 30 should land after the selector and lesson UX are real, but before live benchmark capture and final demo recording.
+
 ## Critical Path
 
 `1 -> 2 -> 3 -> 4 -> 6 -> 7 -> 8 -> 9 -> 10 -> 15 -> 16 -> 17 -> 18 -> 19 -> 11 -> 12 -> 20 -> 21 -> 13 -> 22`
@@ -169,6 +203,10 @@ Extended closure path:
 Cost guardrail lane:
 
 `29`
+
+UX finish lane:
+
+`30`
 
 ## Rule
 

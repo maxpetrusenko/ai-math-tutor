@@ -28,7 +28,7 @@ This repo is aimed at builders who want a working realtime tutoring spine, not a
 | --- | --- |
 | Core loop | browser mic/text -> STT -> LLM -> TTS -> avatar |
 | Provider model | env-driven STT, LLM, TTS, and avatar selection |
-| Backend verification | `60` passing `pytest` tests in current tree |
+| Backend verification | `76` passing `pytest` tests in current tree |
 | Browser path | session UI, interruption, avatar switching, playback, latency cards |
 | Benchmark harness | `90` synthetic local runs, `30` per prompt |
 | Timing snapshot | `speech_end -> tts_first_audio` p50 `440 ms`, p95 `480 ms` |
@@ -41,7 +41,20 @@ High-signal results:
 - default tutor is `2D CSS`; `3D Three.js` loads on demand
 - eval, docs, smoke tests, and benchmark reports all live in the repo
 
-Benchmark numbers above come from the current synthetic harness in [`docs/planning/benchmark-report-v1.md`](docs/planning/benchmark-report-v1.md). Live-vendor closure is still tracked explicitly and not hidden.
+Benchmark numbers and live-vendor evidence are tracked in [`docs/planning/benchmark-report-v1.md`](docs/planning/benchmark-report-v1.md). The live stack is wired end to end and still misses the latency target explicitly.
+
+## Closure Lanes
+
+Current lane state as of 2026-03-10:
+
+- Lane A `avatar selector`: done
+- Lane B `local avatar assets`: done
+- Lane C `lesson session + text turns`: done
+- Lane D `offline smoke matrix`: done
+- Lane E `live benchmark closure`: done
+- Lane F `pedagogy + demo + acceptance`: done
+- Lane G `cost + licensing`: done
+- Lane H `UI polish`: done
 
 ---
 
@@ -156,12 +169,12 @@ That keeps the realtime loop stable while you change vendors.
 
 - connection pill for the live session
 - text prompt plus browser mic capture
-- `Run Demo Turn`, `Send Text Turn`, `Interrupt`
+- `Send Text Turn`, hold-to-talk mic icon, `Interrupt`, `New Lesson`
 - latency cards and transcript panels
 - tutor reply and conversation history
 - avatar mode switch between `2D CSS` and `3D Three.js`
 
-The current UI works. It is functional-first today, with a polish pass still open.
+The current UI now carries explicit lesson controls, readable history, and demo-ready layout defaults across desktop and mobile.
 
 ---
 
@@ -225,7 +238,7 @@ See also:
 - deeper browser mic smoke coverage
 - richer session context and personalization
 - stronger live-provider benchmark evidence
-- better visual polish on the tutor surface
+- richer live voice rehearsal evidence
 
 ---
 

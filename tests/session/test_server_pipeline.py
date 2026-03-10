@@ -1,6 +1,7 @@
 import base64
 
 from fastapi.testclient import TestClient
+import pytest
 
 from backend.session import server
 
@@ -28,6 +29,12 @@ class _FakeSTTProvider:
 
     async def open_session(self, tracker: object) -> _FakeSTTSession:
         return self.session
+
+
+@pytest.fixture(autouse=True)
+def disable_live_runtime(monkeypatch) -> None:
+    monkeypatch.setenv("NERDY_DISABLE_LIVE_LLM", "1")
+    monkeypatch.setenv("NERDY_DISABLE_LIVE_TTS", "1")
 
 
 def test_session_server_streams_transcript_tutor_text_and_tts_audio(monkeypatch) -> None:
@@ -163,6 +170,146 @@ def test_session_server_persists_history_and_profile_between_turns(monkeypatch) 
     assert fake_session.closed is True
 
 
+def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
+    captured_calls: list[dict[str, object]] = []
+    fake_session = _FakeSTTSession(final_text="heard from audio")
+
+    original_build = server.build_tutor_messages
+
+    def tracking_build_tutor_messages(
+        subject: str,
+        grade_band: str,
+        latest_student_text: str,
+        history: list[dict[str, str]],
+        student_profile: dict[str, str] | None = None,
+    ) -> list[dict[str, str]]:
+        captured_calls.append(
+            {
+                "subject": subject,
+                "grade_band": grade_band,
+                "latest_student_text": latest_student_text,
+                "history_length": len(history),
+                "student_profile": student_profile or {},
+            }
+        )
+        return original_build(
+            subject=subject,
+            grade_band=grade_band,
+            latest_student_text=latest_student_text,
+            history=history,
+            student_profile=student_profile,
+        )
+
+    monkeypatch.setattr(server, "build_tutor_messages", tracking_build_tutor_messages)
+    monkeypatch.setattr(server, "create_stt_provider", lambda: _FakeSTTProvider(fake_session))
+
+    client = TestClient(server.app)
+
+    with client.websocket_connect("/ws/session") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 1000,
+                "text": "First lesson turn",
+                "subject": "science",
+                "grade_band": "9-10",
+                "student_profile": {"pacing": "slow"},
+            }
+        )
+        for _ in range(8):
+            websocket.receive_json()
+
+        websocket.send_json({"type": "session.reset"})
+        reset_event = websocket.receive_json()
+
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 2000,
+                "text": "Fresh lesson turn",
+            }
+        )
+        for _ in range(8):
+            websocket.receive_json()
+
+    assert reset_event == {"type": "session.reset", "state": "idle"}
+    assert captured_calls[0]["history_length"] == 0
+    assert captured_calls[0]["subject"] == "science"
+    assert captured_calls[0]["grade_band"] == "9-10"
+    assert captured_calls[0]["student_profile"] == {"pacing": "slow"}
+    assert captured_calls[1]["history_length"] == 0
+    assert captured_calls[1]["subject"] == "general"
+    assert captured_calls[1]["grade_band"] == "6-8"
+    assert captured_calls[1]["student_profile"] == {}
+
+
+def test_session_server_restores_history_for_a_reconnected_session(monkeypatch) -> None:
+    captured_calls: list[dict[str, object]] = []
+
+    original_build = server.build_tutor_messages
+
+    def tracking_build_tutor_messages(
+        subject: str,
+        grade_band: str,
+        latest_student_text: str,
+        history: list[dict[str, str]],
+        student_profile: dict[str, str] | None = None,
+    ) -> list[dict[str, str]]:
+        captured_calls.append(
+            {
+                "subject": subject,
+                "grade_band": grade_band,
+                "history_length": len(history),
+                "latest_student_text": latest_student_text,
+                "student_profile": student_profile or {},
+            }
+        )
+        return original_build(
+            subject=subject,
+            grade_band=grade_band,
+            latest_student_text=latest_student_text,
+            history=history,
+            student_profile=student_profile,
+        )
+
+    monkeypatch.setattr(server, "build_tutor_messages", tracking_build_tutor_messages)
+    client = TestClient(server.app)
+
+    with client.websocket_connect("/ws/session?session_id=lesson-restore-1") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "session.restore",
+                "subject": "science",
+                "grade_band": "9-10",
+                "student_profile": {"preference": "use examples"},
+                "history": [
+                    {"role": "user", "content": "What is gravity?"},
+                    {"role": "assistant", "content": "What do you notice when objects fall?"},
+                ],
+            }
+        )
+        websocket.receive_json()
+
+    with client.websocket_connect("/ws/session?session_id=lesson-restore-1") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 2000,
+                "text": "So it pulls things down?",
+            }
+        )
+        for _ in range(8):
+            websocket.receive_json()
+
+    assert captured_calls[0]["subject"] == "science"
+    assert captured_calls[0]["grade_band"] == "9-10"
+    assert captured_calls[0]["history_length"] == 2
+    assert captured_calls[0]["student_profile"] == {"preference": "use examples"}
+
+
 def test_session_server_can_switch_tts_provider_per_turn() -> None:
     client = TestClient(server.app)
 
@@ -256,3 +403,65 @@ def test_session_server_uses_subject_aware_tutor_draft_for_math_truth_checks() -
     assert committed_text["type"] == "tutor.text.committed"
     assert "2 blocks" in committed_text["text"].lower()
     assert "what do you notice about" not in committed_text["text"].lower()
+
+
+def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
+    captured_calls: list[dict[str, object]] = []
+
+    original_build = server.build_tutor_messages
+
+    def tracking_build_tutor_messages(
+        subject: str,
+        grade_band: str,
+        latest_student_text: str,
+        history: list[dict[str, str]],
+        student_profile: dict[str, str] | None = None,
+    ) -> list[dict[str, str]]:
+        captured_calls.append(
+            {
+                "history_length": len(history),
+                "student_profile": student_profile or {},
+                "latest_student_text": latest_student_text,
+            }
+        )
+        return original_build(
+            subject=subject,
+            grade_band=grade_band,
+            latest_student_text=latest_student_text,
+            history=history,
+            student_profile=student_profile,
+        )
+
+    monkeypatch.setattr(server, "build_tutor_messages", tracking_build_tutor_messages)
+    client = TestClient(server.app)
+
+    with client.websocket_connect("/ws/session") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 1000,
+                "text": "first question",
+                "student_profile": {"preference": "go slow"},
+            }
+        )
+        for _ in range(8):
+            websocket.receive_json()
+
+        websocket.send_json({"type": "session.reset"})
+        websocket.receive_json()
+
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 2000,
+                "text": "second question",
+            }
+        )
+        for _ in range(8):
+            websocket.receive_json()
+
+    assert captured_calls[0]["history_length"] == 0
+    assert captured_calls[0]["student_profile"] == {"preference": "go slow"}
+    assert captured_calls[1]["history_length"] == 0
+    assert captured_calls[1]["student_profile"] == {}
