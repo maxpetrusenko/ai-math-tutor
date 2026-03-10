@@ -6,9 +6,11 @@
 .turbo/
 node_modules/
 frontend/.next/
+frontend/.next-dev/
 frontend/node_modules/
 frontend/.env.local
 frontend/coverage/
+frontend/test-results/
 __pycache__/
 .pytest_cache/
 *.tsbuildinfo
