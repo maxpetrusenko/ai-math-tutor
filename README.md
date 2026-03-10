@@ -1,27 +1,59 @@
-# AI Math Tutor
+<p align="center">
+  <img src="docs/assets/readme-card.png" alt="AI Math Tutor project snapshot" width="100%">
+</p>
 
-Open source realtime voice tutor stack for building low-latency, Socratic learning agents.
+<h1 align="center">AI Math Tutor</h1>
+
+<p align="center">
+  <strong>Open source realtime voice tutoring with pluggable STT, LLM, TTS, and avatar providers.</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-15-0b1730?style=flat-square" alt="Next.js 15">
+  <img src="https://img.shields.io/badge/React-19-0b1730?style=flat-square" alt="React 19">
+  <img src="https://img.shields.io/badge/FastAPI-session_server-0b1730?style=flat-square" alt="FastAPI">
+  <img src="https://img.shields.io/badge/Realtime-benchmark_first-0b1730?style=flat-square" alt="Benchmark first">
+  <img src="https://img.shields.io/badge/Providers-STT%20%7C%20LLM%20%7C%20TTS%20%7C%20Avatar-0b1730?style=flat-square" alt="Provider registry">
+</p>
 
 Repository codename and Python package remain `nerdy` for now. GitHub-facing name: `AI Math Tutor`.
 
-## Why It Gets Attention
+---
 
-- realtime voice loop: mic -> STT -> LLM -> TTS -> avatar
-- pluggable providers across STT, LLM, TTS, avatar
-- default `2D CSS` tutor, optional lazy-loaded `3D Three.js` tutor
-- benchmark, eval, unit, integration, and browser smoke coverage already in repo
-- built for fast provider swaps, not one locked demo stack
+## Snapshot
 
-## What Is Real Today
+This repo is aimed at builders who want a working realtime tutoring spine, not a dead-end demo.
 
-- backend session server in `FastAPI` with streamed WebSocket turns
-- STT provider path with `Deepgram` live default
-- LLM provider path with `MiniMax` primary and `Gemini` fallback
-- TTS provider path with `Cartesia` primary and `MiniMax` alternate
-- browser mic path sending `audio.chunk.bytes_b64`
-- transcript, latency cards, interruption, avatar switching, and playback UI
+| Scope | Result |
+| --- | --- |
+| Core loop | browser mic/text -> STT -> LLM -> TTS -> avatar |
+| Provider model | env-driven STT, LLM, TTS, and avatar selection |
+| Backend verification | `60` passing `pytest` tests in current tree |
+| Browser path | session UI, interruption, avatar switching, playback, latency cards |
+| Benchmark harness | `90` synthetic local runs, `30` per prompt |
+| Timing snapshot | `speech_end -> tts_first_audio` p50 `440 ms`, p95 `480 ms` |
+| STT snapshot | `speech_end -> stt_final` p95 `120 ms` |
 
-## Architecture
+High-signal results:
+
+- provider swaps now happen behind stable registry-backed session contracts
+- browser mic sends `audio.chunk.bytes_b64`
+- default tutor is `2D CSS`; `3D Three.js` loads on demand
+- eval, docs, smoke tests, and benchmark reports all live in the repo
+
+Benchmark numbers above come from the current synthetic harness in [`docs/planning/benchmark-report-v1.md`](docs/planning/benchmark-report-v1.md). Live-vendor closure is still tracked explicitly and not hidden.
+
+---
+
+## What Is AI Math Tutor?
+
+AI Math Tutor is a low-latency tutoring stack for voice-first learning sessions. It is built around short spoken turns, Socratic prompting, interruption-safe playback, and provider swaps that do not require rewriting the session server.
+
+Instead of locking the app to one speech model or one avatar vendor, the project keeps the session protocol stable and lets providers change underneath it.
+
+---
+
+## How It Works
 
 ```text
 Browser mic / text
@@ -33,21 +65,21 @@ Browser mic / text
   -> 2D CSS or 3D Three.js avatar
 ```
 
-Provider selection is environment-driven. Session contracts stay stable while providers change behind the registry.
-
-## Tools
+### Current Runtime
 
 | Layer | Current choice | Notes |
 | --- | --- | --- |
-| Frontend | `Next.js 15` + `React 19` + `TypeScript` | app shell, avatar UI, latency UI |
-| Backend | `FastAPI` + `uvicorn` | session authority |
+| Frontend | `Next.js 15` + `React 19` + `TypeScript` | shell, tutor UI, avatar UI, latency UI |
+| Backend | `FastAPI` + `uvicorn` | websocket session authority |
 | STT | `Deepgram` | default provider |
 | LLM | `MiniMax` + `Gemini` fallback | registry-backed switch |
 | TTS | `Cartesia` or `MiniMax` | streamed speech path |
-| 3D Avatar | `three`, `@react-three/fiber`, `@react-three/drei` | optional, lazy-loaded |
-| Tests | `pytest`, `vitest`, `playwright` | backend, frontend, e2e |
+| Avatar | `2D CSS` or lazy-loaded `Three.js` | default plus richer branch |
+| Tests | `pytest`, `vitest`, `playwright` | backend, frontend, browser smoke |
 
-## Install
+---
+
+## Getting Started
 
 ### Prereqs
 
@@ -85,9 +117,9 @@ pnpm install
 pnpm dev --hostname 127.0.0.1 --port 3000
 ```
 
-## Env
+### Environment
 
-Core backend switches:
+Backend:
 
 ```bash
 NERDY_STT_PROVIDER=deepgram
@@ -104,19 +136,36 @@ Frontend:
 NEXT_PUBLIC_SESSION_WS_URL=ws://127.0.0.1:8000/ws/session
 ```
 
-If you only want the typed demo path, frontend still runs without live mic credentials.
+If you only want the typed demo path, the frontend still runs without live mic credentials.
+
+---
 
 ## Provider Swaps
 
-This part is intentionally easy now.
+This is one of the main reasons to use the repo.
 
-1. add a wrapper in `backend/providers/<kind>/`
-2. register it in the provider registry/config path
-3. switch env vars without touching session semantics
+1. Add a wrapper in `backend/providers/<kind>/`
+2. Register it in the provider registry/config path
+3. Switch env vars without changing session semantics
 
-That keeps the app usable while you change STT, LLM, TTS, or avatar providers.
+That keeps the realtime loop stable while you change vendors.
 
-## Repo Map
+---
+
+## What You See In The App
+
+- connection pill for the live session
+- text prompt plus browser mic capture
+- `Run Demo Turn`, `Send Text Turn`, `Interrupt`
+- latency cards and transcript panels
+- tutor reply and conversation history
+- avatar mode switch between `2D CSS` and `3D Three.js`
+
+The current UI works. It is functional-first today, with a polish pass still open.
+
+---
+
+## Repository Structure
 
 ```text
 backend/
@@ -135,16 +184,7 @@ docs/                 architecture, stack, demo, trace, checklist
 tests/                backend and docs verification
 ```
 
-## Runbook
-
-What you should see:
-
-- connected session pill once backend is up
-- prompt box plus live mic capture
-- `Run Demo Turn` and `Interrupt`
-- latency cards
-- transcript and tutor reply panels
-- avatar mode switch between `2D CSS` and `3D Three.js`
+---
 
 ## Verification
 
@@ -170,27 +210,24 @@ pnpm build
 pnpm typecheck
 ```
 
-## Current State
+See also:
 
-- backend test suite passing
-- docs freshness checks passing
-- frontend unit, build, typecheck flow in place
-- browser smoke coverage started for app load, demo turn, interrupt, avatar mode
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/STACK.md`](docs/STACK.md)
+- [`docs/requirements-trace.md`](docs/requirements-trace.md)
+- [`docs/progress.md`](docs/progress.md)
 
-See:
-
-- `docs/ARCHITECTURE.md`
-- `docs/STACK.md`
-- `docs/requirements-trace.md`
-- `docs/progress.md`
+---
 
 ## Roadmap
 
 - reviewer-facing latency closure for `first_viseme` and `audio_done`
 - deeper browser mic smoke coverage
 - richer session context and personalization
-- stronger benchmark evidence from live providers
-- more providers, same contracts
+- stronger live-provider benchmark evidence
+- better visual polish on the tutor surface
+
+---
 
 ## Contributing
 
@@ -202,4 +239,4 @@ High-signal areas:
 - pedagogy and eval depth
 - browser smoke reliability
 
-If you add behavior or change an interface, update docs in the same change.
+If you change behavior or an interface, update docs in the same change.
