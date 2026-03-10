@@ -1,0 +1,1 @@
+self.__REACT_LOADABLE_MANIFEST="{\"components/AvatarProvider.tsx -> ./Avatar3D\":{\"id\":\"components/AvatarProvider.tsx -> ./Avatar3D\",\"files\":[\"static/chunks/_app-pages-browser_components_Avatar3D_tsx.js\"]}}"

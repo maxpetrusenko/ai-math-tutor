@@ -1,0 +1,37 @@
+{
+  "tracks": [
+    {
+      "subject": "math",
+      "turns": [
+        {
+          "grade_band": "6-8",
+          "student_utterance": "I don't understand how to solve for x.",
+          "expected_concept": "linear equations",
+          "rubric_hooks": ["asks-guiding-question", "scaffolds-step", "grade-fit"]
+        }
+      ]
+    },
+    {
+      "subject": "science",
+      "turns": [
+        {
+          "grade_band": "9-10",
+          "student_utterance": "What about photosynthesis?",
+          "expected_concept": "photosynthesis basics",
+          "rubric_hooks": ["checks-prior-knowledge", "correctness", "encouragement"]
+        }
+      ]
+    },
+    {
+      "subject": "english",
+      "turns": [
+        {
+          "grade_band": "11-12",
+          "student_utterance": "Is it 5?",
+          "expected_concept": "subject-verb agreement",
+          "rubric_hooks": ["redirects-gently", "asks-why", "direct-answer-avoidance"]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,612 @@
+/*!****************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/.pnpm/next@15.5.12_@playwright+test@1.58.2_react-dom@19.2.4_react@19.2.4/node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[2].use[1]!./node_modules/.pnpm/next@15.5.12_@playwright+test@1.58.2_react-dom@19.2.4_react@19.2.4/node_modules/next/dist/build/webpack/loaders/next-font-loader/index.js??ruleSet[1].rules[14].oneOf[2].use[2]!./node_modules/.pnpm/next@15.5.12_@playwright+test@1.58.2_react-dom@19.2.4_react@19.2.4/node_modules/next/font/google/target.css?{"path":"app/layout.tsx","import":"Space_Grotesk","arguments":[{"subsets":["latin"],"variable":"--font-heading"}],"variableName":"headingFont"} ***!
+  \****************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************/
+/* vietnamese */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url(/_next/static/media/e1aab0933260df4d-s.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url(/_next/static/media/b7387a63dd068245-s.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url(/_next/static/media/36966cca54120369-s.p.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}@font-face {font-family: 'Space Grotesk Fallback';src: local("Arial");ascent-override: 89.71%;descent-override: 26.62%;line-gap-override: 0.00%;size-adjust: 109.69%
+}.__className_dd5b2f {font-family: 'Space Grotesk', 'Space Grotesk Fallback';font-style: normal
+}.__variable_dd5b2f {--font-heading: 'Space Grotesk', 'Space Grotesk Fallback'
+}
+
+/*!*********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/.pnpm/next@15.5.12_@playwright+test@1.58.2_react-dom@19.2.4_react@19.2.4/node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[2].use[1]!./node_modules/.pnpm/next@15.5.12_@playwright+test@1.58.2_react-dom@19.2.4_react@19.2.4/node_modules/next/dist/build/webpack/loaders/next-font-loader/index.js??ruleSet[1].rules[14].oneOf[2].use[2]!./node_modules/.pnpm/next@15.5.12_@playwright+test@1.58.2_react-dom@19.2.4_react@19.2.4/node_modules/next/font/google/target.css?{"path":"app/layout.tsx","import":"IBM_Plex_Mono","arguments":[{"subsets":["latin"],"weight":["400","500"],"variable":"--font-body"}],"variableName":"bodyFont"} ***!
+  \*********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************/
+/* cyrillic-ext */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/_next/static/media/58f386aa6b1a2a92-s.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/_next/static/media/011e180705008d6f-s.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/_next/static/media/7ba5fb2a8c88521c-s.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/_next/static/media/92eeb95d069020cc-s.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/_next/static/media/d3ebbfd689654d3a-s.p.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* cyrillic-ext */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/_next/static/media/ef4d5661765d0e49-s.woff2) format('woff2');
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+/* cyrillic */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/_next/static/media/d29838c109ef09b4-s.woff2) format('woff2');
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/_next/static/media/e40af3453d7c920a-s.woff2) format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/_next/static/media/99dcf268bda04fe5-s.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(/_next/static/media/98e207f02528a563-s.p.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}@font-face {font-family: 'IBM Plex Mono Fallback';src: local("Arial");ascent-override: 76.16%;descent-override: 20.43%;line-gap-override: 0.00%;size-adjust: 134.59%
+}.__className_46fe82 {font-family: 'IBM Plex Mono', 'IBM Plex Mono Fallback';font-style: normal
+}.__variable_46fe82 {--font-body: 'IBM Plex Mono', 'IBM Plex Mono Fallback'
+}
+
+/*!*****************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/.pnpm/next@15.5.12_@playwright+test@1.58.2_react-dom@19.2.4_react@19.2.4/node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[14].oneOf[10].use[2]!./node_modules/.pnpm/next@15.5.12_@playwright+test@1.58.2_react-dom@19.2.4_react@19.2.4/node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[14].oneOf[10].use[3]!./app/globals.css ***!
+  \*****************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************/
+:root {
+  --bg: #f7efe2;
+  --panel: rgba(255, 250, 242, 0.9);
+  --ink: #1f1308;
+  --muted: #6c5441;
+  --accent: #b54a28;
+  --accent-strong: #8f2c0e;
+  --line: rgba(31, 19, 8, 0.12);
+  --shadow: 0 24px 60px rgba(69, 34, 17, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(181, 74, 40, 0.24), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(218, 167, 88, 0.35), transparent 34%),
+    var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body), monospace;
+}
+
+h1,
+h3,
+.eyebrow {
+  font-family: var(--font-heading), sans-serif;
+}
+
+.session-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 48px 20px 64px;
+}
+
+.hero-card,
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+}
+
+.hero-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  padding: 28px;
+  margin-bottom: 24px;
+}
+
+.hero-card h1 {
+  margin: 0;
+  font-size: clamp(2rem, 3vw, 4rem);
+  line-height: 0.95;
+  max-width: 11ch;
+}
+
+.hero-status,
+.button-row,
+.panel__header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--accent-strong);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.session-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-gap: 24px;
+  gap: 24px;
+}
+
+.stack {
+  display: grid;
+  grid-gap: 20px;
+  gap: 20px;
+}
+
+.panel {
+  padding: 22px;
+}
+
+.status-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(31, 19, 8, 0.07);
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.status-pill--live {
+  background: rgba(181, 74, 40, 0.14);
+  color: var(--accent-strong);
+}
+
+.field {
+  display: grid;
+  grid-gap: 10px;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-gap: 14px;
+  gap: 14px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 128px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+  resize: vertical;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  font: inherit;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 13px 18px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.primary-button {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  color: white;
+}
+
+.ghost-button {
+  background: rgba(31, 19, 8, 0.08);
+  color: var(--ink);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-gap: 12px;
+  gap: 12px;
+}
+
+.metric-card {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(31, 19, 8, 0.08);
+}
+
+.metric-card span {
+  display: block;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.metric-card strong {
+  font-size: 1.1rem;
+}
+
+.transcript-panel p,
+.tutor-panel p {
+  min-height: 80px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.avatar {
+  min-height: 320px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 30% 18%, rgba(255, 255, 255, 0.75), transparent 22%),
+    radial-gradient(circle at 68% 16%, rgba(218, 167, 88, 0.2), transparent 18%),
+    linear-gradient(180deg, rgba(181, 74, 40, 0.12), rgba(255, 255, 255, 0.68));
+  overflow: hidden;
+  position: relative;
+}
+
+.avatar__stage {
+  min-height: 320px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  padding: 18px 18px 28px;
+}
+
+.avatar__halo {
+  position: absolute;
+  inset: 26px;
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(255, 236, 207, 0.9), rgba(255, 236, 207, 0.1) 38%, transparent 64%),
+    radial-gradient(circle at 50% 70%, rgba(181, 74, 40, 0.18), transparent 54%);
+  filter: blur(2px);
+}
+
+.avatar__head {
+  width: min(240px, 72%);
+  aspect-ratio: 0.9;
+  border-radius: 36% 36% 42% 42%;
+  background:
+    radial-gradient(circle at 40% 28%, rgba(255, 255, 255, 0.84), transparent 18%),
+    linear-gradient(180deg, #ffd3bb, #f5b492 48%, #dc8158 100%);
+  border: 1px solid rgba(143, 44, 14, 0.12);
+  box-shadow:
+    inset 0 -18px 32px rgba(143, 44, 14, 0.15),
+    0 28px 48px rgba(69, 34, 17, 0.14);
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  padding-top: 48px;
+  position: relative;
+  z-index: 1;
+  transform-origin: center 78%;
+}
+
+.avatar__brow {
+  width: 118px;
+  height: 18px;
+  border-top: 5px solid rgba(31, 19, 8, 0.8);
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+
+.avatar__eyes {
+  width: 122px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.avatar__eye {
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(31, 19, 8, 0.94);
+  position: relative;
+  transform-origin: center;
+  transition: transform 140ms ease;
+}
+
+.avatar__eye::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.88);
+  top: 3px;
+  left: 8px;
+}
+
+.avatar__cheeks {
+  width: 146px;
+  height: 24px;
+  margin-bottom: 20px;
+  background:
+    radial-gradient(circle at 18% 50%, rgba(217, 92, 86, 0.18), transparent 28%),
+    radial-gradient(circle at 82% 50%, rgba(217, 92, 86, 0.18), transparent 28%);
+}
+
+.avatar__mouth-wrap {
+  min-height: 58px;
+  display: grid;
+  place-items: start center;
+}
+
+.avatar__mouth {
+  --mouth-open: 0.12;
+  width: 78px;
+  height: calc(10px + (var(--mouth-open) * 34px));
+  border-radius: calc(24px + (var(--mouth-open) * 24px));
+  background:
+    linear-gradient(180deg, #7d160f, #ab2414 56%, #f78f64 100%);
+  box-shadow:
+    inset 0 -5px 0 rgba(255, 189, 146, 0.28),
+    0 8px 18px rgba(122, 29, 18, 0.14);
+  transform: scaleX(calc(0.84 + (var(--mouth-open) * 0.2)));
+  transform-origin: center top;
+  transition:
+    height 80ms linear,
+    border-radius 80ms linear,
+    transform 80ms linear,
+    filter 120ms ease;
+}
+
+.avatar__caption {
+  margin: 18px 0 0;
+  max-width: 24ch;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+  position: relative;
+  z-index: 1;
+}
+
+.avatar--idle .avatar__head {
+  animation: avatar-breathe 3.4s ease-in-out infinite;
+}
+
+.avatar--listening .avatar__halo {
+  animation: avatar-listen-pulse 1.4s ease-in-out infinite;
+}
+
+.avatar--listening .avatar__head {
+  transform: translateY(-2px) rotate(-4deg);
+}
+
+.avatar--listening .avatar__eye {
+  transform: scaleY(0.92);
+}
+
+.avatar--thinking .avatar__halo {
+  animation: avatar-think-drift 2.2s ease-in-out infinite;
+}
+
+.avatar--thinking .avatar__head {
+  transform: translateY(-4px) rotate(3deg);
+}
+
+.avatar--thinking .avatar__brow {
+  transform: translateY(-2px) skewX(-10deg);
+}
+
+.avatar--speaking .avatar__halo {
+  animation: avatar-speak-halo 0.9s ease-in-out infinite;
+}
+
+.avatar--speaking .avatar__head {
+  animation: avatar-speak-bob 0.58s ease-in-out infinite;
+}
+
+.avatar--speaking .avatar__mouth {
+  filter: saturate(1.1);
+}
+
+.avatar--fading .avatar__halo {
+  animation: avatar-fade-halo 0.22s ease-out forwards;
+}
+
+.avatar--fading .avatar__head {
+  animation: avatar-fade-settle 0.22s ease-out forwards;
+}
+
+@keyframes avatar-breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.01);
+  }
+}
+
+@keyframes avatar-listen-pulse {
+  0%,
+  100% {
+    transform: scale(0.98);
+    opacity: 0.76;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 1;
+  }
+}
+
+@keyframes avatar-think-drift {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(-6px) rotate(2deg);
+    opacity: 1;
+  }
+}
+
+@keyframes avatar-speak-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(-1.4deg);
+  }
+}
+
+@keyframes avatar-speak-halo {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.82;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+@keyframes avatar-fade-halo {
+  from {
+    opacity: 0.96;
+    transform: scale(1.03);
+  }
+  to {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+}
+
+@keyframes avatar-fade-settle {
+  from {
+    transform: translateY(-2px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.error-text {
+  color: #9f1f1f;
+}
+
+@media (max-width: 900px) {
+  .hero-card,
+  .session-grid {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .hero-card {
+    gap: 18px;
+  }
+
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

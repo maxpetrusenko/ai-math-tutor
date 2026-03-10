@@ -1,0 +1,25 @@
+{
+  "prompts": [
+    {
+      "id": "math_linear_equation_intro",
+      "subject": "math",
+      "grade_band": "6-8",
+      "student_transcript": "I don't understand how to solve for x.",
+      "tags": ["linear-equations", "intro", "socratic"]
+    },
+    {
+      "id": "science_photosynthesis_followup",
+      "subject": "science",
+      "grade_band": "9-10",
+      "student_transcript": "What about photosynthesis?",
+      "tags": ["photosynthesis", "follow-up", "concept-check"]
+    },
+    {
+      "id": "english_subject_verb_guess",
+      "subject": "english",
+      "grade_band": "11-12",
+      "student_transcript": "Is it 5?",
+      "tags": ["subject-verb-agreement", "guess", "redirect"]
+    }
+  ]
+}
