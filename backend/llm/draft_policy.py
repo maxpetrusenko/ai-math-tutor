@@ -80,6 +80,10 @@ def _math_follow_up_reply(text: str, history: list[dict[str, str]]) -> str | Non
     if equation_follow_up:
         return equation_follow_up
 
+    clarification_reply = _math_problem_clarification_reply(text, previous_student)
+    if clarification_reply:
+        return clarification_reply
+
     if _looks_like_short_answer(text):
         return f"You might be onto something. How can you verify {text}?"
     return None
@@ -165,7 +169,7 @@ def _format_number(value: float) -> str:
 
 
 def _math_expression_reply(text: str) -> str | None:
-    match = re.fullmatch(r"(\d+)\s*([+\-*/])\s*(\d+)", text)
+    match = _extract_expression_match(text)
     if not match:
         return None
 
@@ -210,3 +214,27 @@ def _expected_equation_first_step(text: str) -> tuple[str, str] | None:
     if operator == "+":
         return ("subtract", value)
     return ("add", value)
+
+
+def _math_problem_clarification_reply(text: str, previous_student: str) -> str | None:
+    if not _looks_like_help_request(text):
+        return None
+
+    arithmetic_reply = _math_expression_reply(previous_student)
+    if arithmetic_reply:
+        return arithmetic_reply
+
+    equation_reply = _math_equation_reply(previous_student)
+    if equation_reply:
+        return equation_reply
+
+    return None
+
+
+def _looks_like_help_request(text: str) -> bool:
+    lowered = text.lower()
+    return "help" in lowered or "solve" in lowered or "sovle" in lowered or "show me" in lowered
+
+
+def _extract_expression_match(text: str) -> re.Match[str] | None:
+    return re.fullmatch(r"(\d+)\s*([+\-*/])\s*(\d+)[?.!]*", text.strip())

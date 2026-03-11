@@ -267,6 +267,38 @@ def test_session_server_uses_history_aware_follow_up_reply_for_math_stub() -> No
     assert second_reply == "That's right; 2+2 gives 4. How did you get 4?"
 
 
+def test_session_server_keeps_active_math_problem_for_help_follow_up() -> None:
+    client = TestClient(server.app)
+
+    with client.websocket_connect("/ws/session") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 1000,
+                "text": "2+2?",
+                "subject": "math",
+                "grade_band": "6-8",
+            }
+        )
+        first_events = [websocket.receive_json() for _ in range(8)]
+
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 2000,
+                "text": "yes pelase help me to sovle it",
+            }
+        )
+        second_events = [websocket.receive_json() for _ in range(8)]
+
+    first_reply = " ".join(event["text"] for event in first_events if event["type"] == "tutor.text.committed").strip()
+    second_reply = " ".join(event["text"] for event in second_events if event["type"] == "tutor.text.committed").strip()
+
+    assert first_reply == "Let's work on 2+2. What total do you get when you add 2 and 2?"
+    assert second_reply == "Let's work on 2+2. What total do you get when you add 2 and 2?"
+
+
 def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
     captured_calls: list[dict[str, object]] = []
     fake_session = _FakeSTTSession(final_text="heard from audio")

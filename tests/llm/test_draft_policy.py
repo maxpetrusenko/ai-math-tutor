@@ -104,3 +104,30 @@ def test_build_draft_tutor_reply_handles_equation_step_follow_up() -> None:
     assert "subtract 4" in reply.lower()
     assert "what equation" in reply.lower()
     assert reply.endswith("?")
+
+
+def test_build_draft_tutor_reply_handles_fresh_math_expression_with_question_mark() -> None:
+    reply = build_draft_tutor_reply(
+        subject="math",
+        grade_band="6-8",
+        latest_student_text="2+2?",
+    )
+
+    assert reply == "Let's work on 2+2. What total do you get when you add 2 and 2?"
+
+
+def test_build_draft_tutor_reply_handles_help_request_for_active_math_problem() -> None:
+    reply = build_draft_tutor_reply(
+        subject="math",
+        grade_band="6-8",
+        latest_student_text="yes pelase help me to sovle it",
+        history=[
+            {"role": "user", "content": "2+2?"},
+            {
+                "role": "assistant",
+                "content": "Let's work on 2+2. What total do you get when you add 2 and 2?",
+            },
+        ],
+    )
+
+    assert reply == "Let's work on 2+2. What total do you get when you add 2 and 2?"
