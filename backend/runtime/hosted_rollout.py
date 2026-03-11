@@ -439,17 +439,25 @@ def deploy_session_backend(
     return image, normalize_url(service_url)
 
 
-def rollout_frontend(*, project: str, backend_id: str, git_branch: str | None, git_commit: str | None) -> None:
+def rollout_frontend(
+    *,
+    repo_root: Path,
+    project: str,
+    backend_id: str,
+    git_branch: str | None,
+    git_commit: str | None,
+) -> None:
+    _ = git_branch, git_commit
     args = [
         "firebase",
-        "apphosting:rollouts:create",
-        backend_id,
+        "deploy",
+        "--only",
+        f"apphosting:{backend_id}",
         "--project",
         project,
         "--force",
-        *build_rollout_ref_args(git_branch=git_branch, git_commit=git_commit),
     ]
-    run_command(args)
+    run_command(args, cwd=repo_root)
 
 
 def smoke_frontend(

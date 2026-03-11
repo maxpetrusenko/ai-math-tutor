@@ -1,4 +1,10 @@
 {
+  "apphosting": [
+    {
+      "backendId": "ai-math-tutor",
+      "rootDir": "."
+    }
+  ],
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"

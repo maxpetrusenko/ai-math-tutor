@@ -13,6 +13,7 @@ from backend.runtime.hosted_rollout import (
     build_run_deploy_command,
     extract_json_payload,
     parse_env_file,
+    rollout_frontend,
     service_url_to_ws_url,
     set_apphosting_secret,
     write_cloud_build_config_file,
@@ -183,3 +184,41 @@ def test_set_apphosting_secret_answers_no_to_yaml_prompt(monkeypatch: pytest.Mon
     ]
     assert str(captured["args"][6]).startswith(tempfile.gettempdir())
     assert captured["input_text"] == "n\n"
+
+
+def test_rollout_frontend_deploys_local_apphosting_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_command(
+        args: list[str],
+        *,
+        cwd: Path | None = None,
+        input_text: str | None = None,
+        check: bool = True,
+    ) -> None:
+        captured["args"] = args
+        captured["cwd"] = cwd
+        captured["input_text"] = input_text
+        captured["check"] = check
+
+    monkeypatch.setattr("backend.runtime.hosted_rollout.run_command", fake_run_command)
+
+    rollout_frontend(
+        repo_root=tmp_path,
+        project="demo-project",
+        backend_id="demo-backend",
+        git_branch=None,
+        git_commit="abc123",
+    )
+
+    assert captured["args"] == [
+        "firebase",
+        "deploy",
+        "--only",
+        "apphosting:demo-backend",
+        "--project",
+        "demo-project",
+        "--force",
+    ]
+    assert captured["cwd"] == tmp_path
+    assert captured["input_text"] is None

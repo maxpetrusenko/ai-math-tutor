@@ -94,6 +94,7 @@ def _rollout_once(
         value=session_ws_url,
     )
     rollout_frontend(
+        repo_root=REPO_ROOT,
         project=target.firebase_project,
         backend_id=target.frontend_backend,
         git_branch=git_branch,
