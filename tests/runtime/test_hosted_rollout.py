@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from backend.runtime.hosted_rollout import (
     extract_json_payload,
     parse_env_file,
     service_url_to_ws_url,
+    set_apphosting_secret,
     write_cloud_build_config_file,
 )
 
@@ -147,3 +149,36 @@ def test_build_run_deploy_command_points_to_env_file(tmp_path: Path) -> None:
         "--env-vars-file",
         str(env_file),
     ]
+
+
+def test_set_apphosting_secret_answers_no_to_yaml_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_command(
+        args: list[str],
+        *,
+        cwd: Path | None = None,
+        input_text: str | None = None,
+        check: bool = True,
+    ) -> None:
+        captured["args"] = args
+        captured["cwd"] = cwd
+        captured["input_text"] = input_text
+        captured["check"] = check
+
+    monkeypatch.setattr("backend.runtime.hosted_rollout.run_command", fake_run_command)
+
+    set_apphosting_secret(project="demo-project", secret_name="DEMO_SECRET", value="secret-value")
+
+    assert captured["args"] == [
+        "firebase",
+        "apphosting:secrets:set",
+        "DEMO_SECRET",
+        "--project",
+        "demo-project",
+        "--data-file",
+        captured["args"][6],
+        "--force",
+    ]
+    assert str(captured["args"][6]).startswith(tempfile.gettempdir())
+    assert captured["input_text"] == "n\n"

@@ -350,7 +350,11 @@ def set_apphosting_secret(*, project: str, secret_name: str, value: str) -> None
                 "--data-file",
                 data_file,
                 "--force",
-            ]
+            ],
+            # Firebase may still prompt to edit apphosting.yaml in non-TTY CI even
+            # when the secret is already declared. Answering "no" keeps the command
+            # non-interactive while preserving the committed config.
+            input_text="n\n",
         )
     finally:
         try:
