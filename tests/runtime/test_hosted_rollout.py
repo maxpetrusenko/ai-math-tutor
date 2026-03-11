@@ -88,6 +88,7 @@ def test_build_cloud_build_command_uses_repo_root_context(tmp_path: Path) -> Non
         "demo-project",
         "--config",
         str(config_file),
+        "--suppress-logs",
     ]
 
 

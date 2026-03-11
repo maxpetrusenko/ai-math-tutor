@@ -144,6 +144,7 @@ def build_cloud_build_command(*, project: str, source_dir: Path, config_file: Pa
         project,
         "--config",
         str(config_file),
+        "--suppress-logs",
     ]
 
 
