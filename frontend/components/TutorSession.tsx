@@ -274,6 +274,11 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
       return;
     }
 
+    if (firebaseEnabled && authReady && !user) {
+      setConnectionState("sign in");
+      return;
+    }
+
     let cancelled = false;
 
     const connectTransport = async () => {
@@ -301,7 +306,7 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
     return () => {
       cancelled = true;
     };
-  }, [lessonSessionId, sessionTransport, storageReady]);
+  }, [authReady, firebaseEnabled, lessonSessionId, sessionTransport, storageReady, user]);
 
   useEffect(() => playbackController.subscribe((snapshot) => setPlaybackState(snapshot.state)), [playbackController]);
 

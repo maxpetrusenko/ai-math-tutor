@@ -9,7 +9,7 @@ import {
   type User,
 } from "firebase/auth";
 
-import { getFirebaseAuthClient, isFirebaseEnabled } from "./firebase_client";
+import { ensureFirebaseApp, getFirebaseAuthClient, isFirebaseEnabled } from "./firebase_client";
 
 type FirebaseAuthContextValue = {
   authReady: boolean;
@@ -30,20 +30,46 @@ const FirebaseAuthContext = createContext<FirebaseAuthContextValue>({
 export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const firebaseEnabled = isFirebaseEnabled();
+  const [firebaseEnabled, setFirebaseEnabled] = useState(isFirebaseEnabled());
 
   useEffect(() => {
-    const auth = getFirebaseAuthClient();
-    if (!auth) {
-      setAuthReady(true);
-      setUser(null);
-      return;
-    }
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
 
-    return onAuthStateChanged(auth, (nextUser) => {
-      setUser(nextUser);
-      setAuthReady(true);
-    });
+    const hydrateAuth = async () => {
+      const app = await ensureFirebaseApp();
+      if (cancelled) {
+        return;
+      }
+
+      if (!app) {
+        setFirebaseEnabled(false);
+        setAuthReady(true);
+        setUser(null);
+        return;
+      }
+
+      const auth = getFirebaseAuthClient();
+      if (!auth) {
+        setFirebaseEnabled(false);
+        setAuthReady(true);
+        setUser(null);
+        return;
+      }
+
+      setFirebaseEnabled(true);
+      unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+        setUser(nextUser);
+        setAuthReady(true);
+      });
+    };
+
+    void hydrateAuth();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, []);
 
   return (

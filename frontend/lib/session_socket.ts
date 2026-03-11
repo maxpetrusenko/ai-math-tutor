@@ -1,6 +1,7 @@
 import { createSessionMetrics, snapshotSessionMetrics, toLatencyMetrics } from "./session_metrics";
 import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/TutorSession";
 import { getCurrentFirebaseIdToken } from "./firebase_auth";
+import { getFirebaseAuthClient } from "./firebase_client";
 import type { PersistedLessonThread } from "./lesson_thread_store";
 
 const SESSION_SOCKET_LOG_PREFIX = "[session_socket]";
@@ -199,6 +200,9 @@ export function createSessionSocketTransport(): SessionTransport {
     const url = new URL(baseWsUrl);
     url.searchParams.set("session_id", ensureCurrentSessionId());
     const idToken = await getCurrentFirebaseIdToken();
+    if (!idToken && getFirebaseAuthClient()) {
+      throw new Error("Firebase sign-in required");
+    }
     if (idToken) {
       url.searchParams.set("auth_token", idToken);
     } else {
