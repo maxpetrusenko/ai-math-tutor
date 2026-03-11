@@ -101,7 +101,7 @@ def _math_arithmetic_follow_up_reply(text: str, previous_student: str) -> str | 
     expected_text = _format_number(expected)
     expression = f"{left}{operator}{right}"
     if _matches_numeric_answer(text, expected):
-        return f"Yes. {expression} gives {expected_text}. How did you get {expected_text}?"
+        return f"That's right; {expression} gives {expected_text}. How did you get {expected_text}?"
     return f"Check {expression} again. What total do you get when you add {left} and {right}?"
 
 
@@ -118,7 +118,7 @@ def _math_equation_follow_up_reply(text: str, previous_student: str) -> str | No
     equation = previous_student.strip()
     if verb in compact_text and value in compact_text:
         return (
-            f"Yes. For {equation} {verb} {value} from both sides first. "
+            f"That's right; for {equation} {verb} {value} from both sides first. "
             "What equation do you get next?"
         )
 

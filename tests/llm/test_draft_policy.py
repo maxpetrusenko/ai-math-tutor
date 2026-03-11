@@ -50,7 +50,7 @@ def test_build_draft_tutor_reply_uses_history_for_short_math_follow_up() -> None
         ],
     )
 
-    assert "2+2 gives 4" in reply.lower()
+    assert "that's right; 2+2 gives 4" in reply.lower()
     assert "what part can you check first" not in reply.lower()
     assert reply.endswith("?")
 

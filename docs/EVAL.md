@@ -146,14 +146,17 @@ Located in `eval/fixtures/multi_turn/`:
 - Socratic question ratio at least 80%
 - Student speaks at least 3 turns
 - Clear concept progression across turns
-- Tutor uses conversation history appropriately for the active problem
+- Tutor uses conversation history only for the active problem
+- Tutor handles same-problem follow-ups coherently, especially short replies like `2`, `4`, `yes`, and `subtract 4`
 - Tutor resets context when the student clearly switches to a new problem
+- Tutor does not leak stale wording or stale concepts into the new problem
 - Learning arc shows diagnosis → practice → mastery
 
 ### Multi-Turn Score Dimensions
 
 - Socratic quality
 - Follow-up continuity
+- Topical relevance
 - Correction style
 - Grade fit
 - Lesson arc
@@ -164,11 +167,13 @@ Located in `eval/fixtures/multi_turn/`:
 - require no dimension below `3`
 - require lesson arc average at least `4`
 - require correction style average at least `4`
+- require topical relevance average at least `4`
 
 ### Topic-Shift Regression Check
 
 - run a same-session regression where the student switches from one problem to another
 - require the tutor to answer the new problem without pulling stale context into the reply
+- include abrupt shifts like `2+2 -> 4`, `1+1 -> 2`, and `2x+4=10 -> subtract 4`
 
 ### Demo Lock
 

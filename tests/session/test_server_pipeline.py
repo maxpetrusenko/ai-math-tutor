@@ -264,7 +264,7 @@ def test_session_server_uses_history_aware_follow_up_reply_for_math_stub() -> No
     second_reply = " ".join(event["text"] for event in second_events if event["type"] == "tutor.text.committed").strip()
 
     assert first_reply == "Let's work on 2+2. What total do you get when you add 2 and 2?"
-    assert second_reply == "Yes. 2+2 gives 4. How did you get 4?"
+    assert second_reply == "That's right; 2+2 gives 4. How did you get 4?"
 
 
 def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
