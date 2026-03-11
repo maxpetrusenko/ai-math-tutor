@@ -5,7 +5,7 @@ runConfig:
 
 env:
   - variable: FIREBASE_WEBAPP_CONFIG
-    value: '{"apiKey":"AIzaSyDEImFbxlEJvC-i55Ezxqgz7SzmkxcYtLw","authDomain":"ai-math-tutor-b39b3.firebaseapp.com","projectId":"ai-math-tutor-b39b3","storageBucket":"ai-math-tutor-b39b3.firebasestorage.app","messagingSenderId":"287553407736","appId":"1:287553407736:web:733d838aaebe8e0eac890d","measurementId":"G-DY0X9N76YV"}'
+    secret: FIREBASE_WEBAPP_CONFIG
     availability:
       - BUILD
       - RUNTIME
