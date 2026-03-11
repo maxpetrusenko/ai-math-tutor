@@ -20,7 +20,7 @@ def chunk_text(text: str, mode: str) -> list[str]:
         current = ""
         for character in normalized:
             current += character
-            if character in ",!?":
+            if character in ",.!?":
                 chunks.append(current.strip())
                 current = ""
         if current.strip():

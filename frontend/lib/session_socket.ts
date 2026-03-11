@@ -6,14 +6,11 @@ import type { PersistedLessonThread } from "./lesson_thread_store";
 
 const SESSION_SOCKET_LOG_PREFIX = "[session_socket]";
 const TURN_TIMEOUT_MS = 15_000;
-const QUIET_SEND_TYPES = new Set(["audio.chunk"]);
+const QUIET_SEND_TYPES = new Set<string>();
 const QUIET_RECEIVE_TYPES = new Set([
   "audio.received",
   "session.started",
   "state.changed",
-  "transcript.partial_stable",
-  "tutor.text.committed",
-  "tts.audio",
 ]);
 const LOG_DEDUPE_WINDOW_MS = 2_000;
 
@@ -103,6 +100,7 @@ function summarizePayload(payload: Record<string, unknown>) {
         ? Object.keys(payload.student_profile as Record<string, unknown>)
         : [];
     summary.textLength = typeof payload.text === "string" ? payload.text.length : 0;
+    summary.transcribeOnly = payload.transcribe_only;
     summary.ttsProvider = payload.tts_provider;
     summary.ttsModel = payload.tts_model;
     summary.tsMs = payload.ts_ms;
@@ -112,9 +110,22 @@ function summarizePayload(payload: Record<string, unknown>) {
     summary.detail = payload.detail ?? payload.message;
   }
 
+  if (payload.type === "transcript.partial_stable" || payload.type === "transcript.final") {
+    const text = typeof payload.text === "string" ? payload.text : "";
+    summary.text = text;
+    summary.textLength = text.length;
+  }
+
+  if (payload.type === "tutor.text.committed") {
+    const text = typeof payload.text === "string" ? payload.text : "";
+    summary.text = text;
+    summary.textLength = text.length;
+  }
+
   if (payload.type === "tts.audio") {
     summary.isFinal = payload.is_final;
     summary.audioBase64Length = typeof payload.audio_b64 === "string" ? payload.audio_b64.length : 0;
+    summary.audioMimeType = payload.audio_mime_type;
     summary.timestampCount = Array.isArray(payload.timestamps) ? payload.timestamps.length : 0;
   }
 
@@ -124,6 +135,57 @@ function summarizePayload(payload: Record<string, unknown>) {
   }
 
   return summary;
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+function combineAudioChunksForTranscription(audioChunks: NonNullable<TutorTurnRequest["audioChunks"]>) {
+  if (audioChunks.length <= 1) {
+    return audioChunks;
+  }
+
+  const payloadChunks = audioChunks.filter((chunk) => typeof chunk.bytesBase64 === "string" && chunk.bytesBase64.length > 0);
+  if (payloadChunks.length !== audioChunks.length) {
+    return audioChunks;
+  }
+
+  const mimeTypes = new Set(payloadChunks.map((chunk) => chunk.mimeType ?? ""));
+  if (mimeTypes.size > 1) {
+    return audioChunks;
+  }
+
+  const byteParts = payloadChunks.map((chunk) => base64ToBytes(chunk.bytesBase64 as string));
+  const totalBytes = byteParts.reduce((sum, chunk) => sum + chunk.length, 0);
+  const combinedBytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const part of byteParts) {
+    combinedBytes.set(part, offset);
+    offset += part.length;
+  }
+
+  return [
+    {
+      sequence: 1,
+      size: totalBytes,
+      bytesBase64: bytesToBase64(combinedBytes),
+      mimeType: payloadChunks[0]?.mimeType,
+    },
+  ];
 }
 
 type TurnPhase = "stt" | "llm" | "tts";
@@ -175,6 +237,14 @@ export function createSessionSocketTransport(): SessionTransport {
         timestamps: TutorTurnResult["timestamps"];
         audioSegments: NonNullable<TutorTurnResult["audioSegments"]>;
         pendingSegmentTexts: string[];
+        timeoutId: ReturnType<typeof setTimeout> | null;
+      }
+    | null = null;
+  let pendingTranscription:
+    | {
+        onTranscriptUpdate?: (text: string) => void;
+        reject: (error: Error) => void;
+        resolve: (transcript: string) => void;
         timeoutId: ReturnType<typeof setTimeout> | null;
       }
     | null = null;
@@ -249,7 +319,29 @@ export function createSessionSocketTransport(): SessionTransport {
         pendingRestore = null;
         return;
       }
+      if (pendingTranscription) {
+        if (pendingTranscription.timeoutId) {
+          clearTimeout(pendingTranscription.timeoutId);
+        }
+        pendingTranscription.reject(new Error(message));
+        pendingTranscription = null;
+        return;
+      }
       failActiveTurn(message);
+      return;
+    }
+    if (pendingTranscription) {
+      if (payload.type === "transcript.partial_stable" || payload.type === "transcript.final") {
+        const transcriptText = String(payload.text ?? "");
+        pendingTranscription.onTranscriptUpdate?.(transcriptText);
+        if (payload.type === "transcript.final") {
+          if (pendingTranscription.timeoutId) {
+            clearTimeout(pendingTranscription.timeoutId);
+          }
+          pendingTranscription.resolve(transcriptText);
+          pendingTranscription = null;
+        }
+      }
       return;
     }
     if (!activeTurn) {
@@ -344,6 +436,13 @@ export function createSessionSocketTransport(): SessionTransport {
               logSessionError("error", errorDetails);
             }
             if (socket === nextSocket) {
+              if (pendingTranscription) {
+                if (pendingTranscription.timeoutId) {
+                  clearTimeout(pendingTranscription.timeoutId);
+                }
+                pendingTranscription.reject(new Error("WebSocket connection failed"));
+                pendingTranscription = null;
+              }
               failActiveTurn("WebSocket connection failed");
               pendingReset?.reject(new Error("WebSocket connection failed"));
               pendingReset = null;
@@ -366,6 +465,13 @@ export function createSessionSocketTransport(): SessionTransport {
               ...summarizeCloseEvent(event),
             });
             if (socket === nextSocket) {
+              if (pendingTranscription) {
+                if (pendingTranscription.timeoutId) {
+                  clearTimeout(pendingTranscription.timeoutId);
+                }
+                pendingTranscription.reject(new Error("WebSocket connection closed"));
+                pendingTranscription = null;
+              }
               failActiveTurn("WebSocket connection closed");
               pendingReset?.reject(new Error("WebSocket connection closed"));
               pendingReset = null;
@@ -505,7 +611,78 @@ export function createSessionSocketTransport(): SessionTransport {
         connectedSocket.send(JSON.stringify(payload));
       });
     },
+    async transcribeAudio(request: TutorTurnRequest) {
+      if (typeof window === "undefined") {
+        return request.studentText;
+      }
+
+      const connectedSocket = await ensureSocket();
+      if (activeTurn || pendingTranscription) {
+        throw new Error("A tutor turn is already in progress");
+      }
+
+      return new Promise<string>((resolve, reject) => {
+        pendingTranscription = {
+          onTranscriptUpdate: request.onTranscriptUpdate,
+          reject,
+          resolve,
+          timeoutId: setTimeout(() => {
+            logSessionWarn("turn.timeout", {
+              phase: "stt",
+              phaseLabel: describeTurnPhase("stt"),
+              sessionId: ensureCurrentSessionId(),
+              timeoutMs: TURN_TIMEOUT_MS,
+              transcriptLength: 0,
+            });
+            if (pendingTranscription) {
+              pendingTranscription.reject(new Error("Tutor turn timed out during speech transcription"));
+              pendingTranscription = null;
+            }
+          }, TURN_TIMEOUT_MS),
+        };
+
+        const audioChunks = combineAudioChunksForTranscription(request.audioChunks ?? [{ sequence: 1, size: 320 }]);
+        logSessionInfo("transcribe.start", {
+          chunkCount: audioChunks.length,
+          mimeTypes: Array.from(new Set(audioChunks.map((chunk) => chunk.mimeType).filter(Boolean))),
+          sessionId: ensureCurrentSessionId(),
+          totalBytes: audioChunks.reduce((sum, chunk) => sum + chunk.size, 0),
+          transcribeOnly: true,
+        });
+
+        for (const chunk of audioChunks) {
+          const payload = {
+            type: "audio.chunk",
+            sequence: chunk.sequence,
+            size: chunk.size,
+            bytes_b64: chunk.bytesBase64,
+            mime_type: chunk.mimeType,
+            ts_ms: Date.now(),
+          };
+          logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
+          connectedSocket.send(JSON.stringify(payload));
+        }
+        const payload = {
+          type: "speech.end",
+          ts_ms: Date.now(),
+          text: request.studentText,
+          subject: request.subject,
+          grade_band: request.gradeBand,
+          student_profile: request.studentProfile,
+          transcribe_only: true,
+        };
+        logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
+        connectedSocket.send(JSON.stringify(payload));
+      });
+    },
     async interrupt() {
+      if (pendingTranscription) {
+        if (pendingTranscription.timeoutId) {
+          clearTimeout(pendingTranscription.timeoutId);
+        }
+        pendingTranscription.reject(new Error("Tutor turn interrupted"));
+        pendingTranscription = null;
+      }
       if (socket?.readyState === WebSocket.OPEN) {
         const payload = { type: "interrupt" };
         logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
@@ -516,6 +693,13 @@ export function createSessionSocketTransport(): SessionTransport {
       const connectedSocket = await ensureSocket();
       if (activeTurn) {
         failActiveTurn("Lesson reset");
+      }
+      if (pendingTranscription) {
+        if (pendingTranscription.timeoutId) {
+          clearTimeout(pendingTranscription.timeoutId);
+        }
+        pendingTranscription.reject(new Error("Lesson reset"));
+        pendingTranscription = null;
       }
       return new Promise<void>((resolve, reject) => {
         pendingReset = { resolve, reject };
@@ -536,6 +720,13 @@ export function createSessionSocketTransport(): SessionTransport {
 
       if (activeTurn) {
         failActiveTurn("Lesson switched");
+      }
+      if (pendingTranscription) {
+        if (pendingTranscription.timeoutId) {
+          clearTimeout(pendingTranscription.timeoutId);
+        }
+        pendingTranscription.reject(new Error("Lesson switched"));
+        pendingTranscription = null;
       }
       pendingReset = null;
       pendingRestore = null;

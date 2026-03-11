@@ -33,10 +33,16 @@ export type PersistedTurnDebug = {
     totalBytes: number;
     withPayloadCount: number;
   };
+  derivedFromLegacyTurn?: boolean;
   latency?: {
     llmFirstTokenToTtsFirstAudioMs: number;
     speechEndToSttFinalMs: number;
+    speechEndToAudioDoneMs?: number | null;
+    speechEndToFirstVisemeMs?: number | null;
     sttFinalToLlmFirstTokenMs: number;
+    ttsFirstAudioToFirstVisemeMs?: number | null;
+    missingEvents?: string[];
+    requiredEventCoverageComplete?: boolean;
   };
   request: {
     gradeBand: string;
@@ -51,6 +57,8 @@ export type PersistedTurnDebug = {
   };
   response: {
     audioSegmentCount: number;
+    firstTimestampMs?: number | null;
+    lastTimestampMs?: number | null;
     state: string;
     timestampCount: number;
     transcriptLength: number;
@@ -158,10 +166,72 @@ function emptyStore(): PersistedLessonThreadStore {
   };
 }
 
+function resolvePersistedTransport(thread: Partial<PersistedLessonThread>): PersistedTurnDebug["transport"] {
+  return thread.llmProvider === "openai-realtime" && thread.ttsProvider === "openai-realtime"
+    ? "openai-realtime"
+    : "session-socket";
+}
+
+function synthesizeLegacyTurnDebug(
+  thread: Partial<PersistedLessonThread>,
+  turn: PersistedConversationTurn
+): PersistedTurnDebug {
+  return {
+    audio: {
+      chunkCount: 0,
+      mimeTypes: [],
+      totalBytes: 0,
+      withPayloadCount: 0,
+    },
+    derivedFromLegacyTurn: true,
+    latency: {
+      llmFirstTokenToTtsFirstAudioMs: 0,
+      speechEndToSttFinalMs: 0,
+      sttFinalToLlmFirstTokenMs: 0,
+    },
+    request: {
+      gradeBand: typeof thread.gradeBand === "string" ? thread.gradeBand : "6-8",
+      llmModel: typeof thread.llmModel === "string" ? thread.llmModel : DEFAULT_LLM_MODEL,
+      llmProvider: typeof thread.llmProvider === "string" ? thread.llmProvider : DEFAULT_LLM_PROVIDER,
+      preference: typeof thread.preference === "string" ? thread.preference : "",
+      source: "text",
+      studentTextLength: turn.transcript.length,
+      subject: typeof thread.subject === "string" ? thread.subject : "math",
+      ttsModel: typeof thread.ttsModel === "string" ? thread.ttsModel : DEFAULT_TTS_MODEL,
+      ttsProvider: typeof thread.ttsProvider === "string" ? thread.ttsProvider : DEFAULT_TTS_PROVIDER,
+    },
+    response: {
+      audioSegmentCount: 0,
+      firstTimestampMs: null,
+      lastTimestampMs: null,
+      state: "restored",
+      timestampCount: 0,
+      transcriptLength: turn.transcript.length,
+      tutorTextLength: turn.tutorText.length,
+    },
+    sessionId: typeof thread.sessionId === "string" ? thread.sessionId : generateLessonSessionId(),
+    startedAt: "",
+    transport: resolvePersistedTransport(thread),
+  };
+}
+
+function normalizeConversation(
+  thread: Partial<PersistedLessonThread>
+): PersistedConversationTurn[] {
+  if (!Array.isArray(thread.conversation)) {
+    return [];
+  }
+
+  return thread.conversation.map((turn) => ({
+    ...turn,
+    debug: turn.debug ?? synthesizeLegacyTurnDebug(thread, turn),
+  }));
+}
+
 function normalizeThread(thread: Partial<PersistedLessonThread>): PersistedLessonThread {
   return {
     avatarProviderId: typeof thread.avatarProviderId === "string" ? thread.avatarProviderId : "human-css-2d",
-    conversation: Array.isArray(thread.conversation) ? thread.conversation as PersistedConversationTurn[] : [],
+    conversation: normalizeConversation(thread),
     gradeBand: typeof thread.gradeBand === "string" ? thread.gradeBand : "6-8",
     llmModel: typeof thread.llmModel === "string" ? thread.llmModel : DEFAULT_LLM_MODEL,
     llmProvider: typeof thread.llmProvider === "string" ? thread.llmProvider : DEFAULT_LLM_PROVIDER,

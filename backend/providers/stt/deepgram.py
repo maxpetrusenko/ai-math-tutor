@@ -12,7 +12,7 @@ class DeepgramProvider(BaseSTTProvider):
 
     provider_name = "deepgram"
 
-    def __init__(self, stability_repeats: int = 2, model: str = "nova-2") -> None:
+    def __init__(self, stability_repeats: int = 2, model: str = "nova-3") -> None:
         self._client = DeepgramStreamingClient(stability_repeats=stability_repeats, model=model)
 
     async def open_session(self, tracker) -> StreamingSTTSession:

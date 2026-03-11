@@ -220,9 +220,9 @@ def _math_problem_clarification_reply(text: str, previous_student: str) -> str |
     if not _looks_like_help_request(text):
         return None
 
-    arithmetic_reply = _math_expression_reply(previous_student)
-    if arithmetic_reply:
-        return arithmetic_reply
+    arithmetic_help_reply = _math_expression_help_reply(previous_student)
+    if arithmetic_help_reply:
+        return arithmetic_help_reply
 
     equation_reply = _math_equation_reply(previous_student)
     if equation_reply:
@@ -238,3 +238,18 @@ def _looks_like_help_request(text: str) -> bool:
 
 def _extract_expression_match(text: str) -> re.Match[str] | None:
     return re.fullmatch(r"(\d+)\s*([+\-*/])\s*(\d+)[?.!]*", text.strip())
+
+
+def _math_expression_help_reply(text: str) -> str | None:
+    match = _extract_expression_match(text)
+    if not match:
+        return None
+
+    left, operator, right = match.groups()
+    if operator == "+":
+        return f"Great, let's go step by step. What do you get if you start with {left} and add {right}?"
+    if operator == "-":
+        return f"Great, let's go step by step. What do you get if you start with {left} and subtract {right}?"
+    if operator == "*":
+        return f"Great, let's go step by step. What do you get if you multiply {left} by {right}?"
+    return f"Great, let's go step by step. What do you get if you divide {left} by {right}?"

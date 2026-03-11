@@ -34,10 +34,12 @@ import {
 import { PlaybackController, type PlaybackState } from "../lib/playback_controller";
 import { useFirebaseAuth } from "../lib/firebase_auth";
 import {
+  applyRuntimeProviderChange,
   DEFAULT_LLM_MODEL,
   DEFAULT_LLM_PROVIDER,
   DEFAULT_TTS_MODEL,
   DEFAULT_TTS_PROVIDER,
+  OPENAI_REALTIME_PROVIDER,
   normalizeRuntimeSelection,
   type RuntimeSelection,
   resolveDefaultLlmModel,
@@ -71,6 +73,7 @@ export type TutorTurnRequest = {
   llmModel?: string;
   llmProvider?: string;
   onTranscriptFinal?: (text: string) => void;
+  onTranscriptUpdate?: (text: string) => void;
   studentProfile?: {
     pacing?: string;
     preference?: string;
@@ -105,6 +108,7 @@ export type SessionTransport = {
   connect: () => Promise<"connected" | "failed">;
   getSessionId?: () => string;
   runTurn: (request: TutorTurnRequest) => Promise<TutorTurnResult>;
+  transcribeAudio?: (request: TutorTurnRequest) => Promise<string>;
   interrupt: () => Promise<void>;
   reset: () => Promise<void>;
   switchSession?: (sessionId: string, thread?: PersistedLessonThread) => Promise<void>;
@@ -147,6 +151,18 @@ function createConfiguredTransport(): SessionTransport {
         return openaiRealtimeTransport.runTurn(request);
       }
       return socketTransport.runTurn(request);
+    },
+    async transcribeAudio(request) {
+      if (request.llmProvider === OPENAI_REALTIME_PROVIDER && request.ttsProvider === OPENAI_REALTIME_PROVIDER) {
+        if (openaiRealtimeTransport.transcribeAudio) {
+          return openaiRealtimeTransport.transcribeAudio(request);
+        }
+        return request.studentText;
+      }
+      if (!socketTransport.transcribeAudio) {
+        return request.studentText;
+      }
+      return socketTransport.transcribeAudio(request);
     },
     async interrupt() {
       await Promise.allSettled([
@@ -220,6 +236,11 @@ function summarizeAudioChunks(audioChunks: CapturedAudioChunk[]) {
   };
 }
 
+function describeMicTurnFailure(audioChunks: CapturedAudioChunk[]) {
+  const hasCapturedAudio = audioChunks.some((chunk) => Boolean(chunk.bytesBase64));
+  return hasCapturedAudio ? "Voice captured, but transcription failed." : "Voice turn failed before transcription.";
+}
+
 function resolveTransportKind(runtimeSelection: RuntimeSelection): PersistedTurnDebug["transport"] {
   return runtimeSelection.llmProvider === "openai-realtime" && runtimeSelection.ttsProvider === "openai-realtime"
     ? "openai-realtime"
@@ -258,6 +279,7 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
   const [recentLessons, setRecentLessons] = useState<PersistedLessonSummary[]>([]);
   const [storageReady, setStorageReady] = useState(false);
   const metricsRef = useRef(createSessionMetrics());
+  const micInputBlocked = sessionState === "thinking" || sessionState === "listening" || playbackState === "speaking";
   const pendingRestoreThreadRef = useRef<PersistedLessonThread | null>(null);
   const previousPlaybackStateRef = useRef<PlaybackState>("idle");
   const activeTurnIdRef = useRef(0);
@@ -400,6 +422,8 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
       },
       response: {
         audioSegmentCount: result.audioSegments?.length ?? 0,
+        firstTimestampMs: result.timestamps[0]?.startMs ?? null,
+        lastTimestampMs: result.timestamps.at(-1)?.endMs ?? null,
         state: result.state,
         timestampCount: result.timestamps.length,
         transcriptLength: result.transcript.length,
@@ -624,7 +648,7 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
             },
           ];
       playbackSegments.forEach((segment, index) => {
-        const shouldDeferCompletion = !segment.audioBase64;
+        const shouldDeferCompletion = Boolean(segment.audioBase64);
         playbackController.enqueue({
           id: `${turnId}-${index}-${Date.now()}`,
           text: segment.text,
@@ -652,6 +676,12 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
     } catch (caughtError) {
       if (activeTurnIdRef.current !== turnId) {
         return;
+      }
+      if (source === "mic") {
+        const failedTranscript = describeMicTurnFailure(audioChunks);
+        setStudentPrompt(failedTranscript);
+        setTranscript(failedTranscript);
+        setTutorText("");
       }
       setError(caughtError instanceof Error ? caughtError.message : "Unknown error");
       setSessionState("failed");
@@ -786,7 +816,37 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
       });
       micActiveRef.current = false;
       setMicActive(false);
-      await runDemoTurn(chunks, "mic");
+      setError("");
+      const runtimeSelection = normalizeRuntimeSelection({
+        llmModel,
+        llmProvider,
+        ttsModel,
+        ttsProvider,
+      });
+      setSessionState("thinking");
+      setLatency(null);
+      setTimestamps([]);
+      setTutorText("");
+      const transcriptText = await sessionTransport.transcribeAudio?.({
+        studentText: "",
+        subject,
+        gradeBand,
+        llmProvider: runtimeSelection.llmProvider,
+        llmModel: runtimeSelection.llmModel,
+        onTranscriptUpdate: (text) => {
+          setStudentPrompt(text);
+          setTranscript(text);
+        },
+        studentProfile: preference ? { preference } : undefined,
+        audioChunks: chunks,
+        ttsProvider: runtimeSelection.ttsProvider,
+        ttsModel: runtimeSelection.ttsModel,
+      });
+      if ((transcriptText ?? "").trim()) {
+        setStudentPrompt(transcriptText ?? "");
+        setTranscript(transcriptText ?? "");
+      }
+      setSessionState("idle");
     } catch (caughtError) {
       micActiveRef.current = false;
       setMicActive(false);
@@ -796,7 +856,7 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
   }
 
   function handleMicPressStart(event: React.PointerEvent<HTMLButtonElement>) {
-    if (event.button !== 0 || micHoldRef.current || sessionState === "thinking") {
+    if (event.button !== 0 || micHoldRef.current || micInputBlocked) {
       return;
     }
 
@@ -821,7 +881,7 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
   }
 
   function handleMicMouseDown(event: React.MouseEvent<HTMLButtonElement>) {
-    if (event.button !== 0 || micHoldRef.current || sessionState === "thinking") {
+    if (event.button !== 0 || micHoldRef.current || micInputBlocked) {
       return;
     }
 
@@ -840,7 +900,7 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
   }
 
   function handleMicButtonKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
-    if ((event.key !== " " && event.key !== "Enter") || event.repeat || micHoldRef.current) {
+    if ((event.key !== " " && event.key !== "Enter") || event.repeat || micHoldRef.current || micInputBlocked) {
       return;
     }
 
@@ -931,10 +991,13 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
                     aria-label="LLM provider"
                     onChange={(event) => {
                       const nextProvider = event.target.value;
-                      syncRuntimeSelection({
-                        llmModel: resolveDefaultLlmModel(nextProvider),
-                        llmProvider: nextProvider,
-                      });
+                      syncRuntimeSelection(
+                        applyRuntimeProviderChange(
+                          { llmModel, llmProvider, ttsModel, ttsProvider },
+                          "llm",
+                          nextProvider
+                        )
+                      );
                     }}
                     value={llmProvider}
                   >
@@ -967,10 +1030,13 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
                     aria-label="TTS provider"
                     onChange={(event) => {
                       const nextProvider = event.target.value;
-                      syncRuntimeSelection({
-                        ttsModel: resolveDefaultTtsModel(nextProvider),
-                        ttsProvider: nextProvider,
-                      });
+                      syncRuntimeSelection(
+                        applyRuntimeProviderChange(
+                          { llmModel, llmProvider, ttsModel, ttsProvider },
+                          "tts",
+                          nextProvider
+                        )
+                      );
                     }}
                     value={ttsProvider}
                   >
@@ -1151,7 +1217,7 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
                 <button
                   aria-label={micActive ? "Release to send" : "Hold to talk"}
                   className={`mic-button ${micActive ? "mic-button--live" : ""}`}
-                  disabled={!micSupported || sessionState === "thinking"}
+                  disabled={!micSupported || micInputBlocked}
                   onBlur={(event) => handleMicPressEnd(event)}
                   onKeyDown={handleMicButtonKeyDown}
                   onKeyUp={handleMicButtonKeyUp}
@@ -1185,7 +1251,16 @@ export function TutorSession({ initialAvatarProviderId, transport }: TutorSessio
 
           {/* Latency Monitor - Minimal */}
           <div className="stage-footer">
-            <LatencyMonitor metrics={latency} variant="inline" />
+            <LatencyMonitor
+              metrics={latency}
+              transport={resolveTransportKind(normalizeRuntimeSelection({
+                llmModel,
+                llmProvider,
+                ttsModel,
+                ttsProvider,
+              }))}
+              variant="inline"
+            />
           </div>
         </div>
       </section>

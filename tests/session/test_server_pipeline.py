@@ -113,7 +113,7 @@ def test_session_server_rejects_invalid_runtime_model_and_recovers_idle() -> Non
                 "ts_ms": 1000,
                 "text": "Explain fractions",
                 "llm_provider": "minimax",
-                "llm_model": "gemini-2.5-flash",
+                "llm_model": "gemini-3-flash-preview",
             }
         )
 
@@ -126,7 +126,7 @@ def test_session_server_rejects_invalid_runtime_model_and_recovers_idle() -> Non
     assert transcript == {"type": "transcript.final", "text": "Explain fractions"}
     assert error_event == {
         "type": "session.error",
-        "detail": "unsupported llm model for minimax: gemini-2.5-flash",
+        "detail": "unsupported llm model for minimax: gemini-3-flash-preview",
     }
     assert idle == {"type": "state.changed", "state": "idle"}
 
@@ -309,7 +309,7 @@ def test_session_server_keeps_active_math_problem_for_help_follow_up() -> None:
     second_reply = " ".join(event["text"] for event in second_events if event["type"] == "tutor.text.committed").strip()
 
     assert first_reply == "Let's work on 2+2. What total do you get when you add 2 and 2?"
-    assert second_reply == "Let's work on 2+2. What total do you get when you add 2 and 2?"
+    assert second_reply == "Great, let's go step by step. What do you get if you start with 2 and add 2?"
 
 
 def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:

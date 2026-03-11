@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import type { PersistedTurnDebug } from "../lib/lesson_thread_store";
 
 export type LatencyMetrics = {
   speechEndToSttFinalMs: number;
@@ -15,34 +16,44 @@ export type LatencyMetrics = {
 
 type LatencyMonitorProps = {
   metrics: LatencyMetrics | null;
+  transport?: PersistedTurnDebug["transport"];
   variant?: "panel" | "inline";
 };
 
-const EMPTY_METRICS: LatencyMetrics = {
-  speechEndToSttFinalMs: 0,
-  sttFinalToLlmFirstTokenMs: 0,
-  llmFirstTokenToTtsFirstAudioMs: 0,
-  ttsFirstAudioToFirstVisemeMs: null,
-  speechEndToFirstVisemeMs: null,
-  speechEndToAudioDoneMs: null,
-  missingEvents: ["speech_end", "stt_final", "llm_first_token", "tts_first_audio", "first_viseme", "audio_done"],
-  requiredEventCoverageComplete: false,
-};
-
-export function LatencyMonitor({ metrics, variant = "panel" }: LatencyMonitorProps) {
-  const resolved = metrics ?? EMPTY_METRICS;
-  const syncCoverage = resolved.requiredEventCoverageComplete
-    ? "required events captured"
-    : `missing: ${(resolved.missingEvents ?? []).join(", ")}`;
+export function LatencyMonitor({
+  metrics,
+  transport = "session-socket",
+  variant = "panel",
+}: LatencyMonitorProps) {
+  const resolved = metrics ?? {
+    speechEndToSttFinalMs: 0,
+    sttFinalToLlmFirstTokenMs: 0,
+    llmFirstTokenToTtsFirstAudioMs: 0,
+    ttsFirstAudioToFirstVisemeMs: null,
+    speechEndToFirstVisemeMs: null,
+    speechEndToAudioDoneMs: null,
+    missingEvents: [],
+    requiredEventCoverageComplete: false,
+  };
+  const syncCoverage = describeSyncCoverage(transport, metrics);
+  const transportLabel = transport === "openai-realtime" ? "OpenAI realtime" : "Socket pipeline";
+  const statusLabel = metrics
+    ? resolved.requiredEventCoverageComplete
+      ? "coverage complete"
+      : transport === "openai-realtime"
+        ? "coverage limited"
+        : "coverage partial"
+    : "awaiting turn";
 
   if (variant === "inline") {
     return (
       <div className="latency-strip" data-testid="latency-strip">
         <span>Latency</span>
+        <span className="latency-strip__mode">{transportLabel}</span>
         <strong>STT {resolved.speechEndToSttFinalMs} ms</strong>
         <strong>LLM {resolved.sttFinalToLlmFirstTokenMs} ms</strong>
         <strong>TTS {resolved.llmFirstTokenToTtsFirstAudioMs} ms</strong>
-        <span>{syncCoverage}</span>
+        <span className="latency-strip__coverage">{syncCoverage}</span>
       </div>
     );
   }
@@ -51,7 +62,7 @@ export function LatencyMonitor({ metrics, variant = "panel" }: LatencyMonitorPro
     <div className="panel">
       <div className="panel__header">
         <h3>Latency</h3>
-        <span className="status-pill">{resolved.requiredEventCoverageComplete ? "coverage complete" : "coverage partial"}</span>
+        <span className="status-pill">{statusLabel}</span>
       </div>
       <div className="metric-grid">
         <div className="metric-card">
@@ -79,6 +90,7 @@ export function LatencyMonitor({ metrics, variant = "panel" }: LatencyMonitorPro
           <strong>{formatOptionalMetric(resolved.speechEndToAudioDoneMs)}</strong>
         </div>
       </div>
+      <p className="helper-text" style={{ marginTop: "0.75rem" }}>{transportLabel}</p>
       <p className="helper-text" style={{ marginTop: "0.75rem" }}>{syncCoverage}</p>
     </div>
   );
@@ -89,4 +101,26 @@ function formatOptionalMetric(value: number | null | undefined) {
     return "pending";
   }
   return `${value} ms`;
+}
+
+function describeSyncCoverage(
+  transport: PersistedTurnDebug["transport"],
+  metrics: LatencyMetrics | null
+) {
+  if (!metrics) {
+    return transport === "openai-realtime"
+      ? "Unified speech path selected; run a turn for token and socket timing"
+      : "Run a live turn to populate benchmark timings";
+  }
+
+  if (metrics.requiredEventCoverageComplete) {
+    return "required events captured";
+  }
+
+  if (transport === "openai-realtime") {
+    return "Unified realtime path; word timestamps and full sync coverage are limited";
+  }
+
+  const missing = metrics.missingEvents ?? [];
+  return missing.length > 0 ? `missing: ${missing.join(", ")}` : "coverage partial";
 }

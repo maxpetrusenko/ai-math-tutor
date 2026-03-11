@@ -130,4 +130,4 @@ def test_build_draft_tutor_reply_handles_help_request_for_active_math_problem() 
         ],
     )
 
-    assert reply == "Let's work on 2+2. What total do you get when you add 2 and 2?"
+    assert reply == "Great, let's go step by step. What do you get if you start with 2 and add 2?"

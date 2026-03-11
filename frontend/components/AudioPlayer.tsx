@@ -5,6 +5,12 @@ import { useEffect, useRef, useState } from "react";
 
 import { PlaybackController, type PlaybackSnapshot } from "../lib/playback_controller";
 
+const AUDIO_PLAYER_LOG_PREFIX = "[AudioPlayer]";
+
+function logAudioPlayerInfo(event: string, details: Record<string, unknown>) {
+  console.info(AUDIO_PLAYER_LOG_PREFIX, event, details);
+}
+
 type AudioPlayerProps = {
   controller: PlaybackController;
   variant?: "panel" | "inline" | "hidden";
@@ -43,6 +49,13 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
     }
     audioRef.current?.pause();
     audioRef.current = null;
+    logAudioPlayerInfo("playback.begin", {
+      hasAudioBase64: Boolean(snapshot.activeItem.audioBase64),
+      itemId: snapshot.activeItem.id,
+      queueLength: snapshot.queueLength,
+      text: snapshot.activeItem.text,
+      textLength: snapshot.activeItem.text.length,
+    });
     if (snapshot.activeItem.audioBase64 && typeof Audio !== "undefined") {
       let finished = false;
       let started = false;
@@ -54,6 +67,11 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
           return;
         }
         finished = true;
+        logAudioPlayerInfo("playback.complete", {
+          itemId: snapshot.activeItem?.id,
+          mode: "provider-audio",
+          text: snapshot.activeItem?.text ?? "",
+        });
         snapshot.activeItem?.onPlaybackComplete?.();
         controller.completeActive(snapshot.activeItem?.id);
       };
@@ -62,11 +80,23 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
           return;
         }
         started = true;
+        logAudioPlayerInfo("playback.started", {
+          itemId: snapshot.activeItem?.id,
+          mode: "provider-audio",
+          text: snapshot.activeItem?.text ?? "",
+        });
         snapshot.activeItem?.onPlaybackStart?.();
       };
       audio.volume = volume;
       audio.onended = finishPlayback;
-      audio.onerror = finishPlayback;
+      audio.onerror = () => {
+        logAudioPlayerInfo("playback.error", {
+          itemId: snapshot.activeItem?.id,
+          mode: "provider-audio",
+          text: snapshot.activeItem?.text ?? "",
+        });
+        finishPlayback();
+      };
       audio.onplaying = markPlaybackStarted;
       audioRef.current = audio;
       spokenItemIdRef.current = snapshot.activeItem.id;
@@ -76,6 +106,11 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
         })
         .catch(() => {
           audioRef.current = null;
+          logAudioPlayerInfo("playback.play_rejected", {
+            itemId: snapshot.activeItem?.id,
+            mode: "provider-audio",
+            text: snapshot.activeItem?.text ?? "",
+          });
           finishPlayback();
         });
 
@@ -96,13 +131,28 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
     const utterance = new SpeechSynthesisUtterance(snapshot.activeItem.text);
     utterance.volume = volume;
     utterance.onstart = () => {
+      logAudioPlayerInfo("playback.started", {
+        itemId: snapshot.activeItem?.id,
+        mode: "speech-synthesis",
+        text: snapshot.activeItem?.text ?? "",
+      });
       snapshot.activeItem?.onPlaybackStart?.();
     };
     utterance.onend = () => {
+      logAudioPlayerInfo("playback.complete", {
+        itemId: snapshot.activeItem?.id,
+        mode: "speech-synthesis",
+        text: snapshot.activeItem?.text ?? "",
+      });
       snapshot.activeItem?.onPlaybackComplete?.();
       controller.completeActive(snapshot.activeItem?.id);
     };
     utterance.onerror = () => {
+      logAudioPlayerInfo("playback.error", {
+        itemId: snapshot.activeItem?.id,
+        mode: "speech-synthesis",
+        text: snapshot.activeItem?.text ?? "",
+      });
       snapshot.activeItem?.onPlaybackComplete?.();
       controller.completeActive(snapshot.activeItem?.id);
     };

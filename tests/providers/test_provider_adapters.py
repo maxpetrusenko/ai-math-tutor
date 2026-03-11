@@ -20,6 +20,12 @@ def test_deepgram_provider_delegates_open_session(monkeypatch) -> None:
     assert session is sentinel
 
 
+def test_deepgram_provider_defaults_to_nova_3() -> None:
+    provider = DeepgramProvider()
+
+    assert provider._client.config.model == "nova-3"
+
+
 def test_cartesia_provider_exposes_context_and_cancel() -> None:
     provider = CartesiaProvider()
 

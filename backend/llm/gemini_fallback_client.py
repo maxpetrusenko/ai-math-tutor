@@ -15,7 +15,7 @@ from backend.llm.response_policy import shape_tutor_response
 from backend.monitoring.latency_tracker import LatencyTracker
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 DEFAULT_GEMINI_LIVE_TIMEOUT_SECONDS = 10.0
 MIN_GEMINI_LIVE_TIMEOUT_SECONDS = 10.0
 logger = logging.getLogger(__name__)

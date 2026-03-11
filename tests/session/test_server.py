@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -26,11 +28,13 @@ def test_session_websocket_streams_state_and_tutor_events() -> None:
         transcript = websocket.receive_json()
         speaking = websocket.receive_json()
         tutor_started = websocket.receive_json()
-        websocket.receive_json()
-        websocket.receive_json()
-        websocket.receive_json()
+        tts_context_started = websocket.receive_json()
+        tutor_chunk = websocket.receive_json()
+        first_tts_audio = websocket.receive_json()
         websocket.send_json({"type": "interrupt"})
-        websocket.receive_json()
+        trailing_tutor_chunk = websocket.receive_json()
+        final_tts_audio = websocket.receive_json()
+        tts_flush = websocket.receive_json()
         fading = websocket.receive_json()
         back_to_idle = websocket.receive_json()
 
@@ -45,8 +49,97 @@ def test_session_websocket_streams_state_and_tutor_events() -> None:
     assert transcript == {"type": "transcript.final", "text": "First question"}
     assert speaking["state"] == "speaking"
     assert tutor_started["type"] == "tutor.turn.started"
+    assert tts_context_started["type"] == "tts.context.started"
+    assert tutor_chunk["type"] == "tutor.text.committed"
+    assert first_tts_audio["type"] == "tts.audio"
+    assert trailing_tutor_chunk["type"] == "tutor.text.committed"
+    assert final_tts_audio["type"] == "tts.audio"
+    assert tts_flush == {"type": "tts.flush", "provider": "cartesia"}
     assert fading["state"] == "fading"
     assert back_to_idle["state"] == "idle"
+
+
+def test_session_websocket_can_transcribe_without_starting_a_tutor_turn() -> None:
+    client = TestClient(app)
+
+    with client.websocket_connect("/ws/session") as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "audio.chunk", "sequence": 1, "size": 320})
+        listening = websocket.receive_json()
+        audio_ack = websocket.receive_json()
+        websocket.send_json({"type": "speech.end", "ts_ms": 1000, "text": "First question", "transcribe_only": True})
+        thinking = websocket.receive_json()
+        transcript = websocket.receive_json()
+        back_to_idle = websocket.receive_json()
+
+    assert listening["state"] == "listening"
+    assert audio_ack["type"] == "audio.received"
+    assert thinking["state"] == "thinking"
+    assert transcript == {"type": "transcript.final", "text": "First question"}
+    assert back_to_idle["state"] == "idle"
+
+
+def test_session_websocket_transcribe_only_accepts_stable_partial_when_final_is_missing(monkeypatch) -> None:
+    class _StablePartialOnlySTTSession:
+        async def push_audio(self, chunk: bytes, *, ts_ms: float | None = None) -> list[dict[str, str]]:
+            return []
+
+        async def finalize(self, *, ts_ms: float) -> list[dict[str, str]]:
+            return [{"type": "transcript.partial_stable", "text": "stable partial transcript"}]
+
+        async def close(self) -> None:
+            return None
+
+    class _StablePartialOnlySTTProvider:
+        async def open_session(self, tracker: object) -> _StablePartialOnlySTTSession:
+            return _StablePartialOnlySTTSession()
+
+    monkeypatch.setattr("backend.session.server.create_stt_provider", lambda: _StablePartialOnlySTTProvider())
+    client = TestClient(app)
+
+    with client.websocket_connect("/ws/session") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "audio.chunk",
+                "sequence": 1,
+                "size": 320,
+                "bytes_b64": "YWJj",
+                "mime_type": "audio/webm;codecs=opus",
+            }
+        )
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.send_json({"type": "speech.end", "ts_ms": 1000, "text": "", "transcribe_only": True})
+        thinking = websocket.receive_json()
+        partial = websocket.receive_json()
+        transcript = websocket.receive_json()
+        back_to_idle = websocket.receive_json()
+
+    assert thinking == {"type": "state.changed", "state": "thinking"}
+    assert partial == {"type": "transcript.partial_stable", "text": "stable partial transcript"}
+    assert transcript == {"type": "transcript.final", "text": "stable partial transcript"}
+    assert back_to_idle == {"type": "state.changed", "state": "idle"}
+
+
+def test_session_websocket_writes_trace_for_transcribe_only_turn(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("NERDY_TURN_TRACE_DIR", str(tmp_path / "turn-traces"))
+    client = TestClient(app)
+
+    with client.websocket_connect("/ws/session") as websocket:
+        started = websocket.receive_json()
+        websocket.send_json({"type": "speech.end", "ts_ms": 1000, "text": "debug this mic release", "transcribe_only": True})
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.receive_json()
+
+    trace_files = sorted((tmp_path / "turn-traces").glob("*.json"))
+    assert len(trace_files) == 1
+    trace_payload = json.loads(trace_files[0].read_text())
+    assert trace_payload["session_id"] == started["session_id"]
+    assert trace_payload["stt"]["source"] == "text_fallback"
+    assert trace_payload["stt"]["transcribe_only"] is True
+    assert trace_payload["stt"]["transcript_text"] == "debug this mic release"
 
 
 def test_session_websocket_resets_session_state() -> None:
@@ -55,10 +148,13 @@ def test_session_websocket_resets_session_state() -> None:
     with client.websocket_connect("/ws/session") as websocket:
         websocket.receive_json()
         websocket.send_json({"type": "speech.end", "ts_ms": 1000, "text": "first question"})
-        for _ in range(8):
+        for _ in range(7):
             websocket.receive_json()
 
         websocket.send_json({"type": "session.reset"})
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.receive_json()
         reset_event = websocket.receive_json()
 
     assert reset_event == {"type": "session.reset", "state": "idle"}
@@ -106,7 +202,7 @@ def test_lesson_history_api_persists_active_and_archived_threads() -> None:
         "avatarProviderId": "human-css-2d",
         "conversation": [{"id": "1", "transcript": "What is x?", "tutorText": "What do you know already?"}],
         "gradeBand": "6-8",
-        "llmModel": "gemini-2.5-flash",
+        "llmModel": "gemini-3-flash-preview",
         "llmProvider": "gemini",
         "preference": "slow down",
         "sessionId": "lesson-123",
@@ -262,7 +358,7 @@ def test_lessons_api_scopes_fallback_store_per_firebase_uid(monkeypatch) -> None
         "avatarProviderId": "human-css-2d",
         "conversation": [{"id": "1", "transcript": "What is x?", "tutorText": "Start with the variable."}],
         "gradeBand": "6-8",
-        "llmModel": "gemini-2.5-flash",
+        "llmModel": "gemini-3-flash-preview",
         "llmProvider": "gemini",
         "preference": "slow down",
         "sessionId": "lesson-123",

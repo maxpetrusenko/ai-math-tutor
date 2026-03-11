@@ -17,6 +17,7 @@ from backend.benchmarks.run_latency_benchmark import (
     load_canned_prompts,
     load_local_env,
 )
+from backend.llm.gemini_fallback_client import DEFAULT_GEMINI_MODEL
 from backend.llm.langchain_bridge import summarize_langchain_llm_input, summarize_langchain_llm_output
 from backend.llm.prompt_builder import build_tutor_messages
 from backend.monitoring.latency_tracker import LatencyTracker
@@ -24,7 +25,6 @@ from backend.monitoring.latency_tracker import LatencyTracker
 DEEPGRAM_LISTEN_URL = "https://api.deepgram.com/v1/listen"
 GEMINI_STREAM_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent"
 CARTESIA_BYTES_URL = "https://api.cartesia.ai/tts/bytes"
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_DEEPGRAM_MODEL = "nova-2"
 DEFAULT_CARTESIA_MODEL = "sonic-2"
 DEFAULT_CARTESIA_VOICE_ID = "694f9389-aac1-45b6-b726-9d9369183238"
@@ -270,12 +270,12 @@ def generate_tutor_text(
         return str(result["text"]), float(result["first_token_ms"])
     except error.HTTPError as http_error:
         error_body = http_error.read().decode("utf-8", errors="ignore")
-        if http_error.code == 404 and config.gemini_model != "gemini-2.5-flash":
+        if http_error.code == 404 and config.gemini_model != DEFAULT_GEMINI_MODEL:
             fallback_config = LiveProviderStackConfig(
                 deepgram_api_key=config.deepgram_api_key,
                 deepgram_model=config.deepgram_model,
                 gemini_api_key=config.gemini_api_key,
-                gemini_model="gemini-2.5-flash",
+                gemini_model=DEFAULT_GEMINI_MODEL,
                 cartesia_api_key=config.cartesia_api_key,
                 cartesia_model=config.cartesia_model,
                 cartesia_voice_id=config.cartesia_voice_id,

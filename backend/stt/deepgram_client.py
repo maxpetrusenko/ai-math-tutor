@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlencode
@@ -19,6 +20,8 @@ from backend.turn_taking.transcript_commit import TranscriptCommitter
 
 _DEEPGRAM_LISTEN_URL = "wss://api.deepgram.com/v1/listen"
 logger = logging.getLogger(__name__)
+_DEEPGRAM_PARTIAL_POLL_TIMEOUT_S = 0.01
+_DEEPGRAM_FINALIZE_WAIT_TIMEOUT_S = 1.5
 
 
 class DeepgramConnection(Protocol):
@@ -38,7 +41,7 @@ class DeepgramTransport(Protocol):
 @dataclass(slots=True)
 class DeepgramConfig:
     api_key: str | None
-    model: str = "nova-2"
+    model: str = "nova-3"
     fallback_model: str = "nova-3"
     language: str = "en"
     endpointing_ms: int = 300
@@ -85,7 +88,7 @@ class DeepgramStreamingClient:
         api_key: str | None = None,
         *,
         stability_repeats: int = 2,
-        model: str = "nova-2",
+        model: str = "nova-3",
         fallback_model: str = "nova-3",
         transport: DeepgramTransport | None = None,
     ) -> None:
@@ -213,9 +216,16 @@ class DeepgramStreamingSession:
         stop_on_final: bool = False,
     ) -> list[TranscriptEvent]:
         events: list[TranscriptEvent] = []
-        timeout = 0.5 if stop_on_final else 0.01
+        deadline = time.monotonic() + _DEEPGRAM_FINALIZE_WAIT_TIMEOUT_S if stop_on_final else None
 
         while True:
+            timeout = _DEEPGRAM_PARTIAL_POLL_TIMEOUT_S
+            if stop_on_final:
+                assert deadline is not None
+                remaining_s = deadline - time.monotonic()
+                if remaining_s <= 0:
+                    break
+                timeout = remaining_s
             try:
                 payload = await asyncio.wait_for(self._connection.recv_json(), timeout=timeout)
             except TimeoutError:

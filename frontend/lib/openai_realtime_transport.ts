@@ -4,8 +4,9 @@ import type { PersistedLessonThread } from "./lesson_thread_store";
 
 const REALTIME_SOCKET_URL = "wss://api.openai.com/v1/realtime";
 const REALTIME_API_TIMEOUT_MS = 20_000;
+const REALTIME_TOKEN_MINT_TIMEOUT_MS = 25_000;
 const REALTIME_SAMPLE_RATE = 24_000;
-const REALTIME_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+const REALTIME_TRANSCRIPTION_MODEL = "gpt-4o-transcribe";
 const REALTIME_VOICE = "marin";
 
 type TransportDeps = {
@@ -14,10 +15,17 @@ type TransportDeps = {
   WebSocketImpl?: typeof WebSocket;
 };
 
+type MintClientSecretOptions = {
+  model?: string;
+  sessionType?: "realtime" | "transcription";
+};
+
 type RealtimeTurnPhase = "input" | "response";
 
 type ActiveTurn = {
   audioBase64Chunks: string[];
+  audioDone: boolean;
+  expectsAudio: boolean;
   metrics: ReturnType<typeof createSessionMetrics>;
   onTranscriptFinal?: (text: string) => void;
   phase: RealtimeTurnPhase;
@@ -92,6 +100,41 @@ function isAudioTurn(request: TutorTurnRequest) {
   return (request.audioChunks ?? []).some((chunk) => Boolean(chunk.bytesBase64));
 }
 
+function buildRealtimeResponseSession(request: TutorTurnRequest) {
+  return {
+    type: "realtime",
+    instructions: buildRealtimeInstructions(request),
+    output_modalities: ["audio"],
+    audio: {
+      input: {
+        format: { type: "audio/pcm", rate: REALTIME_SAMPLE_RATE },
+        transcription: { language: "en", model: REALTIME_TRANSCRIPTION_MODEL },
+        turn_detection: null,
+      },
+      output: {
+        format: { type: "audio/pcm", rate: REALTIME_SAMPLE_RATE },
+        voice: REALTIME_VOICE,
+      },
+    },
+  };
+}
+
+function buildRealtimeTranscriptionSession() {
+  return {
+    type: "transcription",
+    audio: {
+      input: {
+        format: { type: "audio/pcm", rate: REALTIME_SAMPLE_RATE },
+        transcription: {
+          language: "en",
+          model: REALTIME_TRANSCRIPTION_MODEL,
+        },
+        turn_detection: null,
+      },
+    },
+  };
+}
+
 function joinBase64PcmChunks(chunks: string[]) {
   const bytes = chunks.flatMap((chunk) => Array.from(base64ToUint8Array(chunk)));
   return new Uint8Array(bytes);
@@ -161,6 +204,10 @@ async function capturedChunksToPcmBase64Chunks(chunks: NonNullable<TutorTurnRequ
     encodedChunks.push(btoa(binary));
   }
   return encodedChunks;
+}
+
+async function requestAudioAsPcmBase64Chunks(request: TutorTurnRequest) {
+  return capturedChunksToPcmBase64Chunks(request.audioChunks ?? []);
 }
 
 async function decodeAndResample(blob: Blob, sampleRate: number) {
@@ -285,6 +332,15 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
     activeTurn = null;
   };
 
+  const maybeFinalizeTurn = () => {
+    if (!activeTurn) {
+      return;
+    }
+    if (activeTurn.responseDone && (!activeTurn.expectsAudio || activeTurn.audioDone)) {
+      finalizeTurn();
+    }
+  };
+
   const handleMessage = (event: MessageEvent<string>) => {
     const payload = JSON.parse(event.data) as Record<string, unknown>;
     if (payload.type === "error") {
@@ -332,13 +388,14 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
     }
 
     if (payload.type === "response.audio.done" || payload.type === "response.output_audio.done") {
-      activeTurn.responseDone = true;
+      activeTurn.audioDone = true;
+      maybeFinalizeTurn();
       return;
     }
 
     if (payload.type === "response.done") {
       activeTurn.responseDone = true;
-      finalizeTurn();
+      maybeFinalizeTurn();
     }
   };
 
@@ -374,27 +431,40 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
     seededHistorySessionId = currentSessionId;
   };
 
-  const mintClientSecret = async (request: TutorTurnRequest) => {
+  const mintClientSecret = async (request: TutorTurnRequest, options: MintClientSecretOptions = {}) => {
     if (!apiUrl) {
       throw new Error("Realtime token endpoint is not configured");
     }
-    const response = await fetchImpl(apiUrl, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        instructions: buildRealtimeInstructions(request),
-        model: request.llmModel || "gpt-realtime-mini",
-        voice: REALTIME_VOICE,
-      }),
-    });
-    if (!response.ok) {
-      throw new Error("Realtime token request failed");
+    const requestedModel = options.model ?? request.llmModel ?? "gpt-realtime-mini";
+    let response: Response;
+    try {
+      response = await fetchImpl(apiUrl, {
+        method: "POST",
+        credentials: "include",
+        signal:
+          typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+            ? AbortSignal.timeout(REALTIME_TOKEN_MINT_TIMEOUT_MS)
+            : undefined,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          instructions: buildRealtimeInstructions(request),
+          model: requestedModel,
+          session_type: options.sessionType,
+          voice: REALTIME_VOICE,
+        }),
+      });
+    } catch (error) {
+      throw new Error(describeRealtimeTokenMintFailure(error));
     }
-    const payload = await response.json() as { client_secret?: { value?: string } };
-    const secret = payload.client_secret?.value;
+    if (!response.ok) {
+      const responseText = await response.text().catch(() => "");
+      const detail = parseRealtimeErrorDetail(responseText);
+      throw new Error(detail ? `Realtime token request failed: ${detail}` : `Realtime token request failed with status ${response.status}`);
+    }
+    const payload = await response.json() as { client_secret?: { value?: string }; value?: string };
+    const secret = payload.client_secret?.value ?? payload.value;
     if (!secret) {
       throw new Error("Realtime token response was missing client_secret");
     }
@@ -429,22 +499,7 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
         };
         sendEvent({
           type: "session.update",
-          session: {
-            type: "realtime",
-            instructions: buildRealtimeInstructions(request),
-            output_modalities: ["audio", "text"],
-            audio: {
-              input: {
-                format: { type: "audio/pcm", rate: REALTIME_SAMPLE_RATE },
-                transcription: { language: "en", model: REALTIME_TRANSCRIPTION_MODEL },
-                turn_detection: null,
-              },
-              output: {
-                format: { type: "audio/pcm", rate: REALTIME_SAMPLE_RATE },
-                voice: REALTIME_VOICE,
-              },
-            },
-          },
+          session: buildRealtimeResponseSession(request),
         });
         replayHistory();
         resolve(ws);
@@ -489,6 +544,8 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
         metrics.mark({ name: "speech_end", tsMs: performance.now() });
         const turn = {
           audioBase64Chunks: [],
+          audioDone: false,
+          expectsAudio: true,
           metrics,
           onTranscriptFinal: request.onTranscriptFinal,
           phase: isAudioTurn(request) ? "input" : "response",
@@ -506,7 +563,7 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
 
         try {
           if (isAudioTurn(request)) {
-            const pcmChunks = await capturedChunksToPcmBase64Chunks(request.audioChunks ?? []);
+            const pcmChunks = await requestAudioAsPcmBase64Chunks(request);
             for (const chunk of pcmChunks) {
               sendEvent({ type: "input_audio_buffer.append", audio: chunk });
             }
@@ -527,12 +584,122 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
           sendEvent({
             type: "response.create",
             response: {
-              modalities: ["audio", "text"],
+              output_modalities: ["audio"],
             },
           });
         } catch (error) {
           failActiveTurn(error instanceof Error ? error.message : "Could not start OpenAI Realtime turn");
         }
+      });
+    },
+    async transcribeAudio(request) {
+      if (typeof window === "undefined") {
+        return request.studentText;
+      }
+      if (!isRealtimeRequest(request) || !isAudioTurn(request)) {
+        return request.studentText;
+      }
+
+      const requestedModel = REALTIME_TRANSCRIPTION_MODEL;
+      const clientSecret = await mintClientSecret(request, {
+        model: requestedModel,
+        sessionType: "transcription",
+      });
+      const pcmChunks = await requestAudioAsPcmBase64Chunks(request);
+      if (pcmChunks.length === 0) {
+        return request.studentText;
+      }
+
+      return new Promise<string>((resolve, reject) => {
+        let settled = false;
+        let transcript = "";
+        const ws = new WebSocketImpl(REALTIME_SOCKET_URL, [
+          "realtime",
+          `openai-insecure-api-key.${clientSecret}`,
+        ]);
+        const timeoutId = setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          try {
+            ws.close();
+          } catch {
+            // ignore close failures
+          }
+          reject(new Error("OpenAI Realtime transcription timed out before a final transcript arrived"));
+        }, REALTIME_API_TIMEOUT_MS);
+
+        const finish = (result: string) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timeoutId);
+          try {
+            ws.close();
+          } catch {
+            // ignore close failures
+          }
+          resolve(result);
+        };
+
+        const fail = (message: string) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timeoutId);
+          try {
+            ws.close();
+          } catch {
+            // ignore close failures
+          }
+          reject(new Error(message));
+        };
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({
+            type: "session.update",
+            session: buildRealtimeTranscriptionSession(),
+          }));
+          for (const chunk of pcmChunks) {
+            ws.send(JSON.stringify({ type: "input_audio_buffer.append", audio: chunk }));
+          }
+          ws.send(JSON.stringify({ type: "input_audio_buffer.commit" }));
+        };
+        ws.onmessage = (event) => {
+          const payload = JSON.parse(event.data) as Record<string, unknown>;
+          if (payload.type === "error") {
+            const message = String((payload.error as Record<string, unknown> | undefined)?.message ?? payload.message ?? "Realtime transcription error");
+            fail(message);
+            return;
+          }
+          if (payload.type === "conversation.item.input_audio_transcription.delta") {
+            const delta = typeof payload.delta === "string" ? payload.delta : "";
+            if (!delta) {
+              return;
+            }
+            transcript += delta;
+            request.onTranscriptUpdate?.(transcript);
+            return;
+          }
+          if (payload.type === "conversation.item.input_audio_transcription.completed") {
+            const completedTranscript =
+              typeof payload.transcript === "string" && payload.transcript.trim()
+                ? payload.transcript
+                : transcript;
+            request.onTranscriptUpdate?.(completedTranscript);
+            request.onTranscriptFinal?.(completedTranscript);
+            finish(completedTranscript);
+          }
+        };
+        ws.onerror = () => fail("Realtime transcription socket failed");
+        ws.onclose = () => {
+          if (!settled) {
+            fail("Realtime transcription socket closed before a final transcript arrived");
+          }
+        };
       });
     },
     async interrupt() {
@@ -558,4 +725,35 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
       closeSocket();
     },
   };
+}
+
+function parseRealtimeErrorDetail(responseText: string) {
+  const trimmed = responseText.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const payload = JSON.parse(trimmed) as { detail?: unknown; error?: { message?: unknown } };
+    if (typeof payload.detail === "string" && payload.detail.trim()) {
+      return payload.detail.trim();
+    }
+    if (typeof payload.error?.message === "string" && payload.error.message.trim()) {
+      return payload.error.message.trim();
+    }
+  } catch {
+    // response was not JSON
+  }
+  return trimmed;
+}
+
+function describeRealtimeTokenMintFailure(error: unknown) {
+  const message = error instanceof Error ? error.message.trim() : "";
+  const normalizedMessage = message.toLowerCase();
+  const errorName = error instanceof Error ? error.name.toLowerCase() : "";
+
+  if (errorName === "aborterror" || normalizedMessage.includes("timed out") || normalizedMessage.includes("aborted")) {
+    return "Realtime token mint timed out before the backend responded";
+  }
+
+  return "Realtime token mint failed before the backend returned a response. Check the local backend server, CORS config, and server logs.";
 }

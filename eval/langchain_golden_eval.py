@@ -10,6 +10,7 @@ from typing import Literal
 from backend.ai.call_logging import run_logged_ai_call
 from backend.benchmarks.run_latency_benchmark import load_local_env
 from backend.llm.draft_policy import build_draft_tutor_reply
+from backend.llm.gemini_fallback_client import DEFAULT_GEMINI_MODEL
 from backend.llm.langchain_bridge import build_langchain_prompt_value, summarize_langchain_llm_input
 from backend.llm.prompt_builder import build_tutor_messages
 from eval.socratic_checks import score_tutor_turn
@@ -41,7 +42,7 @@ def evaluate_golden_cases(
     cases: list[GoldenCase],
     *,
     provider: GoldenProvider = "draft",
-    model: str = "gemini-2.5-flash",
+    model: str = DEFAULT_GEMINI_MODEL,
 ) -> list[dict[str, object]]:
     return [evaluate_golden_case(case, provider=provider, model=model) for case in cases]
 
@@ -50,7 +51,7 @@ def evaluate_golden_case(
     case: GoldenCase,
     *,
     provider: GoldenProvider = "draft",
-    model: str = "gemini-2.5-flash",
+    model: str = DEFAULT_GEMINI_MODEL,
 ) -> dict[str, object]:
     messages = build_tutor_messages(
         subject=case.subject,
@@ -146,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--model",
-        default="gemini-2.5-flash",
+        default=DEFAULT_GEMINI_MODEL,
         help="live LangChain model name for the selected provider",
     )
     args = parser.parse_args(argv)

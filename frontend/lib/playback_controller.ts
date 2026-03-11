@@ -31,6 +31,7 @@ export class PlaybackController {
   enqueue(item: PlaybackItem) {
     this.queue.push({
       ...item,
+      deferCompletion: item.deferCompletion ?? Boolean(item.audioBase64),
       durationMs: item.durationMs ?? Math.max(300, item.text.length * 18),
     });
     if (this.state === "idle") {

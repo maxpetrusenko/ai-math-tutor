@@ -2,15 +2,26 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from typing import Any
 from urllib import error, request
 
 from backend.runtime.local_env import load_local_env
 
 OPENAI_REALTIME_CLIENT_SECRET_URL = "https://api.openai.com/v1/realtime/client_secrets"
+OPENAI_REALTIME_CLIENT_SECRET_TIMEOUT_SECONDS = 20
 DEFAULT_OPENAI_REALTIME_MODEL = "gpt-realtime-mini"
-DEFAULT_OPENAI_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
+DEFAULT_OPENAI_TRANSCRIPTION_MODEL = "gpt-4o-transcribe"
 DEFAULT_OPENAI_REALTIME_VOICE = "marin"
+ALLOWED_OPENAI_SESSION_TYPES = {"realtime", "transcription"}
+
+
+class OpenAIRealtimeClientSecretError(RuntimeError):
+    """Base error for OpenAI Realtime client-secret failures."""
+
+
+class OpenAIRealtimeClientSecretTimeoutError(OpenAIRealtimeClientSecretError):
+    """Raised when the upstream client-secret request times out."""
 
 
 def create_realtime_client_secret(payload: dict[str, object] | None = None) -> dict[str, Any]:
@@ -33,30 +44,51 @@ def create_realtime_client_secret(payload: dict[str, object] | None = None) -> d
 
 def _build_client_secret_payload(payload: dict[str, object]) -> dict[str, object]:
     model = str(payload.get("model") or DEFAULT_OPENAI_REALTIME_MODEL).strip() or DEFAULT_OPENAI_REALTIME_MODEL
+    requested_session_type = str(payload.get("session_type") or "").strip().lower()
+    session_type = (
+        requested_session_type
+        if requested_session_type in ALLOWED_OPENAI_SESSION_TYPES
+        else "transcription" if _is_transcription_model(model) else "realtime"
+    )
     voice = str(payload.get("voice") or DEFAULT_OPENAI_REALTIME_VOICE).strip() or DEFAULT_OPENAI_REALTIME_VOICE
     instructions = str(payload.get("instructions") or "").strip()
 
-    session_payload: dict[str, object] = {
-        "type": "realtime",
-        "model": model,
-        "output_modalities": ["audio", "text"],
-        "audio": {
-            "input": {
-                "format": {"type": "audio/pcm", "rate": 24_000},
-                "transcription": {
-                    "language": "en",
-                    "model": DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
+    if session_type == "transcription":
+        session_payload: dict[str, object] = {
+            "type": "transcription",
+            "audio": {
+                "input": {
+                    "format": {"type": "audio/pcm", "rate": 24_000},
+                    "transcription": {
+                        "language": "en",
+                        "model": model,
+                    },
+                    "turn_detection": None,
+                }
+            },
+        }
+    else:
+        session_payload = {
+            "type": "realtime",
+            "model": model,
+            "output_modalities": ["audio"],
+            "audio": {
+                "input": {
+                    "format": {"type": "audio/pcm", "rate": 24_000},
+                    "transcription": {
+                        "language": "en",
+                        "model": DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
+                    },
+                    "turn_detection": None,
                 },
-                "turn_detection": None,
+                "output": {
+                    "format": {"type": "audio/pcm", "rate": 24_000},
+                    "voice": voice,
+                },
             },
-            "output": {
-                "format": {"type": "audio/pcm", "rate": 24_000},
-                "voice": voice,
-            },
-        },
-    }
-    if instructions:
-        session_payload["instructions"] = instructions
+        }
+        if instructions:
+            session_payload["instructions"] = instructions
 
     return {
         "expires_after": {
@@ -71,12 +103,30 @@ def _post_json(url: str, *, body: dict[str, object], headers: dict[str, str]) ->
     encoded_body = json.dumps(body).encode("utf-8")
     req = request.Request(url, data=encoded_body, headers=headers, method="POST")
     try:
-        with request.urlopen(req, timeout=20) as response:
+        with request.urlopen(req, timeout=OPENAI_REALTIME_CLIENT_SECRET_TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read().decode("utf-8"))
+    except (TimeoutError, socket.timeout) as exc:
+        raise OpenAIRealtimeClientSecretTimeoutError("OpenAI Realtime client secret request timed out") from exc
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(detail or f"OpenAI Realtime request failed with status {exc.code}") from exc
+        raise OpenAIRealtimeClientSecretError(detail or f"OpenAI Realtime request failed with status {exc.code}") from exc
+    except error.URLError as exc:
+        if _is_timeout_reason(exc.reason):
+            raise OpenAIRealtimeClientSecretTimeoutError("OpenAI Realtime client secret request timed out") from exc
+        detail = str(exc.reason).strip() or "unknown network error"
+        raise OpenAIRealtimeClientSecretError(f"OpenAI Realtime client secret request failed: {detail}") from exc
 
     if not isinstance(payload, dict):
-        raise RuntimeError("OpenAI Realtime returned an unexpected response")
+        raise OpenAIRealtimeClientSecretError("OpenAI Realtime returned an unexpected response")
     return payload
+
+
+def _is_timeout_reason(reason: object) -> bool:
+    if isinstance(reason, (TimeoutError, socket.timeout)):
+        return True
+    return "timed out" in str(reason).lower()
+
+
+def _is_transcription_model(model: str) -> bool:
+    normalized = model.strip().lower()
+    return normalized.endswith("-transcribe") or normalized.endswith("-transcribe-diarize")

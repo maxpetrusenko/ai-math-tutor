@@ -128,8 +128,9 @@ test("renders session shell and runs a tutoring turn", async () => {
   });
 });
 
-test("hold-to-talk mic starts on press and sends on release", async () => {
+test("hold-to-talk mic transcribes on release and waits for explicit send for the openai combo", async () => {
   const requests: Array<Record<string, unknown>> = [];
+  const transcriptions: Array<Record<string, unknown>> = [];
   const startSpy = vi.spyOn(BrowserAudioCapture.prototype, "start").mockResolvedValue();
   const stopSpy = vi
     .spyOn(BrowserAudioCapture.prototype, "stop")
@@ -141,6 +142,88 @@ test("hold-to-talk mic starts on press and sends on release", async () => {
       transport={{
         async connect() {
           return "connected";
+        },
+        async transcribeAudio(request) {
+          transcriptions.push(request as Record<string, unknown>);
+          request.onTranscriptUpdate?.("voice transcript");
+          return "voice transcript";
+        },
+        async runTurn(request) {
+          requests.push(request as Record<string, unknown>);
+          request.onTranscriptFinal?.("voice transcript");
+          return {
+            transcript: "voice transcript",
+            tutorText: "Voice tutor reply",
+            state: "speaking",
+            latency: {
+              speechEndToSttFinalMs: 100,
+              sttFinalToLlmFirstTokenMs: 110,
+              llmFirstTokenToTtsFirstAudioMs: 120,
+            },
+            timestamps: [{ word: "Voice", startMs: 0, endMs: 100 }],
+          };
+        },
+        async interrupt() {
+          return;
+        },
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  const micButton = screen.getByRole("button", { name: "Hold to talk" });
+  fireEvent.mouseDown(micButton, { button: 0 });
+  fireEvent.pointerDown(micButton, { button: 0, pointerId: 1 });
+
+  await waitFor(() => expect(startSpy).toHaveBeenCalledTimes(1));
+  const activeMicButton = screen.getByRole("button", { name: /Hold to talk|Release to send/ });
+  fireEvent.pointerUp(activeMicButton, { button: 0, pointerId: 1 });
+  fireEvent.mouseUp(activeMicButton, { button: 0 });
+
+  await waitFor(() => expect(stopSpy).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(transcriptions).toHaveLength(1));
+  expect(transcriptions[0]).toMatchObject({
+    audioChunks: [{ sequence: 1, size: 320, bytesBase64: "YWJj" }],
+    llmProvider: "openai-realtime",
+    ttsProvider: "openai-realtime",
+  });
+  expect(screen.getByLabelText("Student prompt")).toHaveValue("voice transcript");
+
+  expect(requests).toHaveLength(0);
+
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  await waitFor(() => expect(requests).toHaveLength(1));
+  expect(requests[0]).toMatchObject({
+    llmProvider: "openai-realtime",
+    llmModel: "gpt-realtime-mini",
+    ttsProvider: "openai-realtime",
+    ttsModel: "gpt-realtime-mini",
+  });
+  await waitFor(() => expect(screen.getAllByText("Voice tutor reply").length).toBeGreaterThan(0));
+});
+
+test("hold-to-talk mic transcribes on release and waits for explicit send for socket combos", async () => {
+  const requests: Array<Record<string, unknown>> = [];
+  const transcriptions: Array<Record<string, unknown>> = [];
+  const startSpy = vi.spyOn(BrowserAudioCapture.prototype, "start").mockResolvedValue();
+  const stopSpy = vi
+    .spyOn(BrowserAudioCapture.prototype, "stop")
+    .mockResolvedValue([{ sequence: 1, size: 320, bytesBase64: "YWJj" }]);
+  vi.spyOn(BrowserAudioCapture.prototype, "isSupported").mockReturnValue(true);
+
+  render(
+    <TutorSession
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async transcribeAudio(request) {
+          transcriptions.push(request as Record<string, unknown>);
+          request.onTranscriptUpdate?.("voice transcript");
+          return "voice transcript";
         },
         async runTurn(request) {
           requests.push(request as Record<string, unknown>);
@@ -166,19 +249,35 @@ test("hold-to-talk mic starts on press and sends on release", async () => {
     />
   );
 
+  await waitFor(() => expect(screen.getByLabelText("TTS provider")).toHaveValue("openai-realtime"));
+  fireEvent.change(screen.getByLabelText("TTS provider"), {
+    target: { value: "cartesia" },
+  });
+  await waitFor(() => expect(screen.getByLabelText("LLM provider")).toHaveValue("openai"));
+  await waitFor(() => expect(screen.getByLabelText("TTS provider")).toHaveValue("cartesia"));
+
   const micButton = screen.getByRole("button", { name: "Hold to talk" });
   fireEvent.mouseDown(micButton, { button: 0 });
+  fireEvent.pointerDown(micButton, { button: 0, pointerId: 1 });
 
   await waitFor(() => expect(startSpy).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Release to send" })).toBeInTheDocument());
-
-  fireEvent.mouseUp(micButton, { button: 0 });
+  const activeMicButton = screen.getByRole("button", { name: /Hold to talk|Release to send/ });
+  fireEvent.pointerUp(activeMicButton, { button: 0, pointerId: 1 });
+  fireEvent.mouseUp(activeMicButton, { button: 0 });
 
   await waitFor(() => expect(stopSpy).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(requests).toHaveLength(1));
-  expect(requests[0]).toMatchObject({
+  await waitFor(() => expect(transcriptions).toHaveLength(1));
+  expect(transcriptions[0]).toMatchObject({
     audioChunks: [{ sequence: 1, size: 320, bytesBase64: "YWJj" }],
+    llmProvider: "openai",
+    ttsProvider: "cartesia",
   });
+  expect(screen.getByLabelText("Student prompt")).toHaveValue("voice transcript");
+  expect(requests).toHaveLength(0);
+
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  await waitFor(() => expect(requests).toHaveLength(1));
   await waitFor(() => expect(screen.getAllByText("Voice tutor reply").length).toBeGreaterThan(0));
 });
 
@@ -238,6 +337,164 @@ test("selecting realtime on either provider couples both providers and models", 
   });
 });
 
+test("switching llm away from realtime restores a normal llm plus cartesia pair", async () => {
+  render(
+    <TutorSession
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async runTurn() {
+          return {
+            transcript: "",
+            tutorText: "",
+            state: "idle",
+            latency: {
+              speechEndToSttFinalMs: 0,
+              sttFinalToLlmFirstTokenMs: 0,
+              llmFirstTokenToTtsFirstAudioMs: 0,
+            },
+            timestamps: [],
+          };
+        },
+        async interrupt() {
+          return;
+        },
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  fireEvent.change(screen.getByLabelText("TTS provider"), {
+    target: { value: "openai-realtime" },
+  });
+
+  await waitFor(() => expect(screen.getByLabelText("LLM provider")).toHaveValue("openai-realtime"));
+
+  fireEvent.change(screen.getByLabelText("LLM provider"), {
+    target: { value: "gemini" },
+  });
+
+  await waitFor(() => expect(screen.getByLabelText("LLM provider")).toHaveValue("gemini"));
+  expect(screen.getByLabelText("LLM model")).toHaveValue("gemini-3-flash-preview");
+  expect(screen.getByLabelText("TTS provider")).toHaveValue("cartesia");
+  expect(screen.getByLabelText("TTS model")).toHaveValue("sonic-2");
+});
+
+test("fresh lesson defaults to the openai realtime combo", async () => {
+  render(
+    <TutorSession
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async runTurn() {
+          return {
+            transcript: "",
+            tutorText: "",
+            state: "idle",
+            latency: {
+              speechEndToSttFinalMs: 0,
+              sttFinalToLlmFirstTokenMs: 0,
+              llmFirstTokenToTtsFirstAudioMs: 0,
+            },
+            timestamps: [],
+          };
+        },
+        async interrupt() {
+          return;
+        },
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  await waitFor(() => expect(screen.getByLabelText("LLM provider")).toHaveValue("openai-realtime"));
+  expect(screen.getByLabelText("LLM model")).toHaveValue("gpt-realtime-mini");
+  expect(screen.getByLabelText("TTS provider")).toHaveValue("openai-realtime");
+  expect(screen.getByLabelText("TTS model")).toHaveValue("gpt-realtime-mini");
+});
+
+test("mic transcription receives the active runtime selection for socket combos", async () => {
+  vi.spyOn(BrowserAudioCapture.prototype, "isSupported").mockReturnValue(true);
+  vi.spyOn(BrowserAudioCapture.prototype, "start").mockResolvedValue();
+  vi.spyOn(BrowserAudioCapture.prototype, "stop").mockResolvedValue([
+    { sequence: 1, size: 320, bytesBase64: "YWJj", mimeType: "audio/webm" },
+  ]);
+  writePersistedLessonThread({
+    avatarProviderId: "human-css-2d",
+    conversation: [],
+    gradeBand: "6-8",
+    llmModel: "gemini-3-flash-preview",
+    llmProvider: "gemini",
+    preference: "",
+    sessionId: "lesson-socket-mic",
+    studentPrompt: "",
+    subject: "math",
+    transcript: "",
+    ttsModel: "sonic-2",
+    ttsProvider: "cartesia",
+    tutorText: "",
+    version: 1,
+  });
+
+  const transcribeRequests: Array<Record<string, unknown>> = [];
+
+  render(
+    <TutorSession
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async transcribeAudio(request) {
+          transcribeRequests.push(request as Record<string, unknown>);
+          return "2+2";
+        },
+        async runTurn() {
+          return {
+            transcript: "",
+            tutorText: "",
+            state: "idle",
+            latency: {
+              speechEndToSttFinalMs: 0,
+              sttFinalToLlmFirstTokenMs: 0,
+              llmFirstTokenToTtsFirstAudioMs: 0,
+            },
+            timestamps: [],
+          };
+        },
+        async interrupt() {
+          return;
+        },
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  await waitFor(() => expect(screen.getByLabelText("LLM provider")).toHaveValue("gemini"));
+  await waitFor(() => expect(screen.getByLabelText("TTS provider")).toHaveValue("cartesia"));
+  const micButton = screen.getByRole("button", { name: "Hold to talk" });
+  fireEvent.mouseDown(micButton, { button: 0 });
+  fireEvent.pointerDown(micButton, { button: 0, pointerId: 1 });
+  const activeMicButton = await screen.findByRole("button", { name: /Hold to talk|Release to send/ });
+  fireEvent.pointerUp(activeMicButton, { button: 0, pointerId: 1 });
+  fireEvent.mouseUp(activeMicButton, { button: 0 });
+
+  await waitFor(() => expect(transcribeRequests).toHaveLength(1));
+  expect(transcribeRequests[0]).toMatchObject({
+    llmProvider: "gemini",
+    llmModel: "gemini-3-flash-preview",
+    ttsProvider: "cartesia",
+    ttsModel: "sonic-2",
+  });
+});
+
 test("mic stays enabled after an empty capture error", async () => {
   vi.spyOn(BrowserAudioCapture.prototype, "isSupported").mockReturnValue(true);
   vi.spyOn(BrowserAudioCapture.prototype, "start").mockResolvedValue();
@@ -251,8 +508,11 @@ test("mic stays enabled after an empty capture error", async () => {
         async connect() {
           return "connected";
         },
-        async runTurn() {
+        async transcribeAudio() {
           throw new Error("No speech detected");
+        },
+        async runTurn() {
+          throw new Error("runTurn should not be called for mic transcription errors");
         },
         async interrupt() {
           return;
@@ -264,8 +524,17 @@ test("mic stays enabled after an empty capture error", async () => {
     />
   );
 
+  await waitFor(() => expect(screen.getByLabelText("TTS provider")).toHaveValue("openai-realtime"));
+  fireEvent.change(screen.getByLabelText("TTS provider"), {
+    target: { value: "cartesia" },
+  });
+  await waitFor(() => expect(screen.getByLabelText("LLM provider")).toHaveValue("openai"));
+  await waitFor(() => expect(screen.getByLabelText("TTS provider")).toHaveValue("cartesia"));
+
   const micButton = screen.getByRole("button", { name: "Hold to talk" });
   fireEvent.mouseDown(micButton, { button: 0 });
+  fireEvent.pointerDown(micButton, { button: 0, pointerId: 1 });
+  fireEvent.pointerUp(micButton, { button: 0, pointerId: 1 });
   fireEvent.mouseUp(micButton, { button: 0 });
 
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("No speech detected"));
@@ -498,7 +767,7 @@ test("does not trigger a hydration mismatch when archived lessons exist only on 
       },
     ],
     gradeBand: "9-10",
-    llmModel: "gemini-2.5-flash",
+    llmModel: "gemini-3-flash-preview",
     llmProvider: "gemini",
     preference: "Use slower examples",
     sessionId: "lesson-saved-1",
@@ -717,7 +986,7 @@ test("restores a saved lesson thread from browser storage", async () => {
       },
     ],
     gradeBand: "9-10",
-    llmModel: "gemini-2.5-flash",
+    llmModel: "gemini-3-flash-preview",
     llmProvider: "gemini",
     preference: "Use slower examples",
     sessionId: "lesson-saved-1",
@@ -772,12 +1041,12 @@ test("restores a saved lesson thread from browser storage", async () => {
   expect(screen.getByText("saved transcript")).toBeInTheDocument();
 });
 
-test("restoring a mismatched realtime lesson normalizes both providers to realtime", async () => {
+test("restoring a mismatched realtime lesson preserves the saved provider split", async () => {
   writePersistedLessonThread({
     avatarProviderId: "robot-css-2d",
     conversation: [],
     gradeBand: "6-8",
-    llmModel: "gemini-2.5-flash",
+    llmModel: "gemini-3-flash-preview",
     llmProvider: "gemini",
     preference: "",
     sessionId: "lesson-mismatch-1",
@@ -820,8 +1089,8 @@ test("restoring a mismatched realtime lesson normalizes both providers to realti
   );
 
   await waitFor(() => expect(screen.getByLabelText("Student prompt")).toHaveValue("saved prompt"));
-  expect(screen.getByLabelText("LLM provider")).toHaveValue("openai-realtime");
-  expect(screen.getByLabelText("LLM model")).toHaveValue("gpt-realtime-mini");
+  expect(screen.getByLabelText("LLM provider")).toHaveValue("gemini");
+  expect(screen.getByLabelText("LLM model")).toHaveValue("gemini-3-flash-preview");
   expect(screen.getByLabelText("TTS provider")).toHaveValue("openai-realtime");
   expect(screen.getByLabelText("TTS model")).toHaveValue("gpt-realtime-mini");
 });
@@ -864,11 +1133,78 @@ test("history shows per-turn debug payload", async () => {
   await waitFor(() => expect(screen.getAllByText("debug reply").length).toBeGreaterThan(0));
   fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
   await waitFor(() => expect(screen.getByText("History")).toBeInTheDocument());
-  fireEvent.click(within(screen.getByTestId("turn-debug-1")).getByText("Debug"));
+  fireEvent.click(within(screen.getByTestId("turn-debug-1")).getByRole("button", { name: "Turn 1 debug info" }));
 
-  await waitFor(() => expect(screen.getByText(/"transport": "session-socket"/)).toBeInTheDocument());
-  expect(screen.getByText(/"source": "text"/)).toBeInTheDocument();
-  expect(screen.getByText(/"llmProvider": "gemini"/)).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByText("Trace")).toBeInTheDocument());
+  const turnDebug = within(screen.getByTestId("turn-debug-1"));
+  expect(turnDebug.getByText("openai-realtime")).toBeInTheDocument();
+  expect(turnDebug.getByText("text")).toBeInTheDocument();
+  expect(turnDebug.getAllByText(/openai-realtime · gpt-realtime-mini/)).toHaveLength(2);
+  expect(turnDebug.getByText(/1 · 0 ms -> 80 ms/)).toBeInTheDocument();
+  expect(turnDebug.getByText(/STT 11 · LLM 22 · TTS 33/)).toBeInTheDocument();
+});
+
+test("history backfills a debug payload for restored legacy turns", async () => {
+  writePersistedLessonThread({
+    avatarProviderId: "human-css-2d",
+    conversation: [
+      {
+        id: "turn-no-debug",
+        transcript: "old question",
+        tutorText: "old reply",
+      },
+    ],
+    gradeBand: "6-8",
+    llmModel: "gemini-3-flash-preview",
+    llmProvider: "gemini",
+    preference: "",
+    sessionId: "lesson-no-debug",
+    studentPrompt: "",
+    subject: "math",
+    transcript: "old question",
+    ttsModel: "sonic-2",
+    ttsProvider: "cartesia",
+    tutorText: "old reply",
+    version: 1,
+  });
+
+  render(
+    <TutorSession
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async runTurn() {
+          return {
+            transcript: "",
+            tutorText: "",
+            state: "idle",
+            latency: {
+              speechEndToSttFinalMs: 0,
+              sttFinalToLlmFirstTokenMs: 0,
+              llmFirstTokenToTtsFirstAudioMs: 0,
+            },
+            timestamps: [],
+          };
+        },
+        async interrupt() {
+          return;
+        },
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
+  await waitFor(() => expect(screen.getByText("History")).toBeInTheDocument());
+  fireEvent.click(within(screen.getByTestId("turn-debug-turn-no-debug")).getByRole("button", { name: "Turn turn-no-debug debug info" }));
+  expect(screen.getByText("Trace")).toBeInTheDocument();
+  expect(screen.getAllByText("legacy").length).toBeGreaterThan(0);
+  expect(screen.getByText(/gemini · gemini-3-flash-preview/)).toBeInTheDocument();
+  expect(screen.getByText(/cartesia · sonic-2/)).toBeInTheDocument();
+  expect(screen.getByText("legacy fallback")).toBeInTheDocument();
 });
 
 test("history toggle updates drawer accessibility state", async () => {

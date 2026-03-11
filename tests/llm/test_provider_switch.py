@@ -85,7 +85,7 @@ def test_gemini_fallback_client_uses_live_api_when_key_present(monkeypatch) -> N
     client = GeminiFallbackClient()
 
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-test")
-    monkeypatch.setenv("NERDY_RUNTIME_LLM_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("NERDY_RUNTIME_LLM_MODEL", "gemini-3-flash-preview")
     monkeypatch.setattr("backend.llm.gemini_fallback_client.load_local_env", lambda: [])
     monkeypatch.setattr("backend.llm.gemini_fallback_client.ChatGoogleGenerativeAI", _FakeModel)
     monkeypatch.setattr("backend.llm.gemini_fallback_client.time.perf_counter", lambda: next(perf_values))

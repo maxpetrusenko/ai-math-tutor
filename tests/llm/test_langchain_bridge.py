@@ -25,16 +25,16 @@ def test_langchain_bridge_summarizes_input_and_output() -> None:
         {"role": "user", "content": "What about photosynthesis?"},
     ]
 
-    input_summary = summarize_langchain_llm_input(messages, model="gemini-2.5-flash")
+    input_summary = summarize_langchain_llm_input(messages, model="gemini-3-flash-preview")
     output_summary = summarize_langchain_llm_output(
         {
             "provider": "gemini",
-            "model": "gemini-2.5-flash",
+            "model": "gemini-3-flash-preview",
             "text": "Good question. What do plants use from light to start making food?",
         }
     )
 
-    assert input_summary["model"] == "gemini-2.5-flash"
+    assert input_summary["model"] == "gemini-3-flash-preview"
     assert input_summary["message_count"] == 2
     assert input_summary["messages"][1]["type"] == "human"
     assert output_summary["message"]["type"] == "ai"

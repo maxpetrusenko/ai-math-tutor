@@ -45,6 +45,22 @@ class _FakeTransport:
         return self.connection
 
 
+class _DelayedControlConnection(_FakeConnection):
+    def __init__(self, *, delay_s: float, payload: dict[str, object]) -> None:
+        super().__init__()
+        self.delay_s = delay_s
+        self.payload = payload
+        self._payload_sent = False
+
+    async def recv_json(self) -> dict[str, object]:
+        if not self._payload_sent:
+            await asyncio.sleep(self.delay_s)
+            self._payload_sent = True
+            return self.payload
+        await asyncio.sleep(60)
+        raise RuntimeError("unexpected extra recv_json call")
+
+
 def test_deepgram_client_emits_stable_partial_and_marks_latency() -> None:
     async def run() -> tuple[list[dict[str, str]], list[object], list[bytes]]:
         tracker = LatencyTracker()
@@ -119,6 +135,35 @@ def test_deepgram_client_emits_final_transcript_and_marks_latency() -> None:
     assert tracker_events[0].name == "stt_final"
     assert control_payloads == [{"type": "Finalize"}]
     assert closed is True
+
+
+def test_deepgram_client_waits_for_delayed_final_transcript_after_finalize() -> None:
+    async def run() -> list[dict[str, str]]:
+        tracker = LatencyTracker()
+        connection = _DelayedControlConnection(
+            delay_s=0.75,
+            payload={
+                "type": "Results",
+                "is_final": True,
+                "channel": {"alternatives": [{"transcript": "heard after finalize delay"}]},
+            },
+        )
+        client = DeepgramStreamingClient(api_key="test-key", transport=_FakeTransport(connection))
+        session = await client.open_session(tracker)
+
+        try:
+            return await session.finalize(ts_ms=200)
+        finally:
+            await session.close()
+
+    events = asyncio.run(run())
+
+    assert events == [
+        {
+            "type": "transcript.final",
+            "text": "heard after finalize delay",
+        }
+    ]
 
 
 def test_deepgram_client_logs_connect_and_audio_payload_summary(caplog) -> None:

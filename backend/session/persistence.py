@@ -295,7 +295,7 @@ def _coerce_lesson_thread(value: object) -> PersistedLessonThread | None:
             if isinstance(item, dict)
         ],
         "gradeBand": str(value.get("gradeBand") or "6-8"),
-        "llmModel": str(value.get("llmModel") or "gemini-2.5-flash"),
+        "llmModel": str(value.get("llmModel") or "gemini-3-flash-preview"),
         "llmProvider": str(value.get("llmProvider") or "gemini"),
         "preference": str(value.get("preference") or ""),
         "sessionId": str(value.get("sessionId") or ""),

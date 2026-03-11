@@ -1,6 +1,6 @@
 import React from "react";
 import { afterEach, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { TutorSession } from "./TutorSession";
 import { BrowserAudioCapture } from "../lib/audio_capture";
@@ -11,6 +11,7 @@ vi.mock("./Avatar3D", () => ({
 }));
 
 afterEach(() => {
+  cleanup();
   clearPersistedLessonThread();
   window.localStorage.clear();
   vi.restoreAllMocks();
@@ -90,7 +91,7 @@ test("student prompt starts empty for a fresh lesson", async () => {
 
 test("mic turn writes the final transcript into the composer", async () => {
   vi.spyOn(BrowserAudioCapture.prototype, "isSupported").mockReturnValue(true);
-  vi.spyOn(BrowserAudioCapture.prototype, "start").mockResolvedValue();
+  const startSpy = vi.spyOn(BrowserAudioCapture.prototype, "start").mockResolvedValue();
   vi.spyOn(BrowserAudioCapture.prototype, "stop").mockResolvedValue([
     { sequence: 1, size: 320, bytesBase64: "YWJj", mimeType: "audio/webm" },
   ]);
@@ -100,6 +101,10 @@ test("mic turn writes the final transcript into the composer", async () => {
       transport={{
         async connect() {
           return "connected";
+        },
+        async transcribeAudio(request) {
+          request.onTranscriptUpdate?.("2+2");
+          return "2+2";
         },
         async runTurn() {
           return {
@@ -126,8 +131,11 @@ test("mic turn writes the final transcript into the composer", async () => {
 
   const micButton = screen.getByRole("button", { name: "Hold to talk" });
   fireEvent.mouseDown(micButton, { button: 0 });
-  await waitFor(() => expect(screen.getByRole("button", { name: "Release to send" })).toBeInTheDocument());
-  fireEvent.mouseUp(micButton, { button: 0 });
+  fireEvent.pointerDown(micButton, { button: 0, pointerId: 1 });
+  await waitFor(() => expect(startSpy).toHaveBeenCalledTimes(1));
+  const activeMicButton = screen.getByRole("button", { name: /Hold to talk|Release to send/ });
+  fireEvent.pointerUp(activeMicButton, { button: 0, pointerId: 1 });
+  fireEvent.mouseUp(activeMicButton, { button: 0 });
 
   await waitFor(() => expect(screen.getByLabelText("Student prompt")).toHaveValue("2+2"));
 });
@@ -149,7 +157,7 @@ test("restored lessons do not reuse duplicate conversation keys on the next turn
       },
     ],
     gradeBand: "9-10",
-    llmModel: "gemini-2.5-flash",
+    llmModel: "gemini-3-flash-preview",
     llmProvider: "gemini",
     preference: "Use slower examples",
     sessionId: "lesson-saved-1",

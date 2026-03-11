@@ -26,7 +26,10 @@ from backend.session.persistence import (
     read_lesson_store,
     write_active_lesson_thread,
 )
-from backend.session.openai_realtime import create_realtime_client_secret
+from backend.session.openai_realtime import (
+    OpenAIRealtimeClientSecretTimeoutError,
+    create_realtime_client_secret,
+)
 from backend.session.runtime_options import runtime_options_payload, validate_runtime_config
 from backend.session.registry import clear_session_snapshot, load_session_snapshot, save_session_snapshot
 from backend.session.turn_trace import summarize_latency_tracker, write_turn_trace
@@ -96,7 +99,14 @@ def post_realtime_client_secret(
     authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
     verify_firebase_bearer_token(authorization)
-    return create_realtime_client_secret(payload or {})
+    try:
+        return create_realtime_client_secret(payload or {})
+    except ValueError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except OpenAIRealtimeClientSecretTimeoutError as error:
+        raise HTTPException(status_code=504, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @app.put("/api/lessons/active")
@@ -238,8 +248,11 @@ async def _handle_message(
     if message_type == "speech.end":
         speech_end_ts_ms = float(message["ts_ms"])
         events = controller.handle_speech_end(ts_ms=speech_end_ts_ms)
+        transcript_events: list[dict[str, object]] = []
         transcript_text = ""
         transcript_source = "missing"
+        transcribe_only = bool(message.get("transcribe_only"))
+        trace_turn_id = str(message.get("turn_id") or uuid4())
         logger.info(
             "session speech.end received %s",
             _json_summary(
@@ -247,6 +260,7 @@ async def _handle_message(
                     "has_stt_session": stt_session is not None,
                     "session_id": controller.session_id,
                     "text_length": len(str(message.get("text") or "")),
+                    "transcribe_only": transcribe_only,
                     "ts_ms": speech_end_ts_ms,
                 }
             ),
@@ -261,22 +275,32 @@ async def _handle_message(
                 for event in await stt_session.finalize(ts_ms=speech_end_ts_ms + 120)
                 if not _is_empty_transcript_event(event)
             ]
+            final_transcript = _latest_transcript_for_type(transcript_events, "transcript.final")
+            stable_partial_transcript = _latest_transcript_for_type(transcript_events, "transcript.partial_stable")
             logger.info(
                 "session stt.finalize end %s",
                 _json_summary(
                     {
                         "event_count": len(transcript_events),
+                        "event_types": _summarize_transcript_event_types(transcript_events),
+                        "final_transcript_length": len(final_transcript),
+                        "has_final": bool(final_transcript),
+                        "has_partial_stable": bool(stable_partial_transcript),
+                        "partial_stable_length": len(stable_partial_transcript),
                         "session_id": controller.session_id,
-                        "transcript_length": len(_latest_final_transcript(transcript_events)),
+                        "transcribe_only": transcribe_only,
                     }
                 ),
             )
             events.extend(transcript_events)
-            transcript_text = _latest_final_transcript(transcript_events)
+            transcript_text = final_transcript
+            if not transcript_text and transcribe_only and stable_partial_transcript:
+                transcript_text = stable_partial_transcript
+                events.append({"type": "transcript.final", "text": transcript_text})
             await stt_session.close()
             stt_session = None
             if transcript_text:
-                transcript_source = "stt"
+                transcript_source = "stt_final" if final_transcript else "stt_partial_stable"
 
         if not transcript_text:
             transcript_text = str(message.get("text", "")).strip()
@@ -291,7 +315,27 @@ async def _handle_message(
             transcript_text=transcript_text,
         )
         if not transcript_text:
+            _write_speech_end_trace(
+                controller=controller,
+                turn_id=trace_turn_id,
+                transcript_source=transcript_source,
+                transcript_text=transcript_text,
+                transcript_events=transcript_events,
+                transcribe_only=transcribe_only,
+            )
             events.append({"type": "session.error", "detail": "No speech detected"})
+            events.extend(controller.abandon_turn())
+            return events, stt_session
+
+        if transcribe_only:
+            _write_speech_end_trace(
+                controller=controller,
+                turn_id=trace_turn_id,
+                transcript_source=transcript_source,
+                transcript_text=transcript_text,
+                transcript_events=transcript_events,
+                transcribe_only=transcribe_only,
+            )
             events.extend(controller.abandon_turn())
             return events, stt_session
 
@@ -436,7 +480,7 @@ async def _handle_message(
         write_turn_trace(
             {
                 "session_id": controller.session_id,
-                "turn_id": turn_id,
+                "turn_id": trace_turn_id,
                 "subject": controller.subject,
                 "grade_band": controller.grade_band,
                 "student_profile": controller.student_profile,
@@ -523,10 +567,51 @@ def _is_empty_transcript_event(event: dict[str, object]) -> bool:
 
 
 def _latest_final_transcript(events: list[dict[str, object]]) -> str:
+    return _latest_transcript_for_type(events, "transcript.final")
+
+
+def _latest_transcript_for_type(events: list[dict[str, object]], event_type: str) -> str:
     for event in reversed(events):
-        if event.get("type") == "transcript.final":
+        if event.get("type") == event_type:
             return str(event.get("text", "")).strip()
     return ""
+
+
+def _summarize_transcript_event_types(events: list[dict[str, object]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for event in events:
+        event_type = str(event.get("type") or "unknown")
+        counts[event_type] = counts.get(event_type, 0) + 1
+    return counts
+
+
+def _write_speech_end_trace(
+    *,
+    controller: SessionController,
+    turn_id: str,
+    transcript_source: str,
+    transcript_text: str,
+    transcript_events: list[dict[str, object]],
+    transcribe_only: bool,
+) -> None:
+    write_turn_trace(
+        {
+            "session_id": controller.session_id,
+            "turn_id": turn_id,
+            "subject": controller.subject,
+            "grade_band": controller.grade_band,
+            "student_profile": controller.student_profile,
+            "stt": {
+                "event_count": len(transcript_events),
+                "event_types": _summarize_transcript_event_types(transcript_events),
+                "source": transcript_source,
+                "transcribe_only": transcribe_only,
+                "transcript_length": len(transcript_text),
+                "transcript_text": transcript_text,
+            },
+            "latency": summarize_latency_tracker(controller.latency_tracker),
+        }
+    )
 
 
 def _json_summary(payload: dict[str, object]) -> str:
