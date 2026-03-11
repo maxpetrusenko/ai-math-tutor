@@ -95,7 +95,7 @@ def test_build_cloud_build_command_uses_repo_root_context(tmp_path: Path) -> Non
 def test_write_cloud_build_config_file_targets_backend_dockerfile(tmp_path: Path) -> None:
     handle = write_cloud_build_config_file(
         image="us-east4-docker.pkg.dev/demo/repo/backend:abc123",
-        dockerfile=tmp_path / "backend" / "Dockerfile",
+        dockerfile=Path("backend") / "Dockerfile",
     )
     payload = json.loads(Path(handle.name).read_text(encoding="utf-8"))
 
@@ -106,7 +106,7 @@ def test_write_cloud_build_config_file_targets_backend_dockerfile(tmp_path: Path
                 "args": [
                     "build",
                     "-f",
-                    str(tmp_path / "backend" / "Dockerfile"),
+                    "backend/Dockerfile",
                     "-t",
                     "us-east4-docker.pkg.dev/demo/repo/backend:abc123",
                     ".",

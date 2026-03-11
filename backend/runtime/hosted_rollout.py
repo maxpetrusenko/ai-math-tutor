@@ -387,7 +387,7 @@ def deploy_session_backend(
         image_name=target.session_image_name,
         tag=image_tag,
     )
-    build_config = write_cloud_build_config_file(image=image, dockerfile=repo_root / "backend" / "Dockerfile")
+    build_config = write_cloud_build_config_file(image=image, dockerfile=Path("backend") / "Dockerfile")
     try:
         run_command(
             build_cloud_build_command(
