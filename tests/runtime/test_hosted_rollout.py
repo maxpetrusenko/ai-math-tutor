@@ -222,3 +222,10 @@ def test_rollout_frontend_deploys_local_apphosting_source(monkeypatch: pytest.Mo
     ]
     assert captured["cwd"] == tmp_path
     assert captured["input_text"] is None
+
+
+def test_firebase_apphosting_root_dir_targets_frontend() -> None:
+    firebase_config = Path(__file__).resolve().parents[2] / "firebase.json"
+    payload = json.loads(firebase_config.read_text(encoding="utf-8"))
+
+    assert payload["apphosting"] == [{"backendId": "ai-math-tutor", "rootDir": "frontend"}]

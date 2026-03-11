@@ -2,7 +2,7 @@
   "apphosting": [
     {
       "backendId": "ai-math-tutor",
-      "rootDir": "."
+      "rootDir": "frontend"
     }
   ],
   "firestore": {

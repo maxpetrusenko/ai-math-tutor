@@ -137,7 +137,7 @@ pnpm dev --hostname 127.0.0.1 --port 3000
 ### Deploy
 
 Hosted deploys now auto-roll from `main`: GitHub Actions deploys staging first, then prod after staging smoke passes.
-App Hosting deploys from the checked-out repo source via `firebase deploy --only apphosting:ai-math-tutor`, so no connected App Hosting GitHub backend is required.
+App Hosting deploys from the checked-out repo source via `firebase deploy --only apphosting:ai-math-tutor`, using the `frontend/` app root declared in [firebase.json](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/firebase.json), so no connected App Hosting GitHub backend is required.
 
 Repo setup for Actions:
 
