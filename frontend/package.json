@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "NEXT_DIST_DIR=${NEXT_DIST_DIR:-.next-dev} next dev",
     "build": "next build",
+    "start": "next start",
     "test": "vitest run",
     "coverage": "vitest run --coverage",
     "typecheck": "next typegen && tsc -p tsconfig.typecheck.json --noEmit",
