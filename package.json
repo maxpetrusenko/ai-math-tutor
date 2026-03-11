@@ -9,6 +9,7 @@
 		"check:env:local": "python3 -m backend.runtime.env_contract --mode local",
 		"check:env:prod": "python3 -m backend.runtime.env_contract --mode prod",
 		"deploy:stage": "python3 scripts/rollout_hosted.py stage",
+		"deploy:prod": "python3 scripts/rollout_hosted.py prod",
 		"promote:prod": "python3 scripts/rollout_hosted.py promote",
 		"start": "pnpm --dir frontend start",
 		"dev": "pnpm --dir frontend dev",

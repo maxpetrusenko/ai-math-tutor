@@ -1,0 +1,113 @@
+name: Hosted Rollout
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: hosted-rollout-main
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    name: Stage
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: staging
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install deploy tooling
+        run: |
+          python3 -m pip install -e '.[dev]'
+          npm install -g firebase-tools
+
+      - name: Write backend env
+        env:
+          HOSTED_BACKEND_ENV_JSON: ${{ secrets.HOSTED_BACKEND_ENV_JSON }}
+        run: |
+          test -n "$HOSTED_BACKEND_ENV_JSON"
+          printf '%s' "$HOSTED_BACKEND_ENV_JSON" > "$RUNNER_TEMP/hosted-backend-env.json"
+
+      - name: Deploy staging
+        run: |
+          python3 scripts/rollout_hosted.py stage \
+            --stage-project "${{ vars.STAGE_FIREBASE_PROJECT_ID }}" \
+            --stage-backend-env-file "$RUNNER_TEMP/hosted-backend-env.json" \
+            --git-commit "${{ github.sha }}"
+
+  prod:
+    name: Prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    needs:
+      - stage
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install deploy tooling
+        run: |
+          python3 -m pip install -e '.[dev]'
+          npm install -g firebase-tools
+
+      - name: Write backend env
+        env:
+          HOSTED_BACKEND_ENV_JSON: ${{ secrets.HOSTED_BACKEND_ENV_JSON }}
+        run: |
+          test -n "$HOSTED_BACKEND_ENV_JSON"
+          printf '%s' "$HOSTED_BACKEND_ENV_JSON" > "$RUNNER_TEMP/hosted-backend-env.json"
+
+      - name: Deploy prod
+        run: |
+          python3 scripts/rollout_hosted.py prod \
+            --prod-project "${{ vars.PROD_FIREBASE_PROJECT_ID }}" \
+            --prod-backend-env-file "$RUNNER_TEMP/hosted-backend-env.json" \
+            --git-commit "${{ github.sha }}"

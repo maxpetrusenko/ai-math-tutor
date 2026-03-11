@@ -115,6 +115,7 @@ bash scripts/dev.sh
 
 Open `http://127.0.0.1:3000`.
 `scripts/dev.sh` auto-loads `.env`, `.env.local`, and `frontend/.env.local` into the spawned processes.
+If Firebase Google sign-in is enabled, add `127.0.0.1` to Firebase Console -> Authentication -> Settings -> Authorized domains. Newer Firebase projects do not auto-allow localhost-style dev hosts.
 
 ### Manual Split
 
@@ -135,9 +136,19 @@ pnpm dev --hostname 127.0.0.1 --port 3000
 
 ### Deploy
 
-Hosted deploys use a separate staging Firebase and GCP project, then promote the same git commit to prod after smoke passes.
+Hosted deploys now auto-roll from `main`: GitHub Actions deploys staging first, then prod after staging smoke passes.
 
-Stage:
+Repo setup for Actions:
+
+- variable `GCP_WORKLOAD_IDENTITY_PROVIDER`
+- variable `GCP_SERVICE_ACCOUNT`
+- variable `STAGE_FIREBASE_PROJECT_ID`
+- variable `PROD_FIREBASE_PROJECT_ID`
+- secret `HOSTED_BACKEND_ENV_JSON`
+
+Manual fallback still exists and uses a separate staging Firebase and GCP project, then promotes the same git commit to prod after smoke passes.
+
+Stage only:
 
 ```bash
 pnpm deploy:stage \
@@ -146,7 +157,16 @@ pnpm deploy:stage \
   --git-commit "$(git rev-parse HEAD)"
 ```
 
-Promote:
+Prod only:
+
+```bash
+pnpm deploy:prod \
+  --prod-project ai-math-tutor-b39b3 \
+  --prod-backend-env-file .env.deploy.prod \
+  --git-commit "$(git rev-parse HEAD)"
+```
+
+Full local chain:
 
 ```bash
 pnpm promote:prod \

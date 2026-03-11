@@ -128,39 +128,34 @@ def _wait_for_smoke(*, frontend_url: str, timeout_seconds: int, revision_hint: s
     raise RuntimeError(detail)
 
 
-def cmd_stage(args: argparse.Namespace) -> int:
+def _rollout_target(args: argparse.Namespace, *, prefix: str, label: str) -> RolloutResult:
     git_commit = args.git_commit or _default_git_commit()
-    target = _deploy_target(args, prefix="stage")
+    target = _deploy_target(args, prefix=prefix)
     result = _rollout_once(target=target, git_branch=args.git_branch, git_commit=git_commit)
     _wait_for_smoke(
         frontend_url=result.frontend_url,
         timeout_seconds=args.smoke_timeout_seconds,
         revision_hint=args.expect_revision_contains,
     )
-    print(f"stage frontend={result.frontend_url}")
-    print(f"stage session={result.session_service_url}")
-    print(f"stage image={result.backend_image}")
+    print(f"{label} frontend={result.frontend_url}")
+    print(f"{label} session={result.session_service_url}")
+    print(f"{label} image={result.backend_image}")
+    return result
+
+
+def cmd_stage(args: argparse.Namespace) -> int:
+    _rollout_target(args, prefix="stage", label="stage")
+    return 0
+
+
+def cmd_prod(args: argparse.Namespace) -> int:
+    _rollout_target(args, prefix="prod", label="prod")
     return 0
 
 
 def cmd_promote(args: argparse.Namespace) -> int:
-    git_commit = args.git_commit or _default_git_commit()
-    stage_target = _deploy_target(args, prefix="stage")
-    prod_target = _deploy_target(args, prefix="prod")
-
-    stage_result = _rollout_once(target=stage_target, git_branch=args.git_branch, git_commit=git_commit)
-    _wait_for_smoke(
-        frontend_url=stage_result.frontend_url,
-        timeout_seconds=args.smoke_timeout_seconds,
-        revision_hint=args.expect_revision_contains,
-    )
-
-    prod_result = _rollout_once(target=prod_target, git_branch=args.git_branch, git_commit=git_commit)
-    _wait_for_smoke(
-        frontend_url=prod_result.frontend_url,
-        timeout_seconds=args.smoke_timeout_seconds,
-        revision_hint=args.expect_revision_contains,
-    )
+    stage_result = _rollout_target(args, prefix="stage", label="stage")
+    prod_result = _rollout_target(args, prefix="prod", label="prod")
     print(f"stage frontend={stage_result.frontend_url}")
     print(f"prod frontend={prod_result.frontend_url}")
     print(f"prod session={prod_result.session_service_url}")
@@ -192,6 +187,11 @@ def build_parser() -> argparse.ArgumentParser:
     _add_target_args(stage_parser, prefix="stage")
     _add_git_ref_args(stage_parser)
     stage_parser.set_defaults(func=cmd_stage)
+
+    prod_parser = subparsers.add_parser("prod")
+    _add_target_args(prod_parser, prefix="prod")
+    _add_git_ref_args(prod_parser)
+    prod_parser.set_defaults(func=cmd_prod)
 
     promote_parser = subparsers.add_parser("promote")
     _add_target_args(promote_parser, prefix="stage")

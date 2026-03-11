@@ -8,6 +8,51 @@ Why:
 - no prod secret collisions
 - real promotion gate before prod
 
+## GitHub Auto Rollout
+
+This repo now includes `.github/workflows/hosted-rollout.yml`.
+
+Flow:
+
+1. push to `main`
+2. GitHub Actions deploys staging
+3. hosted smoke passes
+4. GitHub Actions deploys prod with the same commit SHA
+
+Required GitHub repo variables:
+
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`
+- `GCP_SERVICE_ACCOUNT`
+- `STAGE_FIREBASE_PROJECT_ID`
+- `PROD_FIREBASE_PROJECT_ID`
+
+Required GitHub repo secret:
+
+- `HOSTED_BACKEND_ENV_JSON`
+
+Current project ids:
+
+- `STAGE_FIREBASE_PROJECT_ID=ai-math-tutor-staging`
+- `PROD_FIREBASE_PROJECT_ID=ai-math-tutor-b39b3`
+
+The backend env secret can stay shared across staging and prod until you split keys later.
+
+## Workload Identity Federation
+
+GitHub Actions authenticates with Google Cloud through Workload Identity Federation.
+
+Configured provider:
+
+- `projects/287553407736/locations/global/workloadIdentityPools/github-actions/providers/github-provider`
+
+Configured deployer service account:
+
+- `github-actions-deployer@ai-math-tutor-b39b3.iam.gserviceaccount.com`
+
+Provider restriction:
+
+- `repository == 'maxpetrusenko/ai-math-tutor'`
+
 ## Required Files
 
 Create two local env files from `.env.example`:
@@ -63,6 +108,15 @@ Deploy staging first. If smoke passes, deploy the same git commit to prod:
 pnpm promote:prod \
   --stage-project your-staging-firebase-project \
   --stage-backend-env-file .env.deploy.staging \
+  --prod-project ai-math-tutor-b39b3 \
+  --prod-backend-env-file .env.deploy.prod \
+  --git-commit "$(git rev-parse HEAD)"
+```
+
+Prod only:
+
+```bash
+pnpm deploy:prod \
   --prod-project ai-math-tutor-b39b3 \
   --prod-backend-env-file .env.deploy.prod \
   --git-commit "$(git rev-parse HEAD)"
