@@ -31,3 +31,18 @@ test("firebase client reports enabled when required public env is present", asyn
 
   expect(module.isFirebaseEnabled()).toBe(true);
 });
+
+test("firebase client reports enabled when public JSON config is present", async () => {
+  process.env.NEXT_PUBLIC_FIREBASE_WEBAPP_CONFIG = JSON.stringify({
+    apiKey: "test-key",
+    appId: "test-app",
+    authDomain: "example.firebaseapp.com",
+    messagingSenderId: "123",
+    projectId: "demo-project",
+    storageBucket: "demo.appspot.com",
+  });
+
+  const module = await import("./firebase_client");
+
+  expect(module.isFirebaseEnabled()).toBe(true);
+});

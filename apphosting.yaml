@@ -4,7 +4,7 @@ runConfig:
   concurrency: 20
 
 env:
-  - variable: FIREBASE_WEBAPP_CONFIG
+  - variable: NEXT_PUBLIC_FIREBASE_WEBAPP_CONFIG
     secret: FIREBASE_WEBAPP_CONFIG
     availability:
       - BUILD

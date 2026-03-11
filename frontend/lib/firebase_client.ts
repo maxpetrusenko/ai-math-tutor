@@ -29,7 +29,7 @@ function readFirebaseWebConfig(): FirebaseWebConfig | null {
     return null;
   }
 
-  const appHostingConfig = env.FIREBASE_WEBAPP_CONFIG?.trim();
+  const appHostingConfig = env.NEXT_PUBLIC_FIREBASE_WEBAPP_CONFIG?.trim() || env.FIREBASE_WEBAPP_CONFIG?.trim();
   if (appHostingConfig) {
     try {
       return JSON.parse(appHostingConfig) as FirebaseWebConfig;
