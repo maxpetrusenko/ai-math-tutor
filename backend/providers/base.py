@@ -31,6 +31,7 @@ class BaseLLMProvider(ABC):
         token_stream: list[str],
         tracker: "LatencyTracker",
         first_token_ts_ms: float,
+        options: dict[str, str] | None = None,
     ) -> dict[str, str]:
         """Stream LLM response, return result with text."""
         ...
@@ -53,6 +54,7 @@ class BaseTTSProvider(ABC):
         tracker: "LatencyTracker",
         first_audio_ts_ms: float,
         is_final: bool = False,
+        options: dict[str, str] | None = None,
     ) -> dict[str, object]:
         """Convert text phrase to audio events."""
         ...

@@ -12,6 +12,7 @@ from backend.monitoring.latency_tracker import (
     LatencyTracker,
     aggregate_stage_metrics,
 )
+from backend.runtime.local_env import load_local_env as load_repo_local_env
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,10 +37,10 @@ class BenchmarkOutcome:
 PipelineFn = Callable[[str, int], LatencyTracker]
 BenchmarkMode = Literal["fixture", "live"]
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ENV_ALIASES = {
-    "GEMINI_API_KEY": "GOOGLE_AI_API_KEY",
-    "MINIMAX_SPEECH_API_KEY": "MINIMAX_API_KEY",
-}
+
+
+def load_local_env() -> list[str]:
+    return load_repo_local_env(base_dir=REPO_ROOT)
 
 
 def load_canned_prompts(path: str) -> list[BenchmarkPrompt]:
@@ -241,46 +242,6 @@ def _fixture_pipeline(prompt_id: str, iteration: int) -> LatencyTracker:
     tracker.mark("first_viseme", 470 + prompt_offset + (iteration % 3) * 15)
     tracker.mark("audio_done", 1180 + prompt_offset + (iteration % 5) * 30)
     return tracker
-
-
-def load_local_env() -> list[str]:
-    loaded_paths: list[str] = []
-
-    for path in (
-        REPO_ROOT / ".env",
-        REPO_ROOT / ".env.local",
-        REPO_ROOT / "frontend/.env.local",
-    ):
-        if _load_env_file(path):
-            loaded_paths.append(str(path))
-
-    _apply_env_aliases()
-    return loaded_paths
-
-
-def _load_env_file(path: Path) -> bool:
-    if not path.exists():
-        return False
-
-    for raw_line in path.read_text().splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        if line.startswith("export "):
-            line = line[7:].strip()
-        key, raw_value = line.split("=", 1)
-        key = key.strip()
-        value = raw_value.strip().strip("'").strip('"')
-        if key:
-            os.environ.setdefault(key, value)
-
-    return True
-
-
-def _apply_env_aliases() -> None:
-    for target_key, source_key in ENV_ALIASES.items():
-        if not os.getenv(target_key) and os.getenv(source_key):
-            os.environ[target_key] = str(os.environ[source_key])
 
 
 def main(argv: list[str] | None = None) -> int:

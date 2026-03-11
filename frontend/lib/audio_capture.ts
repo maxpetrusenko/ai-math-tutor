@@ -2,10 +2,12 @@ export type CapturedAudioChunk = {
   sequence: number;
   size: number;
   bytesBase64?: string;
+  mimeType?: string;
 };
 
 export class BrowserAudioCapture {
   private mediaRecorder: MediaRecorder | null = null;
+  private recorderMimeType: string | null = null;
   private stream: MediaStream | null = null;
   private blobs: Blob[] = [];
 
@@ -26,6 +28,7 @@ export class BrowserAudioCapture {
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     this.blobs = [];
     this.mediaRecorder = new MediaRecorder(this.stream);
+    this.recorderMimeType = this.mediaRecorder.mimeType || null;
     this.mediaRecorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         this.blobs.push(event.data);
@@ -48,6 +51,7 @@ export class BrowserAudioCapture {
             sequence: index + 1,
             size: blob.size || 320,
             bytesBase64: arrayBufferToBase64(await blob.arrayBuffer()),
+            mimeType: blob.type || this.recorderMimeType || undefined,
           }))
         );
         this.reset();
@@ -68,6 +72,7 @@ export class BrowserAudioCapture {
 
   private reset() {
     this.mediaRecorder = null;
+    this.recorderMimeType = null;
     this.stream = null;
     this.blobs = [];
   }

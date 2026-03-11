@@ -103,15 +103,29 @@ The visual tutor must be judged directly.
 
 ## 6. Pedagogy Evaluation
 
-Use a small fixed evaluation set.
+Use both single-turn and multi-turn fixed evaluation sets.
 
-### Subjects
+Reviewer handoff summary lives in `docs/eval-summary.md`.
+
+### Single-Turn Fixtures
+
+Located in `eval/test_turns.json`:
 
 - math: linear equations
 - science: photosynthesis basics
 - english: subject-verb agreement
 
-### Score dimensions
+### Multi-Turn Fixtures
+
+Located in `eval/fixtures/multi_turn/`:
+
+| File | Subject | Concept | Grade Band | Turns |
+|------|---------|----------|------------|-------|
+| `math-linear-equations.json` | Math | Linear equations | 6-8 | 5 |
+| `science_photosynthesis.json` | Science | Photosynthesis basics | 9-10 | 5 |
+| `english_subject_verb.json` | English | Subject-verb agreement | 11-12 | 5 |
+
+### Single-Turn Score Dimensions
 
 - Socratic questioning
 - scaffolding quality
@@ -120,12 +134,51 @@ Use a small fixed evaluation set.
 - grade fit
 - encouragement
 
-### Recommendation
+### Single-Turn Recommendation
 
 - score each dimension `1-5`
 - require no dimension below `3`
 - require Socratic questioning average at least `4`
 - require correctness average at least `4`
+
+### Multi-Turn Success Indicators
+
+- Socratic question ratio at least 80%
+- Student speaks at least 3 turns
+- Clear concept progression across turns
+- Tutor uses conversation history appropriately for the active problem
+- Tutor resets context when the student clearly switches to a new problem
+- Learning arc shows diagnosis → practice → mastery
+
+### Multi-Turn Score Dimensions
+
+- Socratic quality
+- Follow-up continuity
+- Correction style
+- Grade fit
+- Lesson arc
+
+### Multi-Turn Recommendation
+
+- score each dimension `1-5`
+- require no dimension below `3`
+- require lesson arc average at least `4`
+- require correction style average at least `4`
+
+### Topic-Shift Regression Check
+
+- run a same-session regression where the student switches from one problem to another
+- require the tutor to answer the new problem without pulling stale context into the reply
+
+### Demo Lock
+
+Current frozen demo-safe presets for reviewer use:
+
+- primary avatar: `human-css-2d`
+- alternate 2D: `robot-css-2d`
+- alternate 3D: `human-threejs-3d`
+- primary lesson arc: math linear equations
+- backup lesson arcs: photosynthesis basics, subject-verb agreement
 
 ## 7. Fallback Checks
 

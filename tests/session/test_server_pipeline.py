@@ -32,9 +32,10 @@ class _FakeSTTProvider:
 
 
 @pytest.fixture(autouse=True)
-def disable_live_runtime(monkeypatch) -> None:
+def disable_live_runtime(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("NERDY_DISABLE_LIVE_LLM", "1")
     monkeypatch.setenv("NERDY_DISABLE_LIVE_TTS", "1")
+    monkeypatch.setenv("NERDY_SESSION_DATA_DIR", str(tmp_path))
 
 
 def test_session_server_streams_transcript_tutor_text_and_tts_audio(monkeypatch) -> None:
@@ -86,6 +87,35 @@ def test_session_server_streams_transcript_tutor_text_and_tts_audio(monkeypatch)
     assert tts_flush["type"] == "tts.flush"
     assert fake_session.audio_payloads == [b"real-audio"]
     assert fake_session.closed is True
+
+
+def test_session_server_rejects_invalid_runtime_model_and_recovers_idle() -> None:
+    client = TestClient(server.app)
+
+    with client.websocket_connect("/ws/session") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 1000,
+                "text": "Explain fractions",
+                "llm_provider": "minimax",
+                "llm_model": "gemini-2.5-flash",
+            }
+        )
+
+        thinking = websocket.receive_json()
+        transcript = websocket.receive_json()
+        error_event = websocket.receive_json()
+        idle = websocket.receive_json()
+
+    assert thinking == {"type": "state.changed", "state": "thinking"}
+    assert transcript == {"type": "transcript.final", "text": "Explain fractions"}
+    assert error_event == {
+        "type": "session.error",
+        "detail": "unsupported llm model for minimax: gemini-2.5-flash",
+    }
+    assert idle == {"type": "state.changed", "state": "idle"}
 
 
 def test_session_server_persists_history_and_profile_between_turns(monkeypatch) -> None:
@@ -168,6 +198,73 @@ def test_session_server_persists_history_and_profile_between_turns(monkeypatch) 
     assert captured_calls[1]["student_profile"] == {"pacing": "slow"}
     assert fake_session.audio_payloads == [b"audio-turn-one"]
     assert fake_session.closed is True
+
+
+def test_session_server_rejects_empty_transcript_and_returns_idle(monkeypatch) -> None:
+    fake_session = _FakeSTTSession(final_text="")
+    monkeypatch.setattr(server, "create_stt_provider", lambda: _FakeSTTProvider(fake_session))
+    client = TestClient(server.app)
+
+    with client.websocket_connect("/ws/session") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "audio.chunk",
+                "sequence": 1,
+                "size": 320,
+                "bytes_b64": base64.b64encode(b"quiet-audio").decode("ascii"),
+            }
+        )
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 1000,
+                "text": "",
+            }
+        )
+
+        thinking = websocket.receive_json()
+        error_event = websocket.receive_json()
+        idle = websocket.receive_json()
+
+    assert thinking == {"type": "state.changed", "state": "thinking"}
+    assert error_event == {"type": "session.error", "detail": "No speech detected"}
+    assert idle == {"type": "state.changed", "state": "idle"}
+    assert fake_session.closed is True
+
+
+def test_session_server_uses_history_aware_follow_up_reply_for_math_stub() -> None:
+    client = TestClient(server.app)
+
+    with client.websocket_connect("/ws/session") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 1000,
+                "text": "2+2",
+                "subject": "math",
+                "grade_band": "6-8",
+            }
+        )
+        first_events = [websocket.receive_json() for _ in range(8)]
+
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 2000,
+                "text": "4",
+            }
+        )
+        second_events = [websocket.receive_json() for _ in range(8)]
+
+    first_reply = " ".join(event["text"] for event in first_events if event["type"] == "tutor.text.committed").strip()
+    second_reply = " ".join(event["text"] for event in second_events if event["type"] == "tutor.text.committed").strip()
+
+    assert first_reply == "Let's work on 2+2. What total do you get when you add 2 and 2?"
+    assert second_reply == "Yes. 2+2 gives 4. How did you get 4?"
 
 
 def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
@@ -373,12 +470,16 @@ def test_session_server_returns_error_for_unknown_tts_provider() -> None:
                 "tts_provider": "unknown",
             }
         )
-        for _ in range(4):
-            websocket.receive_json()
+        thinking = websocket.receive_json()
+        transcript = websocket.receive_json()
         error_event = websocket.receive_json()
+        idle = websocket.receive_json()
 
+    assert thinking == {"type": "state.changed", "state": "thinking"}
+    assert transcript == {"type": "transcript.final", "text": "Can you help me with fractions?"}
     assert error_event["type"] == "session.error"
-    assert "unknown tts provider" in error_event["detail"]
+    assert "unknown tts provider: unknown" in error_event["detail"]
+    assert idle == {"type": "state.changed", "state": "idle"}
 
 
 def test_session_server_uses_subject_aware_tutor_draft_for_math_truth_checks() -> None:

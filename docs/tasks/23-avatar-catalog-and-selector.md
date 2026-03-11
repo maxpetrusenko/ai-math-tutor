@@ -29,6 +29,7 @@ Frontend / product engineer
 - `Avatar` dropdown
 - manifest-backed avatar options
 - easy switch between multiple 2D and 3D presets
+- last selected avatar mode persists across reloads and seeds the next app open
 
 ## Done Criteria
 

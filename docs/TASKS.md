@@ -3,6 +3,16 @@
 Date: 2026-03-08  
 Status: aligned to MVP baseline
 
+## Closure Status
+
+As of 2026-03-10:
+
+- Tasks 23-26: done
+- Task 27: open
+- Task 28: done
+- Task 29: done
+- Task 30: done
+
 ## 1. Purpose
 
 Break the MVP plan into assignable work without guessing.
@@ -433,6 +443,38 @@ Done criteria:
 - local assets are the default test path
 - premium avatar vendors are used only in explicit bakeoff lanes
 - every shipped asset has source/license notes
+
+## 31. Task 30: UI Polish and Usability Pass
+
+Owner:
+
+- frontend / product design engineer
+
+Goal:
+
+- make the tutor UI clearer, more usable, and demo-ready
+
+Dependencies:
+
+- Task 23
+- Task 25
+- Task 26
+
+Deliverables:
+
+- layout hierarchy cleanup
+- CTA clarity for text, mic, interrupt, and new lesson
+- history panel polish
+- avatar selector polish
+- mobile and accessibility pass
+- better loading, empty, and error states
+
+Done criteria:
+
+- key lesson actions are obvious without explanation
+- page works well on mobile and desktop
+- keyboard and label/accessibility basics are solid
+- UI is strong enough for reviewer/demo recording
 
 ## 11. Task 10: Audio Playback and Interruption
 

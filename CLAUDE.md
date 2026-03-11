@@ -8,7 +8,7 @@ Work style: telegraph; noun-phrases ok; drop grammar; min tokens.
 - If prompt ambiguous -> propose 3 interpretations. ask again if not clear
 - Workspace: `/Users/maxpetrusenko/Desktop/Projects`.
 - install and set up this first - https://github.com/affaan-m/everything-claude-code, read docs
-- 3rd-party/OSS (non-max): clone under `/Users/maxpetrusenko/Desktop/Projects/oss`.
+- if need embeddigns us Gemini Embedding 2 https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-embedding-2/
 - `/Users/maxpetrusenko/Desktop/Projects/manager`: private ops (domains/DNS, redirects/workers, runbooks).
 - “MacBook” / “Mac Studio” => SSH there; find hosts/IPs via `tailscale status`.
 - Files: repo or `/Users/maxpetrusenko/Desktop/Projects/agent-scripts`.

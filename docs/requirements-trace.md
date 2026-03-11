@@ -2,13 +2,21 @@
 
 ## Overview
 
-This document traces the hard latency requirements from the original spec through to implementation status.
+This document traces the hard latency requirements and key tutoring-behavior requirements from the original spec through to implementation status.
 
 | ID | Requirement | Threshold | Source | Implementation | Status |
 |----|-------------|-----------|--------|----------------|--------|
 | LR-1 | `speech_end -> stt_final` p95 | < 350 ms | Task 03 spec | `latency_tracker.py` stage calculation | FAIL (`live`), PASS (`fixture`) |
 | LR-2 | `speech_end -> tts_first_audio` p50 | < 500 ms | Task 03 spec | `latency_tracker.py` stage calculation | FAIL (`live`), PASS (`fixture`) |
 | LR-3 | `speech_end -> tts_first_audio` p95 | < 900 ms | Task 03 spec | `latency_tracker.py` stage calculation | FAIL (`live`), PASS (`fixture`) |
+
+## Tutoring Behavior Trace
+
+| ID | Requirement | Source | Implementation | Status |
+|----|-------------|--------|----------------|--------|
+| TB-1 | Same-problem follow-up turns reuse session history | `requirements.md`, `PRD.md` | `backend/session/server.py`, `backend/llm/topic_shift.py` | PASS |
+| TB-2 | Clear topic shifts start a fresh turn instead of inheriting stale context | `requirements.md`, `PRD.md` | `backend/llm/topic_shift.py`, `tests/session/test_session_topic_shift.py` | PASS |
+| TB-3 | Shipped UX avoids hardcoded starter prompts | `requirements.md`, `PRD.md` | `frontend/components/TutorSession.tsx`, `frontend/components/TutorSessionComposer.test.tsx` | PASS |
 
 ## Event Trace Requirements
 

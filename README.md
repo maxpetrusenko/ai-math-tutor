@@ -112,6 +112,7 @@ bash scripts/dev.sh
 ```
 
 Open `http://127.0.0.1:3000`.
+`scripts/dev.sh` auto-loads `.env`, `.env.local`, and `frontend/.env.local` into the spawned processes.
 
 ### Manual Split
 

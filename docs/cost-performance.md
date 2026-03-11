@@ -2,6 +2,8 @@
 
 Documents provider choices, cost tradeoffs, and performance baseline for the Nerdy MVP.
 
+Companion policy doc: `docs/avatar-costs-and-licensing.md`
+
 ## Provider Stack
 
 | Layer | Provider | Rationale | Cost (USD) |
@@ -117,6 +119,26 @@ If scaling beyond demo:
 3. Batch TTS requests where timing allows
 4. Consider edge-located STT/TTS for latency
 5. Implement rate limiting per user
+
+## Premium Avatar Vendor Policy
+
+**Simli, HeyGen, and similar premium avatar providers are RESTRICTED for MVP:**
+
+- Use only in explicit bakeoff lanes with cost approval
+- Do NOT integrate into main session path
+- Do NOT bundle premium avatar binaries in repo
+- All demo assets must be repo-original (CSS/Three.js primitives)
+
+Rationale: Premium providers have unpredictable per-minute costs and licensing restrictions. MVP ships with zero-cost local avatars only.
+
+## Asset Licensing Guardrails
+
+- Daily avatar iteration stays on repo-original CSS and Three.js presets.
+- Future imported assets must come from an approved list with pinned source + license notes.
+- “Inspired” presets stay non-branded and demo-safe.
+- Demo success must not depend on marketplace or premium-provider rights.
+
+See `docs/avatar-costs-and-licensing.md` for the frozen source list and spend policy.
 
 ## References
 

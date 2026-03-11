@@ -22,12 +22,14 @@ class GeminiFallbackClient:
         token_stream: list[str],
         tracker: LatencyTracker,
         first_token_ts_ms: float,
+        options: dict[str, str] | None = None,
     ) -> dict[str, str]:
         live_api_key = self._resolve_api_key()
         if live_api_key:
             try:
                 return self._stream_live_response(
                     messages=messages,
+                    model=(options or {}).get("model", DEFAULT_GEMINI_MODEL),
                     tracker=tracker,
                     speech_end_ts_ms=first_token_ts_ms,
                     api_key=live_api_key,
@@ -36,9 +38,18 @@ class GeminiFallbackClient:
                 pass
 
         if token_stream:
-            tracker.mark("llm_first_token", first_token_ts_ms, {"provider": self.provider_name, "mode": "stub"})
+            tracker.mark(
+                "llm_first_token",
+                first_token_ts_ms,
+                {
+                    "provider": self.provider_name,
+                    "mode": "stub",
+                    "model": (options or {}).get("model", DEFAULT_GEMINI_MODEL),
+                },
+            )
         return {
             "provider": self.provider_name,
+            "model": (options or {}).get("model", DEFAULT_GEMINI_MODEL),
             "text": shape_tutor_response("".join(token_stream)),
             "input_messages": str(len(messages)),
         }
@@ -47,12 +58,13 @@ class GeminiFallbackClient:
         self,
         *,
         messages: list[dict[str, str]],
+        model: str,
         tracker: LatencyTracker,
         speech_end_ts_ms: float,
         api_key: str,
     ) -> dict[str, str]:
         started_at = time.perf_counter()
-        model = os.getenv("NERDY_RUNTIME_LLM_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
+        model = model.strip() or DEFAULT_GEMINI_MODEL
         body = {
             "contents": [
                 {
@@ -89,6 +101,7 @@ class GeminiFallbackClient:
                 os.environ["NERDY_RUNTIME_LLM_MODEL"] = DEFAULT_GEMINI_MODEL
                 return self._stream_live_response(
                     messages=messages,
+                    model=DEFAULT_GEMINI_MODEL,
                     tracker=tracker,
                     speech_end_ts_ms=speech_end_ts_ms,
                     api_key=api_key,

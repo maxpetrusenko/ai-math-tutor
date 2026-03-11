@@ -1,0 +1,59 @@
+{
+  "id": "science_photosynthesis_v1",
+  "subject": "science",
+  "concept": "photosynthesis basics",
+  "grade_band": "9-10",
+  "description": "Multi-turn lesson on photosynthesis using guided discovery",
+  "demo": {
+    "locked": true,
+    "transport_mode": "fixture",
+    "avatar_preset": "human-css-2d"
+  },
+  "turns": [
+    {
+      "turn_number": 1,
+      "turn_goal": "diagnose",
+      "student_utterance": "How does photosynthesis work?",
+      "student_outcome": "unsure",
+      "tutor_response": "What do you already know about how plants make food?",
+      "rubric_hooks": ["checks-prior-knowledge", "asks-what-you-know", "grade-fit"]
+    },
+    {
+      "turn_number": 2,
+      "turn_goal": "guide",
+      "student_utterance": "I know plants need sunlight and water",
+      "student_outcome": "partial",
+      "tutor_response": "That's right. What else do plants take in from the air?",
+      "rubric_hooks": ["encouragement", "builds-on-prior", "introduces-co2"]
+    },
+    {
+      "turn_number": 3,
+      "turn_goal": "practice",
+      "student_utterance": "They use oxygen?",
+      "student_outcome": "incorrect",
+      "tutor_response": "Not quite - plants release oxygen. What gas do they take in?",
+      "rubric_hooks": ["redirects-gently", "corrects-misconception", "guides-correctly"]
+    },
+    {
+      "turn_number": 4,
+      "turn_goal": "verify",
+      "student_utterance": "Oh right, carbon dioxide",
+      "student_outcome": "correct",
+      "tutor_response": "Exactly. And what does sunlight provide in this process?",
+      "rubric_hooks": ["encouragement", "confirms-progress", "asks-connection"]
+    },
+    {
+      "turn_number": 5,
+      "turn_goal": "reflect",
+      "student_utterance": "Energy to turn CO2 and water into glucose and oxygen",
+      "student_outcome": "correct",
+      "tutor_response": "You've got it. Sunlight provides the energy for the whole process.",
+      "rubric_hooks": ["confirms-understanding", "summarizes-process", "positive-closure"]
+    }
+  ],
+  "success_indicators": {
+    "socratic_question_ratio": 0.8,
+    "student_speaks_at_least": 3,
+    "concept_progression": ["diagnose", "guide", "correct", "verify", "reflect"]
+  }
+}

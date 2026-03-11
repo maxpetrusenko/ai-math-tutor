@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from backend.monitoring.latency_tracker import LatencyTracker
 from backend.stt.deepgram_client import DeepgramStreamingClient
@@ -118,3 +119,33 @@ def test_deepgram_client_emits_final_transcript_and_marks_latency() -> None:
     assert tracker_events[0].name == "stt_final"
     assert control_payloads == [{"type": "Finalize"}]
     assert closed is True
+
+
+def test_deepgram_client_logs_connect_and_audio_payload_summary(caplog) -> None:
+    async def run() -> None:
+        tracker = LatencyTracker()
+        connection = _FakeConnection(
+            audio_batches=[[{"type": "Metadata", "request_id": "req-1"}]],
+            control_batches=[
+                [
+                    {
+                        "type": "Results",
+                        "is_final": True,
+                        "channel": {"alternatives": [{"transcript": "logged final"}]},
+                    }
+                ]
+            ],
+        )
+        client = DeepgramStreamingClient(api_key="test-key", transport=_FakeTransport(connection))
+        session = await client.open_session(tracker)
+        await session.push_audio(b"chunk-123", ts_ms=110)
+        await session.finalize(ts_ms=220)
+        await session.close()
+
+    caplog.set_level(logging.INFO)
+    asyncio.run(run())
+
+    assert "deepgram session opening" in caplog.text
+    assert '"chunk_bytes": 9' in caplog.text
+    assert '"payload_type": "Metadata"' in caplog.text
+    assert '"control_type": "Finalize"' in caplog.text

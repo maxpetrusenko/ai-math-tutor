@@ -22,12 +22,14 @@ class CartesiaProvider(BaseTTSProvider):
         tracker,
         first_audio_ts_ms: float,
         is_final: bool = False,
+        options: dict[str, str] | None = None,
     ) -> dict[str, object]:
         return self._client.send_phrase(
             text=text,
             tracker=tracker,
             first_audio_ts_ms=first_audio_ts_ms,
             is_final=is_final,
+            options=options,
         )
 
     def flush(self) -> dict[str, object]:

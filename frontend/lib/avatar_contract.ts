@@ -3,6 +3,7 @@ export type AvatarVisualState = "idle" | "listening" | "thinking" | "speaking" |
 export type AvatarConfig = {
   provider: string;
   type: "2d" | "3d";
+  assetRef?: string;
   model_url?: string;
   scale?: number;
   enable_shadows?: boolean;

@@ -18,5 +18,6 @@ test("app loads with core controls", async ({ page }) => {
   await expect(page.getByLabel("Student prompt")).toBeVisible();
   await expect(page.getByLabel("Subject")).toBeVisible();
   await expect(page.getByLabel("Grade band")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Run Demo Turn" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send Text Turn" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Hold to talk" })).toBeVisible();
 });

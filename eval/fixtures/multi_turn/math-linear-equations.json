@@ -1,0 +1,60 @@
+{
+  "id": "math_linear_equations_v1",
+  "subject": "math",
+  "concept": "linear equations",
+  "expected_concept": "linear equations",
+  "grade_band": "6-8",
+  "description": "Multi-turn lesson on solving for x using scaffolding",
+  "demo": {
+    "locked": true,
+    "transport_mode": "fixture",
+    "avatar_preset": "human-css-2d"
+  },
+  "turns": [
+    {
+      "turn_number": 1,
+      "turn_goal": "diagnose",
+      "student_utterance": "I don't understand how to solve for x.",
+      "student_outcome": "unsure",
+      "tutor_response": "What equation are you working with? Let's start there.",
+      "rubric_hooks": ["diagnoses-prior-knowledge", "asks-guiding-question", "grade-fit"]
+    },
+    {
+      "turn_number": 2,
+      "turn_goal": "guide",
+      "student_utterance": "The equation is 2x + 4 = 10",
+      "student_outcome": "partial",
+      "tutor_response": "Good. What do you think we should do first to get x by itself?",
+      "rubric_hooks": ["scaffolds-step", "breaks-down-problem", "asks-what-next"]
+    },
+    {
+      "turn_number": 3,
+      "turn_goal": "practice",
+      "student_utterance": "I think I add 4 to both sides?",
+      "student_outcome": "incorrect",
+      "tutor_response": "Not quite. We want to move the 4 away from the x side. What's the opposite of adding?",
+      "rubric_hooks": ["redirects-gently", "explains-opposite", "guides-correctly"]
+    },
+    {
+      "turn_number": 4,
+      "turn_goal": "correct",
+      "student_utterance": "Oh, I subtract 4, so 2x = 6",
+      "student_outcome": "correct",
+      "tutor_response": "Exactly. Now what do you do to get x alone?",
+      "rubric_hooks": ["encouragement", "confirms-progress", "guides-final-step"]
+    },
+    {
+      "turn_number": 5,
+      "turn_goal": "reflect",
+      "student_utterance": "Divide both sides by 2, so x = 3",
+      "student_outcome": "correct",
+      "tutor_response": "You got it. Subtract first to isolate the term with x, then divide.",
+      "rubric_hooks": ["confirms-understanding", "summarizes-steps", "closes-lesson"]
+    }
+  ],
+  "success_indicators": {
+    "socratic_question_ratio": 0.8,
+    "student_speaks_at_least": 3,
+    "concept_progression": ["diagnose", "guide", "correct", "verify", "reflect"]
+  }
+}

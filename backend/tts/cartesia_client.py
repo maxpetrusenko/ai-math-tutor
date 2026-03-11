@@ -39,13 +39,16 @@ class CartesiaClient:
         tracker: LatencyTracker,
         first_audio_ts_ms: float,
         is_final: bool = False,
+        options: dict[str, str] | None = None,
     ) -> dict[str, object]:
         live_api_key = self._resolve_api_key()
+        model = (options or {}).get("model") or os.getenv("NERDY_RUNTIME_TTS_MODEL", DEFAULT_CARTESIA_MODEL)
         if live_api_key:
             try:
                 audio_bytes, first_audio_delta_ms, audio_duration_ms = self._synthesize_live(
                     text=text,
                     api_key=live_api_key,
+                    model=model,
                 )
                 tracker.mark(
                     "tts_first_audio",
@@ -53,12 +56,13 @@ class CartesiaClient:
                     {
                         "provider": self.provider_name,
                         "mode": "live",
-                        "model": os.getenv("NERDY_RUNTIME_TTS_MODEL", DEFAULT_CARTESIA_MODEL),
+                        "model": model,
                     },
                 )
                 return {
                     "type": "tts.audio",
                     "provider": self.provider_name,
+                    "model": model,
                     "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
                     "audio_mime_type": "audio/wav",
                     "is_final": is_final,
@@ -67,7 +71,7 @@ class CartesiaClient:
             except Exception:
                 pass
 
-        tracker.mark("tts_first_audio", first_audio_ts_ms, {"provider": self.provider_name, "mode": "stub"})
+        tracker.mark("tts_first_audio", first_audio_ts_ms, {"provider": self.provider_name, "mode": "stub", "model": model})
         words = text.split()
         timestamps = [
             {"word": word, "start_ms": index * 120, "end_ms": index * 120 + 100}
@@ -76,6 +80,7 @@ class CartesiaClient:
         return {
             "type": "tts.audio",
             "provider": self.provider_name,
+            "model": model,
             "audio": text,
             "is_final": is_final,
             "timestamps": timestamps,
@@ -93,14 +98,14 @@ class CartesiaClient:
         load_local_env()
         return os.getenv("CARTESIA_API_KEY", "").strip()
 
-    def _synthesize_live(self, *, text: str, api_key: str) -> tuple[bytes, float, float]:
+    def _synthesize_live(self, *, text: str, api_key: str, model: str) -> tuple[bytes, float, float]:
         started_at = time.perf_counter()
         response = request.urlopen(
             request.Request(
                 CARTESIA_BYTES_URL,
                 data=json.dumps(
                     {
-                        "model_id": os.getenv("NERDY_RUNTIME_TTS_MODEL", DEFAULT_CARTESIA_MODEL),
+                        "model_id": model,
                         "transcript": text,
                         "voice": {
                             "mode": "id",

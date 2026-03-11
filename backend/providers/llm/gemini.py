@@ -19,10 +19,12 @@ class GeminiProvider(BaseLLMProvider):
         token_stream: list[str],
         tracker,
         first_token_ts_ms: float,
+        options: dict[str, str] | None = None,
     ) -> dict[str, str]:
         return self._client.stream_response(
             messages=messages,
             token_stream=token_stream,
             tracker=tracker,
             first_token_ts_ms=first_token_ts_ms,
+            options=options,
         )

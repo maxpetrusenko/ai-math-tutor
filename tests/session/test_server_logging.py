@@ -1,0 +1,90 @@
+import asyncio
+import logging
+
+from backend.session.server import _handle_message
+from backend.turn_taking.controller import SessionController
+
+
+class _FakeSTTSession:
+    def __init__(self) -> None:
+        self.audio_payloads: list[bytes] = []
+
+    async def push_audio(self, chunk: bytes, *, ts_ms: float | None = None) -> list[dict[str, str]]:
+        self.audio_payloads.append(chunk)
+        return []
+
+    async def finalize(self, *, ts_ms: float) -> list[dict[str, str]]:
+        return []
+
+    async def close(self) -> None:
+        return None
+
+
+class _FakeSTTProvider:
+    def __init__(self) -> None:
+        self.session = _FakeSTTSession()
+
+    async def open_session(self, tracker) -> _FakeSTTSession:
+        return self.session
+
+
+def test_handle_message_logs_audio_chunk_summary(caplog) -> None:
+    async def run() -> tuple[list[dict[str, object]], _FakeSTTSession | None, _FakeSTTProvider]:
+        controller = SessionController(session_id="lesson-log-1")
+        provider = _FakeSTTProvider()
+        events, stt_session = await _handle_message(
+            controller,
+            {
+                "type": "audio.chunk",
+                "sequence": 3,
+                "size": 1024,
+                "bytes_b64": "YWJjZA==",
+                "mime_type": "audio/webm;codecs=opus",
+            },
+            provider,
+            None,
+        )
+        return events, stt_session, provider
+
+    caplog.set_level(logging.INFO)
+    events, stt_session, provider = asyncio.run(run())
+
+    assert stt_session is provider.session
+    assert provider.session.audio_payloads == [b"abcd"]
+    assert events[0]["type"] == "state.changed"
+    assert "session websocket audio chunk" in caplog.text
+    assert "session websocket opening stt session" in caplog.text
+    assert "session websocket audio decoded" in caplog.text
+    assert '"bytes_b64_length": 8' in caplog.text
+    assert '"decoded_bytes": 4' in caplog.text
+    assert '"mime_type": "audio/webm;codecs=opus"' in caplog.text
+
+
+def test_handle_message_logs_missing_transcript_once(caplog) -> None:
+    async def run() -> tuple[list[dict[str, object]], _FakeSTTSession | None]:
+        controller = SessionController(session_id="lesson-log-2")
+        provider = _FakeSTTProvider()
+        return await _handle_message(
+            controller,
+            {
+                "type": "speech.end",
+                "grade_band": "6-8",
+                "subject": "math",
+                "text": "",
+                "ts_ms": 1000,
+            },
+            provider,
+            None,
+        )
+
+    caplog.set_level(logging.INFO)
+    events, stt_session = asyncio.run(run())
+
+    assert stt_session is None
+    assert events == [
+        {"type": "state.changed", "state": "thinking"},
+        {"type": "session.error", "detail": "No speech detected"},
+        {"type": "state.changed", "state": "idle"},
+    ]
+    assert "session transcript missing" in caplog.text
+    assert '"source": "missing"' in caplog.text

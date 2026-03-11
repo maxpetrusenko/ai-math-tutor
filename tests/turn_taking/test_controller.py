@@ -31,3 +31,15 @@ def test_controller_records_speech_end_event() -> None:
     assert controller.latency_tracker.events[0].name == "speech_end"
     assert controller.state is SessionState.THINKING
     assert durations == {}
+
+
+def test_controller_can_abandon_a_pending_turn() -> None:
+    controller = SessionController(session_id="session-3")
+    controller.open_session()
+    controller.handle_audio_chunk(sequence=1, size=320)
+    controller.handle_speech_end(ts_ms=1234)
+
+    events = controller.abandon_turn()
+
+    assert events == [{"type": "state.changed", "state": "idle"}]
+    assert controller.state is SessionState.IDLE

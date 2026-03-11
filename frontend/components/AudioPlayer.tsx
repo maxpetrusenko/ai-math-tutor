@@ -44,28 +44,68 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
     audioRef.current?.pause();
     audioRef.current = null;
     if (snapshot.activeItem.audioBase64 && typeof Audio !== "undefined") {
+      let finished = false;
+      let started = false;
       const audio = new Audio(
         `data:${snapshot.activeItem.audioMimeType ?? "audio/wav"};base64,${snapshot.activeItem.audioBase64}`
       );
+      const finishPlayback = () => {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        snapshot.activeItem?.onPlaybackComplete?.();
+        controller.completeActive(snapshot.activeItem?.id);
+      };
+      const markPlaybackStarted = () => {
+        if (started) {
+          return;
+        }
+        started = true;
+        snapshot.activeItem?.onPlaybackStart?.();
+      };
       audio.volume = volume;
+      audio.onended = finishPlayback;
+      audio.onerror = finishPlayback;
+      audio.onplaying = markPlaybackStarted;
       audioRef.current = audio;
       spokenItemIdRef.current = snapshot.activeItem.id;
-      void audio.play().catch(() => {
-        audioRef.current = null;
-      });
+      void audio.play()
+        .then(() => {
+          markPlaybackStarted();
+        })
+        .catch(() => {
+          audioRef.current = null;
+          finishPlayback();
+        });
 
       return () => {
         audio.pause();
+        audio.onended = null;
+        audio.onerror = null;
+        audio.onplaying = null;
         audioRef.current = null;
       };
     }
 
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+      controller.completeActive(snapshot.activeItem.id);
       return;
     }
 
     const utterance = new SpeechSynthesisUtterance(snapshot.activeItem.text);
     utterance.volume = volume;
+    utterance.onstart = () => {
+      snapshot.activeItem?.onPlaybackStart?.();
+    };
+    utterance.onend = () => {
+      snapshot.activeItem?.onPlaybackComplete?.();
+      controller.completeActive(snapshot.activeItem?.id);
+    };
+    utterance.onerror = () => {
+      snapshot.activeItem?.onPlaybackComplete?.();
+      controller.completeActive(snapshot.activeItem?.id);
+    };
     utteranceRef.current = utterance;
     spokenItemIdRef.current = snapshot.activeItem.id;
     window.speechSynthesis.speak(utterance);
@@ -78,7 +118,7 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
       }
       utteranceRef.current = null;
     };
-  }, [snapshot, volume]);
+  }, [controller, snapshot, volume]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -89,30 +129,12 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
     }
   }, [volume]);
 
-  function interrupt() {
-    audioRef.current?.pause();
-    audioRef.current = null;
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
-    controller.interrupt();
-  }
-
   if (variant === "hidden") {
     return null;
   }
 
   const controls = (
     <>
-      <button
-        aria-label="Stop audio"
-        className="secondary-button"
-        disabled={snapshot.state === "idle"}
-        onClick={interrupt}
-        type="button"
-      >
-        Stop
-      </button>
       <label className="audio-toolbar__volume">
         <span>Volume</span>
         <input

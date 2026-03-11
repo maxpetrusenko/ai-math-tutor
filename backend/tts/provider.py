@@ -19,6 +19,7 @@ class TTSProvider(Protocol):
         tracker: LatencyTracker,
         first_audio_ts_ms: float,
         is_final: bool = False,
+        options: dict[str, str] | None = None,
     ) -> dict[str, object]:
         ...
 

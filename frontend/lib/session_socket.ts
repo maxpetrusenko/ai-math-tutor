@@ -1,6 +1,19 @@
-import { createSessionMetrics, toLatencyMetrics } from "./session_metrics";
+import { createSessionMetrics, snapshotSessionMetrics, toLatencyMetrics } from "./session_metrics";
 import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/TutorSession";
 import type { PersistedLessonThread } from "./lesson_thread_store";
+
+const SESSION_SOCKET_LOG_PREFIX = "[session_socket]";
+const TURN_TIMEOUT_MS = 8_000;
+const QUIET_SEND_TYPES = new Set(["audio.chunk"]);
+const QUIET_RECEIVE_TYPES = new Set([
+  "audio.received",
+  "session.started",
+  "state.changed",
+  "transcript.partial_stable",
+  "tutor.text.committed",
+  "tts.audio",
+]);
+const LOG_DEDUPE_WINDOW_MS = 2_000;
 
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -10,26 +23,136 @@ function generateSessionId(): string {
   return `lesson-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function normalizeSessionId(sessionId: string | null | undefined): string {
+  const normalized = typeof sessionId === "string" ? sessionId.trim() : "";
+  if (normalized && normalized !== "undefined" && normalized !== "null") {
+    return normalized;
+  }
+
+  return generateSessionId();
+}
+
+let lastLogSignature = "";
+let lastLogTsMs = 0;
+
+function shouldSkipSessionLog(level: "info" | "warn" | "error", event: string, details: Record<string, unknown>) {
+  const payloadType = typeof details.type === "string" ? details.type : "";
+  if (event === "send" && QUIET_SEND_TYPES.has(payloadType)) {
+    return true;
+  }
+  if (event === "receive" && QUIET_RECEIVE_TYPES.has(payloadType)) {
+    return true;
+  }
+
+  const signature = JSON.stringify({ details, event, level });
+  const now = Date.now();
+  if (signature === lastLogSignature && now - lastLogTsMs < LOG_DEDUPE_WINDOW_MS) {
+    return true;
+  }
+
+  lastLogSignature = signature;
+  lastLogTsMs = now;
+  return false;
+}
+
+function logSessionInfo(event: string, details: Record<string, unknown>) {
+  if (shouldSkipSessionLog("info", event, details)) {
+    return;
+  }
+  console.info(SESSION_SOCKET_LOG_PREFIX, event, details);
+}
+
+function logSessionWarn(event: string, details: Record<string, unknown>) {
+  if (shouldSkipSessionLog("warn", event, details)) {
+    return;
+  }
+  console.warn(SESSION_SOCKET_LOG_PREFIX, event, details);
+}
+
+function logSessionError(event: string, details: Record<string, unknown>) {
+  if (shouldSkipSessionLog("error", event, details)) {
+    return;
+  }
+  console.error(SESSION_SOCKET_LOG_PREFIX, event, details);
+}
+
+function summarizePayload(payload: Record<string, unknown>) {
+  const summary: Record<string, unknown> = {
+    type: typeof payload.type === "string" ? payload.type : "unknown",
+  };
+
+  if (payload.type === "audio.chunk") {
+    const bytesBase64 = typeof payload.bytes_b64 === "string" ? payload.bytes_b64 : "";
+    summary.sequence = payload.sequence;
+    summary.size = payload.size;
+    summary.mimeType = payload.mime_type;
+    summary.bytesBase64Length = bytesBase64.length;
+    summary.bytesBase64Prefix = bytesBase64.slice(0, 24);
+  }
+
+  if (payload.type === "speech.end") {
+    summary.subject = payload.subject;
+    summary.gradeBand = payload.grade_band;
+    summary.llmProvider = payload.llm_provider;
+    summary.llmModel = payload.llm_model;
+    summary.studentProfileKeys =
+      payload.student_profile && typeof payload.student_profile === "object"
+        ? Object.keys(payload.student_profile as Record<string, unknown>)
+        : [];
+    summary.textLength = typeof payload.text === "string" ? payload.text.length : 0;
+    summary.ttsProvider = payload.tts_provider;
+    summary.ttsModel = payload.tts_model;
+    summary.tsMs = payload.ts_ms;
+  }
+
+  if (payload.type === "session.error") {
+    summary.detail = payload.detail ?? payload.message;
+  }
+
+  if (payload.type === "tts.audio") {
+    summary.isFinal = payload.is_final;
+    summary.audioBase64Length = typeof payload.audio_b64 === "string" ? payload.audio_b64.length : 0;
+    summary.timestampCount = Array.isArray(payload.timestamps) ? payload.timestamps.length : 0;
+  }
+
+  if (payload.type === "transcript.final" || payload.type === "transcript.partial_stable") {
+    summary.text = typeof payload.text === "string" ? payload.text.slice(0, 120) : "";
+    summary.textLength = typeof payload.text === "string" ? payload.text.length : 0;
+  }
+
+  return summary;
+}
+
+function summarizeCloseEvent(event?: CloseEvent) {
+  return {
+    code: event?.code,
+    reason: event?.reason ?? "",
+    wasClean: event?.wasClean ?? false,
+  };
+}
+
 export function createSessionSocketTransport(): SessionTransport {
   const baseWsUrl =
     typeof process !== "undefined" && process.env.NEXT_PUBLIC_SESSION_WS_URL
       ? process.env.NEXT_PUBLIC_SESSION_WS_URL
       : "ws://localhost:8000/ws/session";
-  let currentSessionId = generateSessionId();
+  let currentSessionId = normalizeSessionId(generateSessionId());
 
   let socket: WebSocket | null = null;
   let socketSessionId: string | null = null;
   let activeTurn:
-    | {
+      | {
         resolve: (result: TutorTurnResult) => void;
         reject: (error: Error) => void;
         metrics: ReturnType<typeof createSessionMetrics>;
+        onTranscriptFinal?: (text: string) => void;
         transcript: string;
         tutorText: string;
         state: string;
         timestamps: TutorTurnResult["timestamps"];
         audioSegments: NonNullable<TutorTurnResult["audioSegments"]>;
         pendingSegmentTexts: string[];
+        timeoutId: ReturnType<typeof setTimeout> | null;
       }
     | null = null;
   let pendingReset:
@@ -45,9 +168,14 @@ export function createSessionSocketTransport(): SessionTransport {
       }
     | null = null;
 
+  const ensureCurrentSessionId = () => {
+    currentSessionId = normalizeSessionId(currentSessionId);
+    return currentSessionId;
+  };
+
   const buildWsUrl = () => {
     const url = new URL(baseWsUrl);
-    url.searchParams.set("session_id", currentSessionId);
+    url.searchParams.set("session_id", ensureCurrentSessionId());
     return url.toString();
   };
 
@@ -56,12 +184,16 @@ export function createSessionSocketTransport(): SessionTransport {
       return;
     }
 
+    if (activeTurn.timeoutId) {
+      clearTimeout(activeTurn.timeoutId);
+    }
     activeTurn.reject(new Error(message));
     activeTurn = null;
   };
 
   const handleMessage = (event: MessageEvent<string>) => {
     const payload = JSON.parse(event.data) as Record<string, unknown>;
+    logSessionInfo("receive", summarizePayload(payload));
     if (payload.type === "session.reset") {
       pendingReset?.resolve();
       pendingReset = null;
@@ -93,6 +225,7 @@ export function createSessionSocketTransport(): SessionTransport {
     }
     if (payload.type === "transcript.final") {
       activeTurn.transcript = String(payload.text);
+      activeTurn.onTranscriptFinal?.(activeTurn.transcript);
       activeTurn.metrics.mark({ name: "stt_final", tsMs: performance.now() });
     }
     if (payload.type === "state.changed") {
@@ -131,9 +264,13 @@ export function createSessionSocketTransport(): SessionTransport {
         tutorText: activeTurn.tutorText,
         state: activeTurn.state,
         latency: toLatencyMetrics(activeTurn.metrics),
+        metricEvents: snapshotSessionMetrics(activeTurn.metrics),
         timestamps: activeTurn.timestamps,
         audioSegments: activeTurn.audioSegments,
       });
+      if (activeTurn.timeoutId) {
+        clearTimeout(activeTurn.timeoutId);
+      }
       activeTurn = null;
     }
   };
@@ -144,16 +281,33 @@ export function createSessionSocketTransport(): SessionTransport {
     }
 
     return new Promise<WebSocket>((resolve, reject) => {
-      const nextSocket = new WebSocket(buildWsUrl());
+      const url = buildWsUrl();
+      const sessionId = ensureCurrentSessionId();
+      const nextSocket = new WebSocket(url);
+      let didOpen = false;
+      let preOpenFailureLogged = false;
 
       nextSocket.onopen = () => {
+        didOpen = true;
         socket = nextSocket;
-        socketSessionId = currentSessionId;
+        socketSessionId = ensureCurrentSessionId();
+        logSessionInfo("open", { sessionId: socketSessionId, url: nextSocket.url });
         resolve(nextSocket);
       };
 
       nextSocket.onmessage = handleMessage;
       nextSocket.onerror = () => {
+        const errorDetails = {
+          readyState: nextSocket.readyState,
+          sessionId: ensureCurrentSessionId(),
+          url: nextSocket.url,
+        };
+        if (!didOpen) {
+          preOpenFailureLogged = true;
+          logSessionWarn("connect.failed", errorDetails);
+        } else {
+          logSessionError("error", errorDetails);
+        }
         if (socket === nextSocket) {
           failActiveTurn("WebSocket connection failed");
           pendingReset?.reject(new Error("WebSocket connection failed"));
@@ -165,7 +319,17 @@ export function createSessionSocketTransport(): SessionTransport {
 
         reject(new Error("WebSocket connection failed"));
       };
-      nextSocket.onclose = () => {
+      nextSocket.onclose = (event) => {
+        if (preOpenFailureLogged && !didOpen) {
+          socket = null;
+          socketSessionId = null;
+          return;
+        }
+        logSessionWarn("close", {
+          sessionId: ensureCurrentSessionId(),
+          url: nextSocket.url,
+          ...summarizeCloseEvent(event),
+        });
         if (socket === nextSocket) {
           failActiveTurn("WebSocket connection closed");
           pendingReset?.reject(new Error("WebSocket connection closed"));
@@ -198,18 +362,22 @@ export function createSessionSocketTransport(): SessionTransport {
     const connectedSocket = await ensureSocket();
     return new Promise<void>((resolve, reject) => {
       pendingRestore = { resolve, reject };
-      connectedSocket.send(
-        JSON.stringify({
-          type: "session.restore",
-          grade_band: thread.gradeBand,
-          history: thread.conversation.flatMap((turn) => [
-            { role: "user", content: turn.transcript },
-            { role: "assistant", content: turn.tutorText },
-          ]),
-          student_profile: thread.preference ? { preference: thread.preference } : {},
-          subject: thread.subject,
-        })
-      );
+      const payload = {
+        type: "session.restore",
+        grade_band: thread.gradeBand,
+        history: thread.conversation.flatMap((turn) => [
+          { role: "user", content: turn.transcript },
+          { role: "assistant", content: turn.tutorText },
+        ]),
+        student_profile: thread.preference ? { preference: thread.preference } : {},
+        subject: thread.subject,
+      };
+      logSessionInfo("send", {
+        historyLength: thread.conversation.length,
+        sessionId: ensureCurrentSessionId(),
+        ...summarizePayload(payload),
+      });
+      connectedSocket.send(JSON.stringify(payload));
     });
   };
 
@@ -247,40 +415,57 @@ export function createSessionSocketTransport(): SessionTransport {
           resolve,
           reject,
           metrics: createSessionMetrics(),
+          onTranscriptFinal: request.onTranscriptFinal,
           transcript: request.studentText,
           tutorText: "",
           state: "thinking",
           timestamps: [],
           audioSegments: [],
           pendingSegmentTexts: [],
+          timeoutId: null,
         };
+        activeTurn.timeoutId = setTimeout(() => {
+          logSessionWarn("turn.timeout", {
+            sessionId: ensureCurrentSessionId(),
+            timeoutMs: TURN_TIMEOUT_MS,
+            transcriptLength: activeTurn?.transcript.length ?? 0,
+          });
+          failActiveTurn("Tutor turn timed out");
+        }, TURN_TIMEOUT_MS);
 
         for (const chunk of request.audioChunks ?? [{ sequence: 1, size: 320 }]) {
-          connectedSocket.send(
-            JSON.stringify({
-              type: "audio.chunk",
-              sequence: chunk.sequence,
-              size: chunk.size,
-              bytes_b64: chunk.bytesBase64,
-            })
-          );
+          const payload = {
+            type: "audio.chunk",
+            sequence: chunk.sequence,
+            size: chunk.size,
+            bytes_b64: chunk.bytesBase64,
+            mime_type: chunk.mimeType,
+          };
+          logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
+          connectedSocket.send(JSON.stringify(payload));
         }
         activeTurn.metrics.mark({ name: "speech_end", tsMs: performance.now() });
-        connectedSocket.send(
-          JSON.stringify({
+        const payload = {
             type: "speech.end",
             ts_ms: Date.now(),
             text: request.studentText,
             subject: request.subject,
             grade_band: request.gradeBand,
+            llm_provider: request.llmProvider,
+            llm_model: request.llmModel,
             student_profile: request.studentProfile,
-          })
-        );
+            tts_provider: request.ttsProvider,
+            tts_model: request.ttsModel,
+          };
+        logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
+        connectedSocket.send(JSON.stringify(payload));
       });
     },
     async interrupt() {
       if (socket?.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "interrupt" }));
+        const payload = { type: "interrupt" };
+        logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
+        socket.send(JSON.stringify(payload));
       }
     },
     async reset() {
@@ -290,15 +475,18 @@ export function createSessionSocketTransport(): SessionTransport {
       }
       return new Promise<void>((resolve, reject) => {
         pendingReset = { resolve, reject };
-        connectedSocket.send(JSON.stringify({ type: "session.reset" }));
+        const payload = { type: "session.reset" };
+        logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
+        connectedSocket.send(JSON.stringify(payload));
       });
     },
     getSessionId() {
-      return currentSessionId;
+      return ensureCurrentSessionId();
     },
     async switchSession(sessionId, thread) {
       const shouldRestore = Boolean(thread && thread.conversation.length > 0);
-      if (sessionId === currentSessionId && socket?.readyState === WebSocket.OPEN && !shouldRestore) {
+      const nextSessionId = normalizeSessionId(sessionId);
+      if (nextSessionId === ensureCurrentSessionId() && socket?.readyState === WebSocket.OPEN && !shouldRestore) {
         return;
       }
 
@@ -307,7 +495,7 @@ export function createSessionSocketTransport(): SessionTransport {
       }
       pendingReset = null;
       pendingRestore = null;
-      currentSessionId = sessionId;
+      currentSessionId = nextSessionId;
       closeSocket();
 
       if (thread && shouldRestore) {

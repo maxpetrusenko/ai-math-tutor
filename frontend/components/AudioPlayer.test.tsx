@@ -32,18 +32,24 @@ test("audio player interrupts queued playback", async () => {
 
   expect(speak).toHaveBeenCalledTimes(1);
 
-  fireEvent.click(screen.getByRole("button", { name: "Stop audio" }));
+  await act(async () => {
+    controller.interrupt();
+  });
 
   expect(controller.queueLength()).toBe(0);
   expect(screen.getByText("idle")).toBeInTheDocument();
   expect(cancel).toHaveBeenCalled();
   expect(screen.getByLabelText("Volume")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Stop audio" })).not.toBeInTheDocument();
 });
 
 test("audio player prefers provider audio bytes over speech synthesis", async () => {
   const play = vi.fn().mockResolvedValue(undefined);
   const pause = vi.fn();
   const audioInstance = {
+    onended: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    onplaying: null as (() => void) | null,
     play,
     pause,
     volume: 1,
@@ -126,13 +132,18 @@ test("audio player speaks the second queued item after the first completes", asy
 });
 
 test("audio player plays the second provider audio segment after the first completes", async () => {
-  vi.useFakeTimers();
   const firstAudio = {
+    onended: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    onplaying: null as (() => void) | null,
     play: vi.fn().mockResolvedValue(undefined),
     pause: vi.fn(),
     volume: 1,
   };
   const secondAudio = {
+    onended: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    onplaying: null as (() => void) | null,
     play: vi.fn().mockResolvedValue(undefined),
     pause: vi.fn(),
     volume: 1,
@@ -166,8 +177,8 @@ test("audio player plays the second provider audio segment after the first compl
   expect(firstAudio.play).toHaveBeenCalledTimes(1);
 
   await act(async () => {
-    vi.advanceTimersByTime(11);
-    await Promise.resolve();
+    firstAudio.onended?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
   expect(secondAudio.play).toHaveBeenCalledTimes(1);
@@ -175,5 +186,53 @@ test("audio player plays the second provider audio segment after the first compl
   await act(async () => {
     controller.interrupt();
   });
-  vi.useRealTimers();
+});
+
+test("audio player reports native playback start and completion for provider audio", async () => {
+  const onPlaybackStart = vi.fn();
+  const onPlaybackComplete = vi.fn();
+  const audioInstance = {
+    onended: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    onplaying: null as (() => void) | null,
+    play: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn(),
+    volume: 1,
+  };
+
+  vi.stubGlobal("Audio", vi.fn(() => audioInstance));
+  vi.stubGlobal("speechSynthesis", { speak: vi.fn(), cancel: vi.fn() });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class SpeechSynthesisUtterance {
+      text: string;
+
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+  );
+
+  const controller = new PlaybackController();
+  render(<AudioPlayer controller={controller} />);
+
+  await act(async () => {
+    controller.enqueue({
+      id: "a",
+      text: "hello",
+      audioBase64: "YQ==",
+      onPlaybackComplete,
+      onPlaybackStart,
+    });
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    audioInstance.onplaying?.();
+    audioInstance.onended?.();
+    await Promise.resolve();
+  });
+
+  expect(onPlaybackStart).toHaveBeenCalledTimes(1);
+  expect(onPlaybackComplete).toHaveBeenCalledTimes(1);
 });

@@ -147,8 +147,14 @@ Inputs:
 
 - text or audio student input
 - subject and grade-level context
-- conversation history
+- relevant conversation history for the current problem
 - student pacing / learning preferences when available
+
+Session context behavior:
+
+- preserve conversation history when the student is clearly continuing the same problem
+- treat an explicit topic or problem shift as a fresh turn instead of forcing old context into the reply
+- avoid hardcoded starter prompts or hardcoded lesson topics in the shipped UX
 
 Outputs:
 

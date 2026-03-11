@@ -18,7 +18,7 @@ const bodyFont = IBM_Plex_Mono({
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html className={`${headingFont.variable} ${bodyFont.variable}`} lang="en">
-      <body>{children}</body>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

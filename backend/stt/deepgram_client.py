@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Protocol
 from urllib.parse import urlencode
 
 from websockets.asyncio.client import connect as websocket_connect
+from websockets.exceptions import ConnectionClosed
 
 from backend.monitoring.latency_tracker import LatencyTracker
 from backend.stt.provider import StreamingSTTSession, TranscriptEvent
 from backend.turn_taking.transcript_commit import TranscriptCommitter
 
 _DEEPGRAM_LISTEN_URL = "wss://api.deepgram.com/v1/listen"
+logger = logging.getLogger(__name__)
 
 
 class DeepgramConnection(Protocol):
@@ -98,6 +101,10 @@ class DeepgramStreamingClient:
             raise RuntimeError("DEEPGRAM_API_KEY is required for audio streaming STT")
 
         url = _build_listen_url(self.config)
+        logger.info(
+            "deepgram session opening %s",
+            _json_summary({"model": self.config.model, "url": url}),
+        )
         connection = await self.transport.connect(api_key, url)
         return DeepgramStreamingSession(
             connection=connection,
@@ -122,15 +129,34 @@ class DeepgramStreamingSession:
         self._model = model
 
     async def push_audio(self, chunk: bytes, *, ts_ms: float | None = None) -> list[TranscriptEvent]:
-        await self._connection.send_bytes(chunk)
+        logger.info(
+            "deepgram audio send %s",
+            _json_summary({"chunk_bytes": len(chunk), "ts_ms": ts_ms}),
+        )
+        try:
+            await self._connection.send_bytes(chunk)
+        except ConnectionClosed as error:
+            raise RuntimeError(_format_connection_closed(error)) from error
         return await self._drain_events(ts_ms=ts_ms)
 
     async def finalize(self, *, ts_ms: float) -> list[TranscriptEvent]:
-        await self._connection.send_json({"type": "Finalize"})
+        payload = {"type": "Finalize"}
+        logger.info(
+            "deepgram control send %s",
+            _json_summary({"control_type": payload["type"], "ts_ms": ts_ms}),
+        )
+        try:
+            await self._connection.send_json(payload)
+        except ConnectionClosed as error:
+            raise RuntimeError(_format_connection_closed(error)) from error
         return await self._drain_events(ts_ms=ts_ms, stop_on_final=True)
 
     async def close(self) -> None:
-        await self._connection.close()
+        logger.info("deepgram session closing %s", _json_summary({"model": self._model}))
+        try:
+            await self._connection.close()
+        except ConnectionClosed:
+            return
 
     async def _drain_events(
         self,
@@ -146,6 +172,10 @@ class DeepgramStreamingSession:
                 payload = await asyncio.wait_for(self._connection.recv_json(), timeout=timeout)
             except TimeoutError:
                 break
+            except ConnectionClosed as error:
+                raise RuntimeError(_format_connection_closed(error)) from error
+
+            logger.info("deepgram payload received %s", _json_summary(_summarize_payload(payload)))
 
             event = self._handle_message(payload, ts_ms=ts_ms)
             if event is None:
@@ -203,3 +233,33 @@ def _build_listen_url(config: DeepgramConfig) -> str:
         }
     )
     return f"{_DEEPGRAM_LISTEN_URL}?{query}"
+
+
+def _json_summary(payload: dict[str, object]) -> str:
+    return json.dumps(payload, default=str, sort_keys=True)
+
+
+def _summarize_payload(payload: dict[str, object]) -> dict[str, object]:
+    summary: dict[str, object] = {
+        "payload_type": str(payload.get("type") or "unknown"),
+    }
+
+    if summary["payload_type"] == "Results":
+        channel = payload.get("channel", {})
+        alternatives = channel.get("alternatives", []) if isinstance(channel, dict) else []
+        transcript = ""
+        if alternatives:
+            transcript = str(alternatives[0].get("transcript", "")).strip()
+        summary.update(
+            {
+                "is_final": bool(payload.get("is_final")),
+                "transcript_length": len(transcript),
+                "transcript_preview": transcript[:120],
+            }
+        )
+
+    return summary
+
+
+def _format_connection_closed(error: ConnectionClosed) -> str:
+    return f"deepgram connection closed: code={error.code} reason={error.reason or 'unknown'}"

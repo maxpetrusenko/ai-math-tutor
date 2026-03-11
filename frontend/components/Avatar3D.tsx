@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import type { Avatar3DAsset } from "../lib/avatar_asset_loader";
 import type { AvatarConfig, AvatarVisualState, WordTimestamp } from "../lib/avatar_contract";
 import { sampleAvatar3DFrame } from "../lib/avatar_3d_driver";
 import { createAvatar3DScene } from "../lib/avatar_3d_scene";
 import { applyAvatar3DFrame } from "../lib/avatar_3d_runtime";
 
 type Avatar3DProps = {
+  asset: Avatar3DAsset;
   config: AvatarConfig;
   state: Exclude<AvatarVisualState, "fading">;
   timestamps: WordTimestamp[];
@@ -15,6 +17,7 @@ type Avatar3DProps = {
 };
 
 export function Avatar3D({
+  asset,
   config,
   state,
   timestamps,
@@ -47,7 +50,7 @@ export function Avatar3D({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const sceneHandle = createAvatar3DScene(containerRef.current, config);
+    const sceneHandle = createAvatar3DScene(containerRef.current, config, asset);
 
     // Animation loop - reads current props via refs to avoid stale closures
     let frameId: number | undefined;
@@ -78,7 +81,7 @@ export function Avatar3D({
       }
       sceneHandle.dispose();
     };
-  }, [config]);
+  }, [asset, config]);
 
   return (
     <div

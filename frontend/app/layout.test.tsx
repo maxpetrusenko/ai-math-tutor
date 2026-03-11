@@ -19,3 +19,11 @@ test("root layout wraps children in html and body tags", () => {
   expect(markup).toContain("font-heading font-body");
   expect(markup).toContain("<body><div>child</div></body>");
 });
+
+test("root layout suppresses hydration warnings on body attributes", () => {
+  const element = RootLayout({
+    children: <div>child</div>,
+  });
+
+  expect(element.props.children.props.suppressHydrationWarning).toBe(true);
+});

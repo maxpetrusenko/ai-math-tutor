@@ -21,6 +21,7 @@ Work style: telegraph; noun-phrases ok; drop grammar; min tokens.
 - Commits: Conventional Commits (`feat|fix|refactor|build|ci|chore|docs|style|perf|test`).
 - Subagents: read `/Users/maxpetrusenko/Desktop/Projects/agent-skills/docs/subagent.md`.
 - Skills: load from `/Users/maxpetrusenko/Desktop/Projects/skills/AGENTS.md`.
+- if need embeddigns us Gemini Embedding 2 https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-embedding-2/
 - If you are claude you can spin up codex with fresh context to finish the task 
 - If you are codex you can spin up claude with fresh context to finish the task 
 - Editor: `code <path>`.

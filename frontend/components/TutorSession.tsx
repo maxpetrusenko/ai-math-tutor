@@ -19,20 +19,38 @@ import type { AvatarRenderMode } from "../lib/avatar_manifest";
 import type { AvatarVisualState, WordTimestamp } from "../lib/avatar_contract";
 import { createFixtureTransport } from "../lib/fixture_transport";
 import {
-  archivePersistedLessonThread,
-  clearPersistedLessonThread,
+  clearPersistedLessonThreadRemote,
   generateLessonSessionId,
+  hydrateLessonThreadStore,
   listArchivedLessonThreads,
+  persistActiveLessonThread,
+  persistArchivedLessonThread,
+  type PersistedLessonSummary,
   type PersistedLessonThread,
   readPersistedLessonThread,
-  readArchivedLessonThread,
-  writePersistedLessonThread,
+  refreshArchivedLessonThread,
 } from "../lib/lesson_thread_store";
 import { PlaybackController, type PlaybackState } from "../lib/playback_controller";
-import { createSessionMetrics } from "../lib/session_metrics";
+import {
+  DEFAULT_LLM_MODEL,
+  DEFAULT_LLM_PROVIDER,
+  DEFAULT_TTS_MODEL,
+  DEFAULT_TTS_PROVIDER,
+  resolveDefaultLlmModel,
+  resolveDefaultTtsModel,
+  RUNTIME_OPTIONS,
+} from "../lib/runtime_options";
+import { writeAvatarProviderPreference } from "../lib/avatar_preference";
+import {
+  createSessionMetrics,
+  hydrateSessionMetrics,
+  seedSessionMetricsFromLatency,
+  type SessionMetricSnapshot,
+  toLatencyMetrics,
+} from "../lib/session_metrics";
 import { createSessionSocketTransport } from "../lib/session_socket";
 
-const DEFAULT_STUDENT_PROMPT = "I don't understand how to solve for x.";
+const DEFAULT_STUDENT_PROMPT = "";
 const DEFAULT_SUBJECT = "math";
 const DEFAULT_GRADE_BAND = "6-8";
 
@@ -40,11 +58,16 @@ export type TutorTurnRequest = {
   studentText: string;
   subject: string;
   gradeBand: string;
+  llmModel?: string;
+  llmProvider?: string;
+  onTranscriptFinal?: (text: string) => void;
   studentProfile?: {
     pacing?: string;
     preference?: string;
   };
   audioChunks?: CapturedAudioChunk[];
+  ttsModel?: string;
+  ttsProvider?: string;
 };
 
 export type TutorTurnResult = {
@@ -52,6 +75,7 @@ export type TutorTurnResult = {
   tutorText: string;
   state: string;
   latency: LatencyMetrics;
+  metricEvents?: SessionMetricSnapshot;
   timestamps: WordTimestamp[];
   audioSegments?: Array<{
     text: string;
@@ -77,8 +101,11 @@ export type SessionTransport = {
 };
 
 type TutorSessionProps = {
+  initialAvatarProviderId?: string;
   transport?: SessionTransport;
 };
+
+type TurnSource = "text" | "mic";
 
 function createConfiguredTransport(): SessionTransport {
   if (
@@ -98,7 +125,47 @@ function createConfiguredTransport(): SessionTransport {
   return createSessionSocketTransport();
 }
 
-export function TutorSession({ transport }: TutorSessionProps) {
+function normalizeLessonSessionId(sessionId: string | null | undefined): string {
+  const normalized = typeof sessionId === "string" ? sessionId.trim() : "";
+  if (normalized && normalized !== "undefined" && normalized !== "null") {
+    return normalized;
+  }
+
+  return generateLessonSessionId();
+}
+
+function withNormalizedThreadSessionId(thread: PersistedLessonThread): PersistedLessonThread {
+  return {
+    ...thread,
+    sessionId: normalizeLessonSessionId(thread.sessionId),
+  };
+}
+
+function resolveThreadStudentPrompt(thread: PersistedLessonThread): string {
+  if (thread.studentPrompt.trim()) {
+    return thread.studentPrompt;
+  }
+
+  const latestTranscript = thread.conversation.at(-1)?.transcript ?? thread.transcript;
+  return latestTranscript.trim();
+}
+
+function resolveNextTurnId(conversation: LessonConversationTurn[]): number {
+  const numericIds = conversation
+    .map((turn) => Number.parseInt(turn.id, 10))
+    .filter((value) => Number.isFinite(value));
+  if (numericIds.length > 0) {
+    return Math.max(...numericIds);
+  }
+
+  return conversation.length;
+}
+
+function resolveConversationKey(turn: LessonConversationTurn, index: number): string {
+  return `${turn.id}-${index}`;
+}
+
+export function TutorSession({ initialAvatarProviderId, transport }: TutorSessionProps) {
   const [sessionTransport] = useState(() => transport ?? createConfiguredTransport());
   const [playbackController] = useState(() => new PlaybackController());
   const [audioCapture] = useState(() => new BrowserAudioCapture());
@@ -110,19 +177,23 @@ export function TutorSession({ transport }: TutorSessionProps) {
   const [studentPrompt, setStudentPrompt] = useState(DEFAULT_STUDENT_PROMPT);
   const [subject, setSubject] = useState(DEFAULT_SUBJECT);
   const [gradeBand, setGradeBand] = useState(DEFAULT_GRADE_BAND);
+  const [llmProvider, setLlmProvider] = useState(DEFAULT_LLM_PROVIDER);
+  const [llmModel, setLlmModel] = useState(DEFAULT_LLM_MODEL);
   const [preference, setPreference] = useState("");
   const [transcript, setTranscript] = useState("");
+  const [ttsProvider, setTtsProvider] = useState(DEFAULT_TTS_PROVIDER);
+  const [ttsModel, setTtsModel] = useState(DEFAULT_TTS_MODEL);
   const [tutorText, setTutorText] = useState("");
   const [conversation, setConversation] = useState<LessonConversationTurn[]>([]);
   const [latency, setLatency] = useState<LatencyMetrics | null>(null);
   const [timestamps, setTimestamps] = useState<WordTimestamp[]>([]);
   const [avatarNowMs, setAvatarNowMs] = useState(0);
   const [error, setError] = useState("");
-  const [lessonSessionId, setLessonSessionId] = useState(() => generateLessonSessionId());
+  const [lessonSessionId, setLessonSessionId] = useState(() => normalizeLessonSessionId(generateLessonSessionId()));
   const [micActive, setMicActive] = useState(false);
-  const [avatarProviderId, setAvatarProviderId] = useState(resolveAvatarProvider().id);
+  const [avatarProviderId, setAvatarProviderId] = useState(() => resolveAvatarProvider(initialAvatarProviderId).id);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [recentLessons, setRecentLessons] = useState(() => listArchivedLessonThreads());
+  const [recentLessons, setRecentLessons] = useState<PersistedLessonSummary[]>([]);
   const [storageReady, setStorageReady] = useState(false);
   const metricsRef = useRef(createSessionMetrics());
   const pendingRestoreThreadRef = useRef<PersistedLessonThread | null>(null);
@@ -146,7 +217,10 @@ export function TutorSession({ transport }: TutorSessionProps) {
     const connectTransport = async () => {
       try {
         if (sessionTransport.switchSession) {
-          await sessionTransport.switchSession(lessonSessionId, pendingRestoreThreadRef.current ?? undefined);
+          await sessionTransport.switchSession(
+            normalizeLessonSessionId(lessonSessionId),
+            pendingRestoreThreadRef.current ?? undefined
+          );
         }
         pendingRestoreThreadRef.current = null;
         const result = await sessionTransport.connect();
@@ -178,14 +252,30 @@ export function TutorSession({ transport }: TutorSessionProps) {
   }, [micActive]);
 
   useEffect(() => {
-    const persistedThread = readPersistedLessonThread();
-    if (persistedThread) {
-      applyThread(persistedThread);
-      setLessonSessionId(persistedThread.sessionId);
-      pendingRestoreThreadRef.current = persistedThread;
-    }
-    setRecentLessons(listArchivedLessonThreads());
-    setStorageReady(true);
+    let cancelled = false;
+
+    const restoreThreadStore = async () => {
+      const hydratedStore = await hydrateLessonThreadStore();
+      if (cancelled) {
+        return;
+      }
+
+      const persistedThread = hydratedStore.activeThread ?? readPersistedLessonThread();
+      if (persistedThread) {
+        const normalizedThread = withNormalizedThreadSessionId(persistedThread);
+        applyThread(normalizedThread);
+        setLessonSessionId(normalizedThread.sessionId);
+        pendingRestoreThreadRef.current = normalizedThread;
+      }
+      setRecentLessons(hydratedStore.archive.map(({ thread: _thread, ...summary }) => summary));
+      setStorageReady(true);
+    };
+
+    void restoreThreadStore();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -193,8 +283,12 @@ export function TutorSession({ transport }: TutorSessionProps) {
       return;
     }
 
-    writePersistedLessonThread(buildCurrentThread());
-  }, [avatarProviderId, conversation, gradeBand, lessonSessionId, preference, storageReady, studentPrompt, subject, transcript, tutorText]);
+    void persistActiveLessonThread(buildCurrentThread());
+  }, [avatarProviderId, conversation, gradeBand, lessonSessionId, llmModel, llmProvider, preference, storageReady, studentPrompt, subject, transcript, ttsModel, ttsProvider, tutorText]);
+
+  useEffect(() => {
+    writeAvatarProviderPreference(avatarProviderId);
+  }, [avatarProviderId]);
 
   useEffect(() => {
     let fadeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -248,7 +342,7 @@ export function TutorSession({ transport }: TutorSessionProps) {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault();
         if (sessionState !== "thinking" && sessionState !== "listening") {
-          void runDemoTurn([]);
+          void runDemoTurn([], "text");
         }
         return;
       }
@@ -276,10 +370,14 @@ export function TutorSession({ transport }: TutorSessionProps) {
       avatarProviderId,
       conversation,
       gradeBand,
+      llmModel,
+      llmProvider,
       preference,
-      sessionId: lessonSessionId,
+      sessionId: normalizeLessonSessionId(lessonSessionId),
       studentPrompt,
       subject,
+      ttsModel,
+      ttsProvider,
       transcript,
       tutorText,
       version: 1,
@@ -289,16 +387,22 @@ export function TutorSession({ transport }: TutorSessionProps) {
   function applyThread(thread: PersistedLessonThread) {
     setAvatarProviderId(thread.avatarProviderId);
     setConversation(thread.conversation);
+    activeTurnIdRef.current = resolveNextTurnId(thread.conversation);
     setGradeBand(thread.gradeBand);
+    setLlmModel(thread.llmModel);
+    setLlmProvider(thread.llmProvider);
     setPreference(thread.preference);
-    setStudentPrompt(thread.studentPrompt);
+    setStudentPrompt(resolveThreadStudentPrompt(thread));
     setSubject(thread.subject);
+    setTtsModel(thread.ttsModel);
+    setTtsProvider(thread.ttsProvider);
     setTranscript(thread.transcript);
     setTutorText(thread.tutorText);
   }
 
-  async function runDemoTurn(audioChunks?: CapturedAudioChunk[]) {
+  async function runDemoTurn(audioChunks: CapturedAudioChunk[] = [], source: TurnSource = "text") {
     const turnId = activeTurnIdRef.current + 1;
+    const submittedPrompt = source === "mic" ? "" : studentPrompt;
     activeTurnIdRef.current = turnId;
     setError("");
     setSessionState("thinking");
@@ -306,17 +410,36 @@ export function TutorSession({ transport }: TutorSessionProps) {
     metricsRef.current = createSessionMetrics();
     try {
       const result = await sessionTransport.runTurn({
-        studentText: studentPrompt,
+        studentText: submittedPrompt,
         subject,
         gradeBand,
+        llmModel,
+        llmProvider,
+        onTranscriptFinal:
+          source === "mic"
+            ? (text) => {
+                if (activeTurnIdRef.current !== turnId) {
+                  return;
+                }
+                setStudentPrompt(text);
+                setTranscript(text);
+              }
+            : undefined,
         studentProfile: preference ? { preference } : undefined,
         audioChunks,
+        ttsModel,
+        ttsProvider,
       });
       if (activeTurnIdRef.current !== turnId) {
         return;
       }
       setTranscript(result.transcript);
       setTutorText(result.tutorText);
+      if (source === "text") {
+        setStudentPrompt("");
+      } else if (result.transcript.trim()) {
+        setStudentPrompt(result.transcript);
+      }
       setConversation((current) => [
         ...current,
         {
@@ -326,10 +449,12 @@ export function TutorSession({ transport }: TutorSessionProps) {
         },
       ]);
       setSessionState(result.state);
-      setLatency(result.latency);
+      metricsRef.current = result.metricEvents
+        ? hydrateSessionMetrics(result.metricEvents)
+        : seedSessionMetricsFromLatency(result.latency);
+      setLatency(toLatencyMetrics(metricsRef.current));
       setTimestamps(result.timestamps);
       setAvatarProviderId((currentId) => result.avatarConfig ? resolveAvatarProviderId(result.avatarConfig) : currentId);
-      metricsRef.current.mark({ name: "tts_first_audio", tsMs: performance.now() });
       const playbackSegments = result.audioSegments?.length
         ? result.audioSegments
         : [
@@ -339,23 +464,27 @@ export function TutorSession({ transport }: TutorSessionProps) {
             },
           ];
       playbackSegments.forEach((segment, index) => {
+        const shouldDeferCompletion = !segment.audioBase64;
         playbackController.enqueue({
           id: `${turnId}-${index}-${Date.now()}`,
           text: segment.text,
           audioBase64: segment.audioBase64,
           audioMimeType: segment.audioMimeType,
+          deferCompletion: shouldDeferCompletion,
           durationMs: segment.durationMs ?? Math.max(300, segment.text.length * 18),
-          onStart: () => {
+          onPlaybackStart: () => {
             if (activeTurnIdRef.current !== turnId || index !== 0) {
               return;
             }
             metricsRef.current.mark({ name: "first_viseme", tsMs: performance.now() });
+            setLatency(toLatencyMetrics(metricsRef.current));
           },
-          onComplete: () => {
+          onPlaybackComplete: () => {
             if (activeTurnIdRef.current !== turnId || index !== playbackSegments.length - 1) {
               return;
             }
             metricsRef.current.mark({ name: "audio_done", tsMs: performance.now() });
+            setLatency(toLatencyMetrics(metricsRef.current));
             setSessionState("idle");
           },
         });
@@ -386,8 +515,8 @@ export function TutorSession({ transport }: TutorSessionProps) {
   }
 
   async function resetLesson() {
-    setRecentLessons(archivePersistedLessonThread(buildCurrentThread()));
-    const nextSessionId = generateLessonSessionId();
+    setRecentLessons(await persistArchivedLessonThread(buildCurrentThread()));
+    const nextSessionId = normalizeLessonSessionId(generateLessonSessionId());
     activeTurnIdRef.current += 1;
     if (sessionTransport.switchSession) {
       await sessionTransport.switchSession(nextSessionId);
@@ -413,19 +542,24 @@ export function TutorSession({ transport }: TutorSessionProps) {
     setStudentPrompt(DEFAULT_STUDENT_PROMPT);
     setSubject(DEFAULT_SUBJECT);
     setGradeBand(DEFAULT_GRADE_BAND);
+    setLlmProvider(DEFAULT_LLM_PROVIDER);
+    setLlmModel(DEFAULT_LLM_MODEL);
     setPreference("");
-    clearPersistedLessonThread();
+    setTtsProvider(DEFAULT_TTS_PROVIDER);
+    setTtsModel(DEFAULT_TTS_MODEL);
+    await clearPersistedLessonThreadRemote();
   }
 
   async function resumeLesson(lessonId: string) {
-    const archivedThread = readArchivedLessonThread(lessonId);
+    const archivedThread = await refreshArchivedLessonThread(lessonId);
     if (!archivedThread) {
       return;
     }
+    const normalizedThread = withNormalizedThreadSessionId(archivedThread);
 
     activeTurnIdRef.current += 1;
     if (sessionTransport.switchSession) {
-      await sessionTransport.switchSession(archivedThread.sessionId, archivedThread);
+      await sessionTransport.switchSession(normalizedThread.sessionId, normalizedThread);
     } else {
       await sessionTransport.reset();
     }
@@ -434,7 +568,7 @@ export function TutorSession({ transport }: TutorSessionProps) {
     micHoldRef.current = false;
     micStartingRef.current = false;
     micActiveRef.current = false;
-    setLessonSessionId(archivedThread.sessionId);
+    setLessonSessionId(normalizedThread.sessionId);
     setSessionState("idle");
     setLatency(null);
     setTimestamps([]);
@@ -442,7 +576,7 @@ export function TutorSession({ transport }: TutorSessionProps) {
     setError("");
     setMicActive(false);
     setHistoryOpen(false);
-    applyThread(archivedThread);
+    applyThread(normalizedThread);
   }
 
   async function startMicCapture() {
@@ -485,7 +619,7 @@ export function TutorSession({ transport }: TutorSessionProps) {
       const chunks = await audioCapture.stop();
       micActiveRef.current = false;
       setMicActive(false);
-      await runDemoTurn(chunks);
+      await runDemoTurn(chunks, "mic");
     } catch (caughtError) {
       micActiveRef.current = false;
       setMicActive(false);
@@ -563,36 +697,20 @@ export function TutorSession({ transport }: TutorSessionProps) {
   }
 
   return (
-    <main className="session-shell">
-      <section className="hero-card">
-        <div>
-          <p className="eyebrow">Live AI Video Tutor</p>
-          <h1>Realtime voice tutoring, benchmark first.</h1>
-        </div>
-        <div className="hero-status">
-          <span className={`status-pill ${
-            connectionState === "connected" ? "status-pill--connected" :
-            connectionState === "connecting" ? "status-pill--connecting" :
-            connectionState === "failed" ? "status-pill--failed" : ""
-          }`}>
-            {connectionState === "connected" ? "Online" : connectionState}
-          </span>
-          <span className={`status-pill ${
-            sessionState === "thinking" || sessionState === "listening" ? "status-pill--live" :
-            sessionState === "failed" ? "status-pill--failed" : ""
-          }`}>
-            {sessionState}
-          </span>
-        </div>
-      </section>
+    <main
+      className={`tutor-layout ${historyOpen ? "tutor-layout--history-open" : ""}`}
+      data-testid="tutor-layout"
+    >
+      {/* Left Sidebar - Fixed Settings Rail */}
+      <aside className="settings-rail">
+        <div className="settings-rail__content">
+          <div className="settings-rail__brand">
+            <p className="eyebrow">AI Tutor</p>
+          </div>
 
-      <section className="session-grid">
-        {/* Left column: Controls */}
-        <div className="stack">
-          {/* Lesson Configuration */}
-          <div className="panel panel--compact">
-            <div className="section-group">
-              <h4 className="section-title">Lesson Settings</h4>
+          <nav className="settings-rail__nav">
+            <div className="settings-section">
+              <h4 className="settings-section__title">Lesson</h4>
               <div className="field-grid">
                 <label className="field">
                   <span>Subject</span>
@@ -603,7 +721,7 @@ export function TutorSession({ transport }: TutorSessionProps) {
                   </select>
                 </label>
                 <label className="field">
-                  <span>Grade band</span>
+                  <span>Grade</span>
                   <select
                     aria-label="Grade band"
                     onChange={(event) => setGradeBand(event.target.value)}
@@ -616,160 +734,351 @@ export function TutorSession({ transport }: TutorSessionProps) {
                 </label>
               </div>
               <label className="field">
-                <span>Learning preference</span>
+                <span>Preference</span>
                 <input
                   aria-label="Learning preference"
                   onChange={(event) => setPreference(event.target.value)}
-                  placeholder="Slow down, use examples..."
+                  placeholder="Slow down, examples..."
                   type="text"
                   value={preference}
                 />
               </label>
             </div>
 
-            {/* Student Input */}
-            <div className="section-group">
-              <h4 className="section-title">Your Question</h4>
-              <label className="field">
-                <textarea
-                  aria-label="Student prompt"
-                  onChange={(event) => setStudentPrompt(event.target.value)}
-                  placeholder="Ask a question..."
-                  rows={3}
-                  value={studentPrompt}
-                />
-              </label>
+            <div className="settings-section">
+              <h4 className="settings-section__title">Avatar</h4>
+              <AvatarSelector
+                onAvatarChange={setAvatarProviderId}
+                onModeChange={handleAvatarModeChange}
+                selectedAvatarId={avatarProviderId}
+                selectedMode={avatarMode}
+              />
+            </div>
 
-              {/* Action Bar */}
-              <div className="action-bar">
-                <div className="action-bar__primary">
-                  <button
-                    ref={sendButtonRef}
-                    aria-label="Send Text Turn"
-                    className="primary-button"
-                    disabled={sessionState === "thinking" || sessionState === "listening"}
-                    onClick={() => void runDemoTurn([])}
-                    type="button"
+            <div className="settings-section">
+              <h4 className="settings-section__title">Models</h4>
+              <div className="field-grid">
+                <label className="field">
+                  <span>LLM</span>
+                  <select
+                    aria-label="LLM provider"
+                    onChange={(event) => {
+                      const nextProvider = event.target.value;
+                      setLlmProvider(nextProvider);
+                      setLlmModel(resolveDefaultLlmModel(nextProvider));
+                    }}
+                    value={llmProvider}
                   >
-                    Send Text Turn
-                  </button>
+                    {Object.keys(RUNTIME_OPTIONS.llm).map((provider) => (
+                      <option key={provider} value={provider}>
+                        {provider}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>LLM model</span>
+                  <select aria-label="LLM model" onChange={(event) => setLlmModel(event.target.value)} value={llmModel}>
+                    {RUNTIME_OPTIONS.llm[llmProvider as keyof typeof RUNTIME_OPTIONS.llm].map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="field-grid">
+                <label className="field">
+                  <span>TTS</span>
+                  <select
+                    aria-label="TTS provider"
+                    onChange={(event) => {
+                      const nextProvider = event.target.value;
+                      setTtsProvider(nextProvider);
+                      setTtsModel(resolveDefaultTtsModel(nextProvider));
+                    }}
+                    value={ttsProvider}
+                  >
+                    {Object.keys(RUNTIME_OPTIONS.tts).map((provider) => (
+                      <option key={provider} value={provider}>
+                        {provider}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>TTS model</span>
+                  <select aria-label="TTS model" onChange={(event) => setTtsModel(event.target.value)} value={ttsModel}>
+                    {RUNTIME_OPTIONS.tts[ttsProvider as keyof typeof RUNTIME_OPTIONS.tts].map((model) => (
+                      <option key={model.value} value={model.value}>
+                        {model.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div className="settings-section">
+              <h4 className="settings-section__title">Controls</h4>
+              <div className="rail-actions">
+                {playbackState === "speaking" ? (
                   <button
-                    aria-label={micActive ? "Release to send voice" : "Hold to talk"}
-                    className={`primary-button mic-button ${micActive ? "mic-button--live" : ""}`}
-                    disabled={!micSupported || sessionState === "thinking"}
-                    onBlur={(event) => handleMicPressEnd(event)}
-                    onKeyDown={handleMicButtonKeyDown}
-                    onKeyUp={handleMicButtonKeyUp}
-                    onLostPointerCapture={(event) => handleMicPressEnd(event)}
-                    onMouseDown={handleMicMouseDown}
-                    onMouseUp={handleMicMouseUp}
-                    onPointerCancel={(event) => handleMicPressEnd(event)}
-                    onPointerDown={handleMicPressStart}
-                    onPointerUp={(event) => handleMicPressEnd(event)}
-                    title={micActive ? "Release to send voice" : "Hold to talk"}
+                    aria-label="Interrupt"
+                    className="icon-button icon-button--danger"
+                    onClick={() => void interruptTurn()}
+                    title="Interrupt"
                     type="button"
                   >
                     <svg
                       aria-hidden="true"
-                      className="mic-button__icon"
-                      fill="none"
+                      className="icon-button__icon"
+                      fill="currentColor"
                       viewBox="0 0 24 24"
                     >
-                      <path
-                        d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V7.5a3.5 3.5 0 1 0-7 0V12a3.5 3.5 0 0 0 3.5 3.5Z"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="1.8"
-                      />
-                      <path
-                        d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3M9 20h6"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="1.8"
-                      />
+                      <rect height="10" rx="2.5" width="10" x="7" y="7" />
                     </svg>
                   </button>
-                </div>
-                <div className="action-bar__secondary">
-                  <button
-                    aria-label="Interrupt"
-                    className="secondary-button"
-                    disabled={sessionState === "idle"}
-                    onClick={() => void interruptTurn()}
-                    type="button"
-                  >
-                    Interrupt
-                  </button>
-                  <button
-                    aria-label="New Lesson"
-                    className="ghost-button"
-                    onClick={() => void resetLesson()}
-                    type="button"
-                  >
-                    New Lesson
-                  </button>
-                </div>
-                <p className="helper-text action-bar__hint">
-                  Text is the primary lesson path. Hold the mic to talk, release to send, Cmd/Ctrl+Enter sends text, Esc interrupts.
-                </p>
+                ) : null}
+                <button
+                  aria-label="New Lesson"
+                  className="secondary-button"
+                  onClick={() => void resetLesson()}
+                  type="button"
+                >
+                  New
+                </button>
               </div>
-              {error ? <p className="error-text" role="alert">{error}</p> : null}
+            </div>
+          </nav>
+
+          <div className="settings-rail__footer">
+            <AudioPlayer controller={playbackController} variant="hidden" />
+            <div className="connection-status">
+              <span className={`status-dot ${
+                connectionState === "connected" ? "status-dot--online" :
+                connectionState === "connecting" ? "status-dot--connecting" :
+                "status-dot--offline"
+              }`} />
+              <span className="connection-status__text">{connectionState}</span>
             </div>
           </div>
-
-          {/* Avatar Selection */}
-          <div className="panel panel--compact">
-            <div className="panel__header">
-              <h3>Avatar</h3>
-              <span className="status-pill">{avatarMode.toUpperCase()}</span>
-            </div>
-            <AvatarSelector
-              onAvatarChange={setAvatarProviderId}
-              onModeChange={handleAvatarModeChange}
-              selectedAvatarId={avatarProviderId}
-              selectedMode={avatarMode}
-            />
-          </div>
-
-          {/* Debug: Latency */}
-          <LatencyMonitor metrics={latency} />
         </div>
+      </aside>
 
-        {/* Right column: Avatar + Output */}
-        <div className="stack">
-          <AvatarProvider
-            avatarId={avatarProviderId}
-            config={avatarConfig}
-            controls={<AudioPlayer controller={playbackController} variant="inline" />}
-            energy={playbackState === "speaking" ? 0.7 : avatarState === "fading" ? 0.24 : 0.12}
-            historyToggle={(
+      {/* Center Stage - Avatar Hero */}
+      <section className="main-stage">
+        <div className="main-stage__content">
+          {/* Top Bar */}
+          <header className="stage-header">
+            <div className="stage-header__left">
+              <h1 className="stage-header__title">Math Tutor</h1>
+              <p className="stage-header__meta">{subject} · grade {gradeBand}</p>
+            </div>
+            <div className="stage-header__right">
               <button
+                aria-label="Toggle history"
+                aria-controls="history-drawer"
                 aria-expanded={historyOpen}
-                aria-label={historyOpen ? "Hide history" : "Show history"}
-                className="ghost-button avatar-panel__history-toggle"
+                className="icon-button stage-header__history"
                 onClick={() => setHistoryOpen((current) => !current)}
                 type="button"
               >
-                {historyOpen ? "Hide history" : `History ${conversation.length}`}
+                <svg
+                  aria-hidden="true"
+                  className="icon-button__icon"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {conversation.length > 0 && (
+                  <span className="stage-header__badge">{conversation.length}</span>
+                )}
               </button>
-            )}
-            nowMs={avatarNowMs}
-            state={avatarState}
-            subtitle={tutorText}
-            timestamps={timestamps}
-          />
+            </div>
+          </header>
 
-          {historyOpen ? (
-            <LessonThreadPanels
-              conversation={conversation}
-              onResumeLesson={resumeLesson}
-              recentLessons={recentLessons}
+          {/* Avatar Stage - Hero */}
+          <div className="avatar-stage">
+            <AvatarProvider
+              avatarId={avatarProviderId}
+              config={avatarConfig}
+              controls={null}
+              energy={playbackState === "speaking" ? 0.8 : avatarState === "fading" ? 0.3 : 0.2}
+              historyToggle={null}
+              nowMs={avatarNowMs}
+              state={avatarState}
+              subtitle={tutorText}
+              timestamps={timestamps}
+              variant="hero"
             />
-          ) : null}
+          </div>
+
+          {/* Composer */}
+          <div className="composer-stage">
+            <div className="composer-stage__input">
+              <textarea
+                aria-label="Student prompt"
+                className="composer-input"
+                onChange={(event) => setStudentPrompt(event.target.value)}
+                placeholder="Ask anything..."
+                rows={1}
+                value={studentPrompt}
+              />
+              <div className="composer-stage__actions">
+                <button
+                  ref={sendButtonRef}
+                  aria-label="Send"
+                  className="send-button"
+                  disabled={sessionState === "thinking" || sessionState === "listening" || !studentPrompt.trim()}
+                  onClick={() => void runDemoTurn([], "text")}
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button
+                  aria-label={micActive ? "Release to send" : "Hold to talk"}
+                  className={`mic-button ${micActive ? "mic-button--live" : ""}`}
+                  disabled={!micSupported || sessionState === "thinking"}
+                  onBlur={(event) => handleMicPressEnd(event)}
+                  onKeyDown={handleMicButtonKeyDown}
+                  onKeyUp={handleMicButtonKeyUp}
+                  onLostPointerCapture={(event) => handleMicPressEnd(event)}
+                  onMouseDown={handleMicMouseDown}
+                  onMouseUp={handleMicMouseUp}
+                  onPointerCancel={(event) => handleMicPressEnd(event)}
+                  onPointerDown={handleMicPressStart}
+                  onPointerUp={(event) => handleMicPressEnd(event)}
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    className="mic-button__icon"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M12 15.5a3.5 3.5 0 0 0 3.5-3.5V7.5a3.5 3.5 0 1 0-7 0V12a3.5 3.5 0 0 0 3.5 3.5Z" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3M9 20h6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            {error && <p className="composer-stage__error" role="alert">{error}</p>}
+            <p className="composer-stage__hint">
+              Hold mic to talk · Cmd+Enter to send · Esc to interrupt
+            </p>
+          </div>
+
+          {/* Latency Monitor - Minimal */}
+          <div className="stage-footer">
+            <LatencyMonitor metrics={latency} variant="inline" />
+          </div>
         </div>
       </section>
+
+      {/* Right Drawer - History Slide-over */}
+      <aside
+        id="history-drawer"
+        aria-hidden={!historyOpen}
+        className={`history-drawer ${historyOpen ? "history-drawer--open" : ""}`}
+        data-testid="history-drawer"
+      >
+        <div className="history-drawer__backdrop" onClick={() => setHistoryOpen(false)} />
+        <div className="history-drawer__panel">
+          <div className="history-drawer__header">
+            <h2 className="history-drawer__title">History</h2>
+            <button
+              aria-label="Close history"
+              className="icon-button"
+              onClick={() => setHistoryOpen(false)}
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                className="icon-button__icon"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+              >
+                <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <div className="history-drawer__content">
+            <section className="history-section">
+              <h3 className="history-section__title">This conversation</h3>
+              {conversation.length === 0 ? (
+                <div className="empty-state">
+                  <p className="empty-state__text">Your conversation will appear here</p>
+                </div>
+              ) : (
+                <div className="conversation-list" data-testid="conversation-history-panel">
+                  {conversation.map((turn, index) => (
+                    <div key={resolveConversationKey(turn, index)} className="conversation-turn">
+                      <div className="conversation-turn__header">
+                        <span className="conversation-turn__number">{index + 1}</span>
+                      </div>
+                      <div className="conversation-turn__student">
+                        <div className="conversation-turn__label">You</div>
+                        <p>{turn.transcript}</p>
+                      </div>
+                      <div className="conversation-turn__tutor">
+                        <div className="conversation-turn__label">Tutor</div>
+                        <p>{turn.tutorText}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="history-section">
+              <h3 className="history-section__title">Previous lessons</h3>
+              {recentLessons.length === 0 ? (
+                <div className="empty-state">
+                  <p className="empty-state__text">Past lessons appear after starting a new one</p>
+                </div>
+              ) : (
+                <div className="lessons-list">
+                  {recentLessons.map((lesson) => (
+                    <button
+                      key={lesson.id}
+                      className="lesson-card"
+                      data-testid={`resume-lesson-${lesson.id}`}
+                      onClick={() => {
+                        void resumeLesson(lesson.id);
+                        setHistoryOpen(false);
+                      }}
+                      type="button"
+                    >
+                      <div className="lesson-card__header">
+                        <span className="lesson-card__subject">{lesson.subject}</span>
+                        <span className="lesson-card__grade">{lesson.gradeBand}</span>
+                      </div>
+                      <div className="lesson-card__title">{lesson.title}</div>
+                      <div className="lesson-card__meta">{lesson.turnCount} turn{lesson.turnCount === 1 ? "" : "s"}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+        </div>
+      </aside>
     </main>
   );
 }

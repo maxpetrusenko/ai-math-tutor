@@ -1,5 +1,6 @@
 import React from "react";
 import { render } from "@testing-library/react";
+import { loadAvatarAsset, type Avatar3DAsset } from "../lib/avatar_asset_loader";
 
 const mocks = vi.hoisted(() => ({
   applyAvatar3DFrame: vi.fn(),
@@ -43,6 +44,7 @@ test("avatar 3d creates a scene, applies frames, and disposes on unmount", () =>
 
   const { unmount } = render(
     <Avatar3D
+      asset={loadAvatarAsset({ type: "3d", assetRef: "human" }) as Avatar3DAsset}
       config={{ provider: "threejs", type: "3d" }}
       energy={0.4}
       nowMs={80}

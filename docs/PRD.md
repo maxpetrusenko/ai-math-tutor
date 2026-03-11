@@ -133,7 +133,10 @@ These items should be treated as out of scope unless later added explicitly:
 
 - `Required` System must accept subject context
 - `Required` System must accept grade-level context
-- `Required` System must use conversation history
+- `Required` System must use relevant conversation history
+- `Required` System must preserve continuity for same-problem follow-up turns
+- `Required` System must treat a clear topic or problem shift as a fresh turn
+- `Required` Shipped UX must not depend on hardcoded sample prompts
 - `Optional` Student pacing or learning preferences may be used when available
 
 ## 10. Performance Requirements

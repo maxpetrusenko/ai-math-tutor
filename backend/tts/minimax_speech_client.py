@@ -20,8 +20,13 @@ class MiniMaxSpeechClient:
         tracker: LatencyTracker,
         first_audio_ts_ms: float,
         is_final: bool = False,
+        options: dict[str, str] | None = None,
     ) -> dict[str, object]:
-        tracker.mark("tts_first_audio", first_audio_ts_ms, {"provider": self.provider_name})
+        tracker.mark(
+            "tts_first_audio",
+            first_audio_ts_ms,
+            {"provider": self.provider_name, "model": (options or {}).get("model", "minimax-speech")},
+        )
         words = text.split()
         timestamps = [
             {"word": word, "start_ms": index * 110, "end_ms": index * 110 + 90}
@@ -30,6 +35,7 @@ class MiniMaxSpeechClient:
         return {
             "type": "tts.audio",
             "provider": self.provider_name,
+            "model": (options or {}).get("model", "minimax-speech"),
             "audio": text,
             "is_final": is_final,
             "timestamps": timestamps,

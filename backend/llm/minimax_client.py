@@ -13,12 +13,18 @@ class MiniMaxClient:
         token_stream: list[str],
         tracker: LatencyTracker,
         first_token_ts_ms: float,
+        options: dict[str, str] | None = None,
     ) -> dict[str, str]:
         if token_stream:
-            tracker.mark("llm_first_token", first_token_ts_ms, {"provider": self.provider_name})
+            tracker.mark(
+                "llm_first_token",
+                first_token_ts_ms,
+                {"provider": self.provider_name, "model": (options or {}).get("model", "minimax-m2.5")},
+            )
         raw_text = "".join(token_stream)
         return {
             "provider": self.provider_name,
+            "model": (options or {}).get("model", "minimax-m2.5"),
             "text": shape_tutor_response(raw_text),
             "input_messages": str(len(messages)),
         }

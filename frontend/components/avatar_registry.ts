@@ -1,44 +1,48 @@
 import type { AvatarConfig } from "../lib/avatar_contract";
+import {
+  DEFAULT_AVATAR_ID,
+  listAvatarManifest,
+  resolveAvatarManifestEntry,
+  type AvatarManifestEntry,
+  type AvatarMode,
+} from "../lib/avatar_manifest";
 
-export type AvatarProviderOption = {
-  id: string;
-  label: string;
-  config: AvatarConfig;
-};
-
-const AVATAR_PROVIDER_OPTIONS: AvatarProviderOption[] = [
-  {
-    id: "css-2d",
-    label: "2D CSS",
-    config: {
-      provider: "css",
-      type: "2d",
-    },
-  },
-  {
-    id: "threejs-3d",
-    label: "3D Three.js",
-    config: {
-      provider: "threejs",
-      type: "3d",
-    },
-  },
-];
-
-export const DEFAULT_AVATAR_PROVIDER_ID = "css-2d";
+export type AvatarProviderOption = AvatarManifestEntry;
+export const DEFAULT_AVATAR_PROVIDER_ID = DEFAULT_AVATAR_ID;
+export type AvatarRenderMode = AvatarMode;
 
 export function listAvatarProviders(): AvatarProviderOption[] {
-  return AVATAR_PROVIDER_OPTIONS;
+  return listAvatarManifest();
 }
 
-export function resolveAvatarProviderId(config: Pick<AvatarConfig, "provider" | "type">): string {
-  const match = AVATAR_PROVIDER_OPTIONS.find(
-    (option) => option.config.provider === config.provider && option.config.type === config.type
+export function listAvatarProvidersForMode(mode: AvatarRenderMode): AvatarProviderOption[] {
+  return listAvatarManifest(mode);
+}
+
+export function resolveAvatarMode(providerId: string = DEFAULT_AVATAR_PROVIDER_ID): AvatarRenderMode {
+  return resolveAvatarProvider(providerId).mode;
+}
+
+export function resolveDefaultAvatarProviderId(mode: AvatarRenderMode = "2d"): string {
+  const defaultProvider = resolveAvatarManifestEntry();
+  if (defaultProvider.mode === mode) {
+    return defaultProvider.id;
+  }
+
+  return listAvatarProvidersForMode(mode)[0]?.id ?? DEFAULT_AVATAR_PROVIDER_ID;
+}
+
+export function resolveAvatarProviderId(config: Pick<AvatarConfig, "provider" | "type" | "assetRef">): string {
+  const match = listAvatarProviders().find(
+    (option) =>
+      option.config.provider === config.provider &&
+      option.config.type === config.type &&
+      (!config.assetRef || option.config.assetRef === config.assetRef)
   );
 
   return match?.id ?? DEFAULT_AVATAR_PROVIDER_ID;
 }
 
 export function resolveAvatarProvider(providerId: string = DEFAULT_AVATAR_PROVIDER_ID): AvatarProviderOption {
-  return AVATAR_PROVIDER_OPTIONS.find((option) => option.id === providerId) ?? AVATAR_PROVIDER_OPTIONS[0];
+  return resolveAvatarManifestEntry(providerId);
 }

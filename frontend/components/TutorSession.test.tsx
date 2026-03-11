@@ -2,14 +2,26 @@ import React from "react";
 import { act } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import { TutorSession } from "./TutorSession";
 import { BrowserAudioCapture } from "../lib/audio_capture";
+import {
+  clearPersistedLessonThread,
+  persistArchivedLessonThread,
+  writePersistedLessonThread,
+} from "../lib/lesson_thread_store";
 
 vi.mock("./Avatar3D", () => ({
   Avatar3D: () => <div>Avatar (3D)</div>,
 }));
+
+afterEach(() => {
+  clearPersistedLessonThread();
+  window.localStorage.clear();
+  document.cookie = "nerdy_avatar_provider=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+  vi.restoreAllMocks();
+});
 
 function createDeferredTurn() {
   let resolve!: (value: {
@@ -69,13 +81,16 @@ test("renders session shell and runs a tutoring turn", async () => {
         },
         interrupt() {
           return Promise.resolve();
+        },
+        reset() {
+          return Promise.resolve();
         }
       }}
     />
   );
 
-  expect(screen.getByText("Tutor State")).toBeInTheDocument();
-  expect(screen.getByText("Latency")).toBeInTheDocument();
+  expect(screen.getByText("Lesson")).toBeInTheDocument();
+  expect(screen.getByTestId("latency-strip")).toBeInTheDocument();
   expect(screen.getByLabelText("Student prompt")).toBeInTheDocument();
   expect(screen.getByLabelText("Subject")).toBeInTheDocument();
   expect(screen.getByLabelText("Grade band")).toBeInTheDocument();
@@ -89,18 +104,116 @@ test("renders session shell and runs a tutoring turn", async () => {
   fireEvent.change(screen.getByLabelText("Grade band"), {
     target: { value: "9-10" }
   });
-  fireEvent.click(screen.getByRole("button", { name: "Run Demo Turn" }));
+  fireEvent.change(screen.getByLabelText("LLM provider"), {
+    target: { value: "minimax" }
+  });
+  fireEvent.change(screen.getByLabelText("TTS provider"), {
+    target: { value: "minimax" }
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
   await waitFor(() =>
-    expect(screen.getByText("Nice start. What should you isolate first?")).toBeInTheDocument()
+    expect(screen.getAllByText("Nice start. What should you isolate first?").length).toBeGreaterThan(0)
   );
-  expect(screen.getByText("120 ms")).toBeInTheDocument();
-  expect(screen.getAllByText("speaking").length).toBeGreaterThanOrEqual(2);
+  expect(screen.getByText("STT 120 ms")).toBeInTheDocument();
+  expect(screen.getByTestId("avatar-subtitle")).toHaveTextContent("Nice start. What should you isolate first?");
   expect(requests[0]).toMatchObject({
     studentText: "I don't understand how to solve for x.",
     subject: "science",
-    gradeBand: "9-10"
+    gradeBand: "9-10",
+    llmProvider: "minimax",
+    llmModel: "minimax-m2.5",
+    ttsProvider: "minimax",
+    ttsModel: "minimax-speech",
   });
+});
+
+test("hold-to-talk mic starts on press and sends on release", async () => {
+  const requests: Array<Record<string, unknown>> = [];
+  const startSpy = vi.spyOn(BrowserAudioCapture.prototype, "start").mockResolvedValue();
+  const stopSpy = vi
+    .spyOn(BrowserAudioCapture.prototype, "stop")
+    .mockResolvedValue([{ sequence: 1, size: 320, bytesBase64: "YWJj" }]);
+  vi.spyOn(BrowserAudioCapture.prototype, "isSupported").mockReturnValue(true);
+
+  render(
+    <TutorSession
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async runTurn(request) {
+          requests.push(request as Record<string, unknown>);
+          return {
+            transcript: "voice transcript",
+            tutorText: "Voice tutor reply",
+            state: "speaking",
+            latency: {
+              speechEndToSttFinalMs: 100,
+              sttFinalToLlmFirstTokenMs: 110,
+              llmFirstTokenToTtsFirstAudioMs: 120,
+            },
+            timestamps: [{ word: "Voice", startMs: 0, endMs: 100 }],
+          };
+        },
+        async interrupt() {
+          return;
+        },
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  const micButton = screen.getByRole("button", { name: "Hold to talk" });
+  fireEvent.mouseDown(micButton, { button: 0 });
+
+  await waitFor(() => expect(startSpy).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Release to send" })).toBeInTheDocument());
+
+  fireEvent.mouseUp(micButton, { button: 0 });
+
+  await waitFor(() => expect(stopSpy).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(requests).toHaveLength(1));
+  expect(requests[0]).toMatchObject({
+    audioChunks: [{ sequence: 1, size: 320, bytesBase64: "YWJj" }],
+  });
+  await waitFor(() => expect(screen.getAllByText("Voice tutor reply").length).toBeGreaterThan(0));
+});
+
+test("mic stays enabled after an empty capture error", async () => {
+  vi.spyOn(BrowserAudioCapture.prototype, "isSupported").mockReturnValue(true);
+  vi.spyOn(BrowserAudioCapture.prototype, "start").mockResolvedValue();
+  vi.spyOn(BrowserAudioCapture.prototype, "stop").mockResolvedValue([
+    { sequence: 1, size: 320, bytesBase64: "YWJj" },
+  ]);
+
+  render(
+    <TutorSession
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async runTurn() {
+          throw new Error("No speech detected");
+        },
+        async interrupt() {
+          return;
+        },
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  const micButton = screen.getByRole("button", { name: "Hold to talk" });
+  fireEvent.mouseDown(micButton, { button: 0 });
+  fireEvent.mouseUp(micButton, { button: 0 });
+
+  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("No speech detected"));
+  expect(screen.getByRole("button", { name: "Hold to talk" })).not.toBeDisabled();
 });
 
 test("avatar provider controls switch between 2d and 3d views", async () => {
@@ -125,27 +238,121 @@ test("avatar provider controls switch between 2d and 3d views", async () => {
         },
         async interrupt() {
           return;
+        },
+        async reset() {
+          return;
         }
       }}
     />
   );
 
   expect(screen.getByTestId("avatar-surface-2d")).toBeInTheDocument();
-  expect(screen.getByTestId("avatar-mode-css-2d")).toHaveAttribute("data-selected", "true");
+  expect(screen.getByLabelText("Render mode")).toHaveValue("2d");
+  expect(screen.getByLabelText("Avatar")).toHaveValue("human-css-2d");
+  expect(screen.getByRole("option", { name: "Human" })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "Human 3D" })).not.toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "3D Three.js" }));
+  fireEvent.change(screen.getByLabelText("Render mode"), {
+    target: { value: "3d" },
+  });
+  fireEvent.change(screen.getByLabelText("Avatar"), {
+    target: { value: "human-threejs-3d" },
+  });
 
   await waitFor(() => expect(screen.getByTestId("avatar-surface-3d")).toBeInTheDocument());
-  expect(screen.getByRole("heading", { name: "Avatar (3D)" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "3D Three.js" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByTestId("avatar-mode-threejs-3d")).toHaveAttribute("data-selected", "true");
+  expect(screen.getByLabelText("Render mode")).toHaveValue("3d");
+  expect(screen.getByLabelText("Avatar")).toHaveValue("human-threejs-3d");
+  expect(screen.getByText("Avatar (3D)")).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "2D CSS" }));
+  fireEvent.change(screen.getByLabelText("Render mode"), {
+    target: { value: "2d" },
+  });
+  fireEvent.change(screen.getByLabelText("Avatar"), {
+    target: { value: "banana-css-2d" },
+  });
 
   await waitFor(() => expect(screen.getByTestId("avatar-surface-2d")).toBeInTheDocument());
-  expect(screen.getByRole("heading", { name: "Avatar" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "2D CSS" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByTestId("avatar-mode-css-2d")).toHaveAttribute("data-selected", "true");
+  expect(screen.getByLabelText("Render mode")).toHaveValue("2d");
+  expect(screen.getByLabelText("Avatar")).toHaveValue("banana-css-2d");
+  expect(screen.getByTestId("avatar-surface-2d")).toBeInTheDocument();
+});
+
+test("renders the preloaded avatar selection on first paint", async () => {
+  render(
+    <TutorSession
+      initialAvatarProviderId="human-threejs-3d"
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async runTurn() {
+          return {
+            transcript: "",
+            tutorText: "",
+            state: "idle",
+            latency: {
+              speechEndToSttFinalMs: 0,
+              sttFinalToLlmFirstTokenMs: 0,
+              llmFirstTokenToTtsFirstAudioMs: 0,
+            },
+            timestamps: [],
+          };
+        },
+        async interrupt() {
+          return;
+        },
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  await waitFor(() => expect(screen.getByText("connected")).toBeInTheDocument());
+  expect(screen.getByTestId("avatar-surface-3d")).toBeInTheDocument();
+  expect(screen.getByLabelText("Render mode")).toHaveValue("3d");
+  expect(screen.getByLabelText("Avatar")).toHaveValue("human-threejs-3d");
+});
+
+test("persists the selected avatar preference for the next app load", async () => {
+  render(
+    <TutorSession
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async runTurn() {
+          return {
+            transcript: "",
+            tutorText: "",
+            state: "idle",
+            latency: {
+              speechEndToSttFinalMs: 0,
+              sttFinalToLlmFirstTokenMs: 0,
+              llmFirstTokenToTtsFirstAudioMs: 0,
+            },
+            timestamps: [],
+          };
+        },
+        async interrupt() {
+          return;
+        },
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  fireEvent.change(screen.getByLabelText("Render mode"), {
+    target: { value: "3d" },
+  });
+  fireEvent.change(screen.getByLabelText("Avatar"), {
+    target: { value: "human-threejs-3d" },
+  });
+
+  await waitFor(() => expect(screen.getByLabelText("Avatar")).toHaveValue("human-threejs-3d"));
+  expect(document.cookie).toContain("nerdy_avatar_provider=human-threejs-3d");
 });
 
 test("does not trigger a hydration mismatch when browser mic support is available", async () => {
@@ -167,6 +374,9 @@ test("does not trigger a hydration mismatch when browser mic support is availabl
       };
     },
     async interrupt() {
+      return;
+    },
+    async reset() {
       return;
     }
   };
@@ -196,6 +406,90 @@ test("does not trigger a hydration mismatch when browser mic support is availabl
   }
 });
 
+test("does not trigger a hydration mismatch when archived lessons exist only on the client", async () => {
+  const transport = {
+    async connect() {
+      return "connected" as const;
+    },
+    async runTurn() {
+      return {
+        transcript: "",
+        tutorText: "",
+        state: "idle",
+        latency: {
+          speechEndToSttFinalMs: 0,
+          sttFinalToLlmFirstTokenMs: 0,
+          llmFirstTokenToTtsFirstAudioMs: 0,
+        },
+        timestamps: [],
+      };
+    },
+    async interrupt() {
+      return;
+    },
+    async reset() {
+      return;
+    },
+  };
+
+  await persistArchivedLessonThread({
+    avatarProviderId: "robot-css-2d",
+    conversation: [
+      {
+        id: "1",
+        transcript: "saved transcript",
+        tutorText: "saved tutor reply",
+      },
+    ],
+    gradeBand: "9-10",
+    llmModel: "gemini-2.5-flash",
+    llmProvider: "gemini",
+    preference: "Use slower examples",
+    sessionId: "lesson-saved-1",
+    studentPrompt: "saved prompt",
+    subject: "science",
+    transcript: "saved transcript",
+    ttsModel: "sonic-2",
+    ttsProvider: "cartesia",
+    tutorText: "saved tutor reply",
+    version: 1,
+  });
+
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  const originalWindow = globalThis.window;
+
+  try {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: undefined,
+    });
+
+    const html = renderToString(<TutorSession transport={transport} />);
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: originalWindow,
+    });
+
+    await act(async () => {
+      hydrateRoot(container, <TutorSession transport={transport} />);
+      await Promise.resolve();
+    });
+
+    expect(consoleError).not.toHaveBeenCalled();
+  } finally {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: originalWindow,
+    });
+    consoleError.mockRestore();
+    document.body.innerHTML = "";
+  }
+});
+
 test("ignores stale tutor results after interrupt", async () => {
   const deferred = createDeferredTurn();
   const transport = {
@@ -207,16 +501,23 @@ test("ignores stale tutor results after interrupt", async () => {
     },
     async interrupt() {
       return;
+    },
+    async reset() {
+      return;
     }
   };
 
   render(<TutorSession transport={transport} />);
 
-  fireEvent.click(screen.getByRole("button", { name: "Run Demo Turn" }));
-  await waitFor(() => expect(screen.getAllByText("thinking").length).toBeGreaterThan(0));
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "interrupt me" }
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeDisabled());
+  expect(screen.queryByRole("button", { name: "Interrupt" })).not.toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "Interrupt" }));
-  await waitFor(() => expect(screen.getAllByText("idle").length).toBeGreaterThan(0));
+  fireEvent.keyDown(window, { key: "Escape" });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).not.toBeDisabled());
 
   await act(async () => {
     deferred.resolve({
@@ -235,7 +536,7 @@ test("ignores stale tutor results after interrupt", async () => {
 
   expect(screen.queryByText("Late tutor text")).not.toBeInTheDocument();
   expect(screen.queryByText("late transcript")).not.toBeInTheDocument();
-  expect(screen.getAllByText("idle").length).toBeGreaterThan(0);
+  expect(screen.getByRole("button", { name: "Send" })).not.toBeDisabled();
 });
 
 test("applies backend avatar provider config to the active avatar view", async () => {
@@ -264,13 +565,195 @@ test("applies backend avatar provider config to the active avatar view", async (
         },
         async interrupt() {
           return;
+        },
+        async reset() {
+          return;
         }
       }}
     />
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Run Demo Turn" }));
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "switch avatar" }
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
   await waitFor(() => expect(screen.getByTestId("avatar-surface-3d")).toBeInTheDocument());
-  expect(screen.getByTestId("avatar-mode-threejs-3d")).toHaveAttribute("data-selected", "true");
+  expect(screen.getByLabelText("Render mode")).toHaveValue("3d");
+  expect(screen.getByLabelText("Avatar")).toHaveValue("human-threejs-3d");
+});
+
+test("send text turn appends conversation history and new lesson clears it", async () => {
+  const requests: Array<Record<string, unknown>> = [];
+  const transport = {
+    async connect() {
+      return "connected" as const;
+    },
+    async runTurn(request: Record<string, unknown>) {
+      requests.push(request);
+      return {
+        transcript: String(request.studentText),
+        tutorText: requests.length === 1 ? "First tutor reply?" : "Second tutor reply?",
+        state: "speaking",
+        latency: {
+          speechEndToSttFinalMs: 10,
+          sttFinalToLlmFirstTokenMs: 20,
+          llmFirstTokenToTtsFirstAudioMs: 30
+        },
+        timestamps: [{ word: "First", startMs: 0, endMs: 100 }]
+      };
+    },
+    async interrupt() {
+      return;
+    },
+    async reset() {
+      return;
+    }
+  };
+
+  render(<TutorSession transport={transport} />);
+
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "first student turn" }
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  await waitFor(() => expect(screen.getAllByText("First tutor reply?").length).toBeGreaterThan(0));
+  expect(screen.getByTestId("avatar-subtitle")).toHaveTextContent("First tutor reply?");
+
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "second student turn" }
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  await waitFor(() => expect(screen.getAllByText("Second tutor reply?").length).toBeGreaterThan(0));
+  expect(requests[0]).toMatchObject({ audioChunks: [] });
+  expect(screen.getByTestId("avatar-subtitle")).toHaveTextContent("Second tutor reply?");
+
+  fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
+  await waitFor(() => expect(screen.getByText("History")).toBeInTheDocument());
+  const historyPanel = screen.getByTestId("conversation-history-panel");
+  expect(within(historyPanel).getByText("second student turn")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: /New Lesson/i }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Toggle history" })).toHaveAttribute("aria-expanded", "false"));
+
+  fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Toggle history" })).toHaveAttribute("aria-expanded", "true"));
+  await waitFor(() => expect(screen.getByText("Previous lessons")).toBeInTheDocument());
+  expect(screen.getByText("Your conversation will appear here")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByText("first student turn"));
+
+  fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
+  await waitFor(() => expect(within(screen.getByTestId("conversation-history-panel")).getByText("second student turn")).toBeInTheDocument());
+  expect(screen.getByLabelText("Student prompt")).toHaveValue("second student turn");
+});
+
+test("restores a saved lesson thread from browser storage", async () => {
+  writePersistedLessonThread({
+    avatarProviderId: "robot-css-2d",
+    conversation: [
+      {
+        id: "1",
+        transcript: "saved transcript",
+        tutorText: "saved tutor reply",
+      },
+    ],
+    gradeBand: "9-10",
+    llmModel: "gemini-2.5-flash",
+    llmProvider: "gemini",
+    preference: "Use slower examples",
+    sessionId: "lesson-saved-1",
+    studentPrompt: "saved prompt",
+    subject: "science",
+    ttsModel: "sonic-2",
+    ttsProvider: "cartesia",
+    transcript: "saved transcript",
+    tutorText: "saved tutor reply",
+    version: 1,
+  });
+
+  render(
+    <TutorSession
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async runTurn() {
+          return {
+            transcript: "",
+            tutorText: "",
+            state: "idle",
+            latency: {
+              speechEndToSttFinalMs: 0,
+              sttFinalToLlmFirstTokenMs: 0,
+              llmFirstTokenToTtsFirstAudioMs: 0,
+            },
+            timestamps: [],
+          };
+        },
+        async interrupt() {
+          return;
+        },
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  // Wait for the persisted thread to be loaded
+  await waitFor(() => expect(screen.getByLabelText("Student prompt")).toHaveValue("saved prompt"));
+  expect(screen.getByLabelText("Subject")).toHaveValue("science");
+  expect(screen.getByLabelText("Grade band")).toHaveValue("9-10");
+  expect(screen.getByLabelText("Learning preference")).toHaveValue("Use slower examples");
+  expect(screen.getByLabelText("Avatar")).toHaveValue("robot-css-2d");
+  expect(screen.getByTestId("avatar-subtitle")).toHaveTextContent("saved tutor reply");
+
+  fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
+  await waitFor(() => expect(screen.getByText("History")).toBeInTheDocument());
+  expect(screen.getByText("saved transcript")).toBeInTheDocument();
+});
+
+test("history toggle updates drawer accessibility state", async () => {
+  render(
+    <TutorSession
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async runTurn() {
+          return {
+            transcript: "",
+            tutorText: "",
+            state: "idle",
+            latency: {
+              speechEndToSttFinalMs: 0,
+              sttFinalToLlmFirstTokenMs: 0,
+              llmFirstTokenToTtsFirstAudioMs: 0,
+            },
+            timestamps: [],
+          };
+        },
+        async interrupt() {
+          return;
+        },
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  const toggle = screen.getByRole("button", { name: "Toggle history" });
+  const drawer = screen.getByTestId("history-drawer");
+
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  expect(drawer).toHaveAttribute("aria-hidden", "true");
+
+  fireEvent.click(toggle);
+
+  await waitFor(() => expect(toggle).toHaveAttribute("aria-expanded", "true"));
+  expect(drawer).toHaveAttribute("aria-hidden", "false");
 });

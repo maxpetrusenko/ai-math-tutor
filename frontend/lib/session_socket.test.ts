@@ -43,6 +43,7 @@ class FakeWebSocket {
 
 afterEach(() => {
   FakeWebSocket.instances = [];
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -55,7 +56,11 @@ test("session transport sends audio bytes before speech end", async () => {
     studentText: "typed fallback",
     subject: "math",
     gradeBand: "6-8",
-    audioChunks: [{ sequence: 1, size: 3, bytesBase64: "YWJj" }]
+    llmProvider: "minimax",
+    llmModel: "minimax-m2.5",
+    ttsProvider: "minimax",
+    ttsModel: "minimax-speech",
+    audioChunks: [{ sequence: 1, size: 3, bytesBase64: "YWJj", mimeType: "audio/webm;codecs=opus" }]
   });
 
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -66,13 +71,18 @@ test("session transport sends audio bytes before speech end", async () => {
     type: "audio.chunk",
     sequence: 1,
     size: 3,
-    bytes_b64: "YWJj"
+    bytes_b64: "YWJj",
+    mime_type: "audio/webm;codecs=opus",
   });
   expect(sentPayloads[1]).toMatchObject({
     type: "speech.end",
     text: "typed fallback",
     subject: "math",
-    grade_band: "6-8"
+    grade_band: "6-8",
+    llm_provider: "minimax",
+    llm_model: "minimax-m2.5",
+    tts_provider: "minimax",
+    tts_model: "minimax-speech",
   });
 
   socket.emit({ type: "transcript.final", text: "heard from audio" });
@@ -88,6 +98,79 @@ test("session transport sends audio bytes before speech end", async () => {
     tutorText: "Nice start.",
     state: "speaking"
   });
+});
+
+test("session transport exposes transcript final before the turn resolves", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+
+  const onTranscriptFinal = vi.fn();
+  const transport = createSessionSocketTransport();
+  const runPromise = transport.runTurn({
+    studentText: "",
+    subject: "math",
+    gradeBand: "6-8",
+    audioChunks: [{ sequence: 1, size: 3, bytesBase64: "YWJj", mimeType: "audio/webm;codecs=opus" }],
+    onTranscriptFinal,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const socket = FakeWebSocket.instances[0];
+
+  socket.emit({ type: "transcript.final", text: "2+2" });
+  expect(onTranscriptFinal).toHaveBeenCalledWith("2+2");
+
+  socket.emit({ type: "state.changed", state: "speaking" });
+  socket.emit({ type: "tutor.text.committed", text: "4" });
+  socket.emit({
+    type: "tts.audio",
+    timestamps: [{ word: "4", start_ms: 0, end_ms: 100 }],
+  });
+
+  await expect(runPromise).resolves.toMatchObject({ transcript: "2+2" });
+});
+
+test("session transport logs speech end summary and close details without chunk spam", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+  const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+  const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  const transport = createSessionSocketTransport();
+  const runPromise = transport.runTurn({
+    studentText: "typed fallback",
+    subject: "math",
+    gradeBand: "6-8",
+    audioChunks: [{ sequence: 2, size: 1280, bytesBase64: "YWJjZA==", mimeType: "audio/webm" }],
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const socket = FakeWebSocket.instances[0];
+  socket.emitClose();
+
+  await expect(runPromise).rejects.toThrow("WebSocket connection closed");
+  const sendLogs = infoSpy.mock.calls.filter(
+    ([prefix, event]) => prefix === "[session_socket]" && event === "send"
+  );
+  expect(sendLogs).toEqual([
+    [
+      "[session_socket]",
+      "send",
+      expect.objectContaining({
+        gradeBand: "6-8",
+        subject: "math",
+        textLength: 14,
+        type: "speech.end",
+      }),
+    ],
+  ]);
+  expect(warnSpy).toHaveBeenCalledWith(
+    "[session_socket]",
+    "close",
+    expect.objectContaining({
+      code: undefined,
+      reason: "",
+      wasClean: false,
+    })
+  );
 });
 
 test("session transport returns failed when websocket connect errors", async () => {
@@ -117,6 +200,113 @@ test("session transport returns failed when websocket connect errors", async () 
   vi.stubGlobal("WebSocket", ErrorWebSocket as unknown as typeof WebSocket);
 
   await expect(createSessionSocketTransport().connect()).resolves.toBe("failed");
+});
+
+test("session transport logs a single warning when websocket connect fails before open", async () => {
+  class ErrorWebSocket {
+    static OPEN = 1;
+
+    readonly sent: string[] = [];
+    readonly url: string;
+    readyState = 3;
+    onopen: (() => void) | null = null;
+    onmessage: ((event: MessageEvent<string>) => void) | null = null;
+    onerror: (() => void) | null = null;
+    onclose: ((event?: CloseEvent) => void) | null = null;
+
+    constructor(url: string) {
+      this.url = url;
+      queueMicrotask(() => {
+        this.onerror?.();
+        this.onclose?.({ code: 1006, reason: "", wasClean: false } as CloseEvent);
+      });
+    }
+
+    send(payload: string) {
+      this.sent.push(payload);
+    }
+  }
+
+  vi.stubGlobal("WebSocket", ErrorWebSocket as unknown as typeof WebSocket);
+  const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  await expect(createSessionSocketTransport().connect()).resolves.toBe("failed");
+
+  expect(warnSpy.mock.calls).toEqual([
+    [
+      "[session_socket]",
+      "connect.failed",
+      expect.objectContaining({
+        readyState: 3,
+      }),
+    ],
+  ]);
+  expect(errorSpy).not.toHaveBeenCalled();
+});
+
+test("session transport rejects runTurn when websocket connect fails before open", async () => {
+  class ErrorWebSocket {
+    static OPEN = 1;
+
+    readonly sent: string[] = [];
+    readonly url: string;
+    readyState = 3;
+    onopen: (() => void) | null = null;
+    onmessage: ((event: MessageEvent<string>) => void) | null = null;
+    onerror: (() => void) | null = null;
+    onclose: (() => void) | null = null;
+
+    constructor(url: string) {
+      this.url = url;
+      queueMicrotask(() => {
+        this.onerror?.();
+      });
+    }
+
+    send(payload: string) {
+      this.sent.push(payload);
+    }
+  }
+
+  vi.stubGlobal("WebSocket", ErrorWebSocket as unknown as typeof WebSocket);
+
+  const transport = createSessionSocketTransport();
+
+  await expect(
+    transport.runTurn({
+      studentText: "1+1",
+      subject: "math",
+      gradeBand: "6-8",
+    })
+  ).rejects.toThrow("WebSocket connection failed");
+});
+
+test("session transport times out a hung turn", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+
+  const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const transport = createSessionSocketTransport();
+  const runPromise = transport.runTurn({
+    studentText: "",
+    subject: "math",
+    gradeBand: "6-8",
+    audioChunks: [{ sequence: 1, size: 3, bytesBase64: "YWJj", mimeType: "audio/webm;codecs=opus" }],
+  });
+  runPromise.catch(() => {});
+
+  await Promise.resolve();
+  await vi.advanceTimersByTimeAsync(8_000);
+
+  await expect(runPromise).rejects.toThrow("Tutor turn timed out");
+  expect(warnSpy).toHaveBeenCalledWith(
+    "[session_socket]",
+    "turn.timeout",
+    expect.objectContaining({
+      timeoutMs: 8000,
+    })
+  );
 });
 
 test("session transport sends interrupt on the open socket", async () => {
@@ -284,10 +474,14 @@ test("session transport can switch websocket sessions and restore lesson history
       },
     ],
     gradeBand: "6-8",
+    llmModel: "gemini-2.5-flash",
+    llmProvider: "gemini",
     preference: "slow down",
     sessionId: "lesson-42",
     studentPrompt: "saved question",
     subject: "math",
+    ttsModel: "sonic-2",
+    ttsProvider: "cartesia",
     transcript: "saved question",
     tutorText: "saved answer",
     version: 1,

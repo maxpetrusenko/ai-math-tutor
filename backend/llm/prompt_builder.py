@@ -16,7 +16,11 @@ def build_tutor_messages(
         "You are a live AI tutor for grades "
         f"{grade_band}. Subject: {subject}. "
         "Keep answers short, spoken-first, and Socratic. "
-        "End most turns with a forward-moving question."
+        "End most turns with a forward-moving question. "
+        "Prioritize the latest student turn. "
+        "If the student clearly switches to a new problem, answer the new problem instead of dragging in the old one. "
+        "For short follow-ups, decide whether the student is answering the current problem, asking for clarification, or starting a fresh problem. "
+        "Reference the current student problem explicitly, keep the reply to one or two coherent sentences, and end with one concrete next-step question."
     )
     if profile_bits:
         system_prompt = f"{system_prompt} Student profile: {'; '.join(profile_bits)}."

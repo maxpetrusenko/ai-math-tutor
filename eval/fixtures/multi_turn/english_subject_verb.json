@@ -1,0 +1,59 @@
+{
+  "id": "english_subject_verb_v1",
+  "subject": "english",
+  "concept": "subject-verb agreement",
+  "grade_band": "11-12",
+  "description": "Multi-turn lesson on subject-verb agreement with examples",
+  "demo": {
+    "locked": true,
+    "transport_mode": "fixture",
+    "avatar_preset": "human-css-2d"
+  },
+  "turns": [
+    {
+      "turn_number": 1,
+      "turn_goal": "diagnose",
+      "student_utterance": "What is subject-verb agreement?",
+      "student_outcome": "unsure",
+      "tutor_response": "Can you give me an example of a sentence with a subject and a verb?",
+      "rubric_hooks": ["checks-prior-knowledge", "asks-for-example", "grade-fit"]
+    },
+    {
+      "turn_number": 2,
+      "turn_goal": "guide",
+      "student_utterance": "The dog runs to the park?",
+      "student_outcome": "partial",
+      "tutor_response": "Good example. What happens to the verb if we change 'dog' to 'dogs'?",
+      "rubric_hooks": ["encouragement", "confirms-direction", "introduces-singular-plural"]
+    },
+    {
+      "turn_number": 3,
+      "turn_goal": "practice",
+      "student_utterance": "It becomes 'The dogs run' - the verb changes",
+      "student_outcome": "correct",
+      "tutor_response": "Exactly. Now, what about this: 'Neither of the students are here' - does that sound right to you?",
+      "rubric_hooks": ["verifies-example", "positive-reinforcement", "adds-complexity"]
+    },
+    {
+      "turn_number": 4,
+      "turn_goal": "correct",
+      "student_utterance": "I think so, neither refers to the students",
+      "student_outcome": "incorrect",
+      "tutor_response": "That's a common mistake. 'Neither' is actually singular. What should the verb be?",
+      "rubric_hooks": ["redirects-gently", "explains-indefinite-pronoun", "asks-correction"]
+    },
+    {
+      "turn_number": 5,
+      "turn_goal": "reflect",
+      "student_utterance": "Oh, so it's 'Neither of the students IS here'",
+      "student_outcome": "correct",
+      "tutor_response": "You got it. Indefinite pronouns like neither, either, and each take singular verbs.",
+      "rubric_hooks": ["confirms-correction", "summarizes-rule", "positive-closure"]
+    }
+  ],
+  "success_indicators": {
+    "socratic_question_ratio": 0.8,
+    "student_speaks_at_least": 3,
+    "concept_progression": ["diagnose", "guide", "practice", "correct", "reflect"]
+  }
+}

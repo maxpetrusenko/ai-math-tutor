@@ -3,9 +3,12 @@ export type PlaybackItem = {
   text: string;
   audioBase64?: string;
   audioMimeType?: string;
+  deferCompletion?: boolean;
   durationMs?: number;
   onStart?: () => void;
   onComplete?: () => void;
+  onPlaybackStart?: () => void;
+  onPlaybackComplete?: () => void;
 };
 
 export type PlaybackState = "idle" | "speaking" | "fading";
@@ -74,6 +77,16 @@ export class PlaybackController {
     this.emit();
   }
 
+  completeActive(itemId?: string) {
+    if (!this.activeItem) {
+      return;
+    }
+    if (itemId && this.activeItem.id !== itemId) {
+      return;
+    }
+    this.finishActiveItem();
+  }
+
   private playNext() {
     const nextItem = this.queue[0];
     if (!nextItem) {
@@ -88,24 +101,39 @@ export class PlaybackController {
     this.emit();
     nextItem.onStart?.();
 
+    if (nextItem.deferCompletion) {
+      return;
+    }
+
     this.activeTimer = setTimeout(() => {
-      this.queue.shift();
-      nextItem.onComplete?.();
       this.activeTimer = null;
-      if (this.queue.length > 0) {
-        this.activeItem = null;
-        this.state = "idle";
-        this.emit();
-        this.transitionTimer = setTimeout(() => {
-          this.transitionTimer = null;
-          this.playNext();
-        }, 0);
-        return;
-      }
+      this.finishActiveItem();
+    }, nextItem.durationMs);
+  }
+
+  private finishActiveItem() {
+    const finishedItem = this.activeItem;
+    if (!finishedItem) {
+      return;
+    }
+
+    this.queue.shift();
+    finishedItem.onComplete?.();
+
+    if (this.queue.length > 0) {
       this.activeItem = null;
       this.state = "idle";
       this.emit();
-    }, nextItem.durationMs);
+      this.transitionTimer = setTimeout(() => {
+        this.transitionTimer = null;
+        this.playNext();
+      }, 0);
+      return;
+    }
+
+    this.activeItem = null;
+    this.state = "idle";
+    this.emit();
   }
 
   private emit() {

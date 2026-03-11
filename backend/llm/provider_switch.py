@@ -18,6 +18,7 @@ class ProviderSwitch:
         tracker: LatencyTracker,
         first_token_ts_ms: float,
         use_fallback: bool = False,
+        options: dict[str, str] | None = None,
     ) -> dict[str, str]:
         provider = self.fallback if use_fallback else self.primary
         return provider.stream_response(
@@ -25,4 +26,5 @@ class ProviderSwitch:
             token_stream=token_stream,
             tracker=tracker,
             first_token_ts_ms=first_token_ts_ms,
+            options=options,
         )
