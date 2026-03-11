@@ -5,7 +5,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   devIndicators: false,
   distDir: process.env.NEXT_DIST_DIR || ".next",
-  outputFileTracingRoot: path.join(__dirname, ".."),
+  output: "standalone",
+  outputFileTracingRoot: path.resolve(__dirname),
   experimental: {
     devtoolSegmentExplorer: false,
   },

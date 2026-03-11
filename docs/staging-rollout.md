@@ -19,7 +19,7 @@ Flow:
 3. hosted smoke passes
 4. GitHub Actions deploys prod with the same commit SHA
 
-Frontend deploys from the checked-out repo source via `firebase deploy --only apphosting:ai-math-tutor`, scoped to `frontend/` by `firebase.json`.
+Frontend deploys from the checked-out repo source via `firebase deploy --only apphosting:ai-math-tutor`, run from `frontend/` with `frontend/firebase.json`.
 App Hosting does not need a connected GitHub backend for this repo flow.
 
 Required GitHub repo variables:

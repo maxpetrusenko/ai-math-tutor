@@ -49,18 +49,63 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
     }
     audioRef.current?.pause();
     audioRef.current = null;
+    const activeItem = snapshot.activeItem;
     logAudioPlayerInfo("playback.begin", {
-      hasAudioBase64: Boolean(snapshot.activeItem.audioBase64),
-      itemId: snapshot.activeItem.id,
+      hasAudioBase64: Boolean(activeItem.audioBase64),
+      itemId: activeItem.id,
       queueLength: snapshot.queueLength,
-      text: snapshot.activeItem.text,
-      textLength: snapshot.activeItem.text.length,
+      text: activeItem.text,
+      textLength: activeItem.text.length,
     });
-    if (snapshot.activeItem.audioBase64 && typeof Audio !== "undefined") {
+
+    const startSpeechFallback = () => {
+      if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+        return false;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(activeItem.text);
+      utterance.volume = volume;
+      utterance.onstart = () => {
+        logAudioPlayerInfo("playback.started", {
+          itemId: activeItem.id,
+          mode: "speech-synthesis-fallback",
+          text: activeItem.text,
+        });
+        activeItem.onPlaybackStart?.();
+      };
+      utterance.onend = () => {
+        logAudioPlayerInfo("playback.complete", {
+          itemId: activeItem.id,
+          mode: "speech-synthesis-fallback",
+          text: activeItem.text,
+        });
+        activeItem.onPlaybackComplete?.();
+        controller.completeActive(activeItem.id);
+      };
+      utterance.onerror = () => {
+        logAudioPlayerInfo("playback.error", {
+          itemId: activeItem.id,
+          mode: "speech-synthesis-fallback",
+          text: activeItem.text,
+        });
+        activeItem.onPlaybackComplete?.();
+        controller.completeActive(activeItem.id);
+      };
+      utteranceRef.current = utterance;
+      logAudioPlayerInfo("playback.fallback", {
+        itemId: activeItem.id,
+        mode: "speech-synthesis",
+        reason: "provider-audio-unavailable",
+      });
+      window.speechSynthesis.speak(utterance);
+      return true;
+    };
+
+    if (activeItem.audioBase64 && typeof Audio !== "undefined") {
       let finished = false;
       let started = false;
       const audio = new Audio(
-        `data:${snapshot.activeItem.audioMimeType ?? "audio/wav"};base64,${snapshot.activeItem.audioBase64}`
+        `data:${activeItem.audioMimeType ?? "audio/wav"};base64,${activeItem.audioBase64}`
       );
       const finishPlayback = () => {
         if (finished) {
@@ -68,12 +113,12 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
         }
         finished = true;
         logAudioPlayerInfo("playback.complete", {
-          itemId: snapshot.activeItem?.id,
+          itemId: activeItem.id,
           mode: "provider-audio",
-          text: snapshot.activeItem?.text ?? "",
+          text: activeItem.text,
         });
-        snapshot.activeItem?.onPlaybackComplete?.();
-        controller.completeActive(snapshot.activeItem?.id);
+        activeItem.onPlaybackComplete?.();
+        controller.completeActive(activeItem.id);
       };
       const markPlaybackStarted = () => {
         if (started) {
@@ -81,25 +126,29 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
         }
         started = true;
         logAudioPlayerInfo("playback.started", {
-          itemId: snapshot.activeItem?.id,
+          itemId: activeItem.id,
           mode: "provider-audio",
-          text: snapshot.activeItem?.text ?? "",
+          text: activeItem.text,
         });
-        snapshot.activeItem?.onPlaybackStart?.();
+        activeItem.onPlaybackStart?.();
       };
       audio.volume = volume;
       audio.onended = finishPlayback;
       audio.onerror = () => {
         logAudioPlayerInfo("playback.error", {
-          itemId: snapshot.activeItem?.id,
+          itemId: activeItem.id,
           mode: "provider-audio",
-          text: snapshot.activeItem?.text ?? "",
+          text: activeItem.text,
         });
+        audioRef.current = null;
+        if (startSpeechFallback()) {
+          return;
+        }
         finishPlayback();
       };
       audio.onplaying = markPlaybackStarted;
       audioRef.current = audio;
-      spokenItemIdRef.current = snapshot.activeItem.id;
+      spokenItemIdRef.current = activeItem.id;
       void audio.play()
         .then(() => {
           markPlaybackStarted();
@@ -107,10 +156,13 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
         .catch(() => {
           audioRef.current = null;
           logAudioPlayerInfo("playback.play_rejected", {
-            itemId: snapshot.activeItem?.id,
+            itemId: activeItem.id,
             mode: "provider-audio",
-            text: snapshot.activeItem?.text ?? "",
+            text: activeItem.text,
           });
+          if (startSpeechFallback()) {
+            return;
+          }
           finishPlayback();
         });
 
@@ -124,40 +176,40 @@ export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps)
     }
 
     if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-      controller.completeActive(snapshot.activeItem.id);
+      controller.completeActive(activeItem.id);
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(snapshot.activeItem.text);
+    const utterance = new SpeechSynthesisUtterance(activeItem.text);
     utterance.volume = volume;
     utterance.onstart = () => {
       logAudioPlayerInfo("playback.started", {
-        itemId: snapshot.activeItem?.id,
+        itemId: activeItem.id,
         mode: "speech-synthesis",
-        text: snapshot.activeItem?.text ?? "",
+        text: activeItem.text,
       });
-      snapshot.activeItem?.onPlaybackStart?.();
+      activeItem.onPlaybackStart?.();
     };
     utterance.onend = () => {
       logAudioPlayerInfo("playback.complete", {
-        itemId: snapshot.activeItem?.id,
+        itemId: activeItem.id,
         mode: "speech-synthesis",
-        text: snapshot.activeItem?.text ?? "",
+        text: activeItem.text,
       });
-      snapshot.activeItem?.onPlaybackComplete?.();
-      controller.completeActive(snapshot.activeItem?.id);
+      activeItem.onPlaybackComplete?.();
+      controller.completeActive(activeItem.id);
     };
     utterance.onerror = () => {
       logAudioPlayerInfo("playback.error", {
-        itemId: snapshot.activeItem?.id,
+        itemId: activeItem.id,
         mode: "speech-synthesis",
-        text: snapshot.activeItem?.text ?? "",
+        text: activeItem.text,
       });
-      snapshot.activeItem?.onPlaybackComplete?.();
-      controller.completeActive(snapshot.activeItem?.id);
+      activeItem.onPlaybackComplete?.();
+      controller.completeActive(activeItem.id);
     };
     utteranceRef.current = utterance;
-    spokenItemIdRef.current = snapshot.activeItem.id;
+    spokenItemIdRef.current = activeItem.id;
     window.speechSynthesis.speak(utterance);
 
     return () => {

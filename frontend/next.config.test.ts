@@ -7,6 +7,7 @@ test("uses default build dist dir when NEXT_DIST_DIR is unset", () => {
   const config = nextConfig;
 
   expect(config.distDir).toBe(".next");
+  expect(config.output).toBe("standalone");
 
   if (original !== undefined) {
     process.env.NEXT_DIST_DIR = original;
@@ -21,6 +22,7 @@ test("uses custom dist dir when NEXT_DIST_DIR is set", async () => {
   const { default: config } = await import("./next.config");
 
   expect(config.distDir).toBe(".next-dev");
+  expect(config.output).toBe("standalone");
 
   if (original === undefined) {
     delete process.env.NEXT_DIST_DIR;

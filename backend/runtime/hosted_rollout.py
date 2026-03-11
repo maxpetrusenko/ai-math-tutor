@@ -448,6 +448,7 @@ def rollout_frontend(
     git_commit: str | None,
 ) -> None:
     _ = git_branch, git_commit
+    frontend_root = repo_root / "frontend"
     args = [
         "firebase",
         "deploy",
@@ -457,7 +458,7 @@ def rollout_frontend(
         project,
         "--force",
     ]
-    run_command(args, cwd=repo_root)
+    run_command(args, cwd=frontend_root)
 
 
 def smoke_frontend(

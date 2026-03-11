@@ -220,12 +220,30 @@ def test_rollout_frontend_deploys_local_apphosting_source(monkeypatch: pytest.Mo
         "demo-project",
         "--force",
     ]
-    assert captured["cwd"] == tmp_path
+    assert captured["cwd"] == tmp_path / "frontend"
     assert captured["input_text"] is None
 
 
-def test_firebase_apphosting_root_dir_targets_frontend() -> None:
-    firebase_config = Path(__file__).resolve().parents[2] / "firebase.json"
+def test_frontend_firebase_config_targets_local_app_root() -> None:
+    firebase_config = Path(__file__).resolve().parents[2] / "frontend" / "firebase.json"
     payload = json.loads(firebase_config.read_text(encoding="utf-8"))
 
-    assert payload["apphosting"] == [{"backendId": "ai-math-tutor", "rootDir": "frontend"}]
+    assert payload["apphosting"] == [
+        {
+            "backendId": "ai-math-tutor",
+            "rootDir": ".",
+            "ignore": [
+                ".git",
+                ".next",
+                ".next-dev",
+                "coverage",
+                "firebase-debug.log",
+                "firebase-debug.*.log",
+                "node_modules",
+                "playwright-report",
+                "test-results",
+                "tsconfig.tsbuildinfo",
+                "tsconfig.typecheck.tsbuildinfo",
+            ],
+        }
+    ]

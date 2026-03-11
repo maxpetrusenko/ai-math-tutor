@@ -40,7 +40,7 @@ High-signal results:
 
 - provider swaps now happen behind stable registry-backed session contracts
 - browser mic sends `audio.chunk.bytes_b64`
-- default tutor is `2D CSS`; `3D Three.js` loads on demand
+- default tutor is `2D CSS`; repo-original `2D SVG` tutors and lazy `3D Three.js` presets are available on demand
 - eval, docs, smoke tests, and benchmark reports all live in the repo
 
 Benchmark numbers and live-vendor evidence are tracked in [`docs/planning/benchmark-report-v1.md`](docs/planning/benchmark-report-v1.md). The live stack is wired end to end and still misses the latency target explicitly.
@@ -77,7 +77,7 @@ Browser mic / text
   -> LLM provider switch
   -> TTS provider context
   -> browser audio player
-  -> 2D CSS or 3D Three.js avatar
+  -> 2D CSS, 2D SVG, or 3D Three.js avatar
 ```
 
 ### Current Runtime
@@ -89,7 +89,7 @@ Browser mic / text
 | STT | `Deepgram` | default provider |
 | LLM | `Gemini`, `MiniMax`, `OpenAI`, or `Anthropic` | runtime switch, LangChain-backed for Gemini/OpenAI/Anthropic |
 | TTS | `Cartesia` or `MiniMax` | streamed speech path |
-| Avatar | `2D CSS` or lazy-loaded `Three.js` | default plus richer branch |
+| Avatar | `2D CSS`, `2D SVG`, or lazy-loaded `Three.js` | default baseline plus character-rich and richer branches |
 | Tests | `pytest`, `vitest`, `playwright` | backend, frontend, browser smoke |
 
 ---
@@ -137,7 +137,7 @@ pnpm dev --hostname 127.0.0.1 --port 3000
 ### Deploy
 
 Hosted deploys now auto-roll from `main`: GitHub Actions deploys staging first, then prod after staging smoke passes.
-App Hosting deploys from the checked-out repo source via `firebase deploy --only apphosting:ai-math-tutor`, using the `frontend/` app root declared in [firebase.json](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/firebase.json), so no connected App Hosting GitHub backend is required.
+App Hosting deploys from the checked-out repo source via `firebase deploy --only apphosting:ai-math-tutor`, run from [frontend/](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend) with its own [firebase.json](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/firebase.json), so no connected App Hosting GitHub backend is required.
 
 Repo setup for Actions:
 

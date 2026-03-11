@@ -1,0 +1,21 @@
+{
+  "apphosting": [
+    {
+      "backendId": "ai-math-tutor",
+      "rootDir": ".",
+      "ignore": [
+        ".git",
+        ".next",
+        ".next-dev",
+        "coverage",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "node_modules",
+        "playwright-report",
+        "test-results",
+        "tsconfig.tsbuildinfo",
+        "tsconfig.typecheck.tsbuildinfo"
+      ]
+    }
+  ]
+}
