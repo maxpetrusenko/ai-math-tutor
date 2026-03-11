@@ -1,0 +1,16 @@
+runConfig:
+  cpu: 1
+  memoryMiB: 512
+  concurrency: 20
+
+env:
+  - variable: FIREBASE_WEBAPP_CONFIG
+    value: '{"apiKey":"AIzaSyDEImFbxlEJvC-i55Ezxqgz7SzmkxcYtLw","authDomain":"ai-math-tutor-b39b3.firebaseapp.com","projectId":"ai-math-tutor-b39b3","storageBucket":"ai-math-tutor-b39b3.firebasestorage.app","messagingSenderId":"287553407736","appId":"1:287553407736:web:733d838aaebe8e0eac890d","measurementId":"G-DY0X9N76YV"}'
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_SESSION_WS_URL
+    value: wss://ai-math-tutor-session-287553407736.us-east4.run.app/ws/session
+    availability:
+      - BUILD
+      - RUNTIME

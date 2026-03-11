@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import struct
 import time
 from urllib import request
 
+from backend.ai.call_logging import run_logged_ai_call
 from backend.benchmarks.run_latency_benchmark import load_local_env
 from backend.monitoring.latency_tracker import LatencyTracker
 
@@ -16,6 +18,8 @@ DEFAULT_CARTESIA_MODEL = "sonic-2"
 DEFAULT_CARTESIA_VOICE_ID = "694f9389-aac1-45b6-b726-9d9369183238"
 DEFAULT_CARTESIA_LANGUAGE = "en"
 DEFAULT_CARTESIA_SAMPLE_RATE = 22050
+DEFAULT_CARTESIA_LIVE_TIMEOUT_SECONDS = 4.0
+logger = logging.getLogger(__name__)
 
 
 class CartesiaClient:
@@ -43,34 +47,109 @@ class CartesiaClient:
     ) -> dict[str, object]:
         live_api_key = self._resolve_api_key()
         model = (options or {}).get("model") or os.getenv("NERDY_RUNTIME_TTS_MODEL", DEFAULT_CARTESIA_MODEL)
+        request_payload = {
+            "mode": "live" if live_api_key else "stub",
+            "model": model,
+            "text": text,
+            "text_length": len(text),
+            "is_final": is_final,
+            "output_format": {
+                "container": "wav",
+                "encoding": "pcm_s16le",
+                "sample_rate": int(os.getenv("NERDY_RUNTIME_TTS_SAMPLE_RATE", str(DEFAULT_CARTESIA_SAMPLE_RATE))),
+            },
+            "voice_id": self._voice_config.get("voice_id") or os.getenv("NERDY_TTS_VOICE_CARTESIA", DEFAULT_CARTESIA_VOICE_ID),
+        }
         if live_api_key:
             try:
-                audio_bytes, first_audio_delta_ms, audio_duration_ms = self._synthesize_live(
-                    text=text,
-                    api_key=live_api_key,
-                    model=model,
+                return run_logged_ai_call(
+                    logger=logger,
+                    provider=self.provider_name,
+                    operation="tts.send_phrase",
+                    request_payload=request_payload,
+                    call=lambda: self._build_live_event(
+                        text=text,
+                        tracker=tracker,
+                        first_audio_ts_ms=first_audio_ts_ms,
+                        is_final=is_final,
+                        api_key=live_api_key,
+                        model=model,
+                    ),
+                    response_summarizer=_summarize_tts_event,
                 )
-                tracker.mark(
-                    "tts_first_audio",
-                    round(first_audio_ts_ms + first_audio_delta_ms, 1),
-                    {
-                        "provider": self.provider_name,
-                        "mode": "live",
-                        "model": model,
-                    },
-                )
-                return {
-                    "type": "tts.audio",
-                    "provider": self.provider_name,
-                    "model": model,
-                    "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
-                    "audio_mime_type": "audio/wav",
-                    "is_final": is_final,
-                    "timestamps": _build_word_timestamps(text, audio_duration_ms),
-                }
             except Exception:
                 pass
 
+        return run_logged_ai_call(
+            logger=logger,
+            provider=self.provider_name,
+            operation="tts.send_phrase",
+            request_payload={**request_payload, "mode": "stub"},
+            call=lambda: self._build_stub_event(
+                text=text,
+                tracker=tracker,
+                first_audio_ts_ms=first_audio_ts_ms,
+                is_final=is_final,
+                model=model,
+            ),
+            response_summarizer=_summarize_tts_event,
+        )
+
+    def flush(self) -> dict[str, object]:
+        return {"type": "tts.flush", "provider": self.provider_name}
+
+    def cancel(self) -> dict[str, object]:
+        return {"type": "tts.cancel", "provider": self.provider_name}
+
+    def _resolve_api_key(self) -> str:
+        if os.getenv("NERDY_DISABLE_LIVE_TTS", "").strip() == "1":
+            return ""
+        load_local_env()
+        return os.getenv("CARTESIA_API_KEY", "").strip()
+
+    def _build_live_event(
+        self,
+        *,
+        text: str,
+        tracker: LatencyTracker,
+        first_audio_ts_ms: float,
+        is_final: bool,
+        api_key: str,
+        model: str,
+    ) -> dict[str, object]:
+        audio_bytes, first_audio_delta_ms, audio_duration_ms = self._synthesize_live(
+            text=text,
+            api_key=api_key,
+            model=model,
+        )
+        tracker.mark(
+            "tts_first_audio",
+            round(first_audio_ts_ms + first_audio_delta_ms, 1),
+            {
+                "provider": self.provider_name,
+                "mode": "live",
+                "model": model,
+            },
+        )
+        return {
+            "type": "tts.audio",
+            "provider": self.provider_name,
+            "model": model,
+            "audio_b64": base64.b64encode(audio_bytes).decode("ascii"),
+            "audio_mime_type": "audio/wav",
+            "is_final": is_final,
+            "timestamps": _build_word_timestamps(text, audio_duration_ms),
+        }
+
+    def _build_stub_event(
+        self,
+        *,
+        text: str,
+        tracker: LatencyTracker,
+        first_audio_ts_ms: float,
+        is_final: bool,
+        model: str,
+    ) -> dict[str, object]:
         tracker.mark("tts_first_audio", first_audio_ts_ms, {"provider": self.provider_name, "mode": "stub", "model": model})
         words = text.split()
         timestamps = [
@@ -85,18 +164,6 @@ class CartesiaClient:
             "is_final": is_final,
             "timestamps": timestamps,
         }
-
-    def flush(self) -> dict[str, object]:
-        return {"type": "tts.flush", "provider": self.provider_name}
-
-    def cancel(self) -> dict[str, object]:
-        return {"type": "tts.cancel", "provider": self.provider_name}
-
-    def _resolve_api_key(self) -> str:
-        if os.getenv("NERDY_DISABLE_LIVE_TTS", "").strip() == "1":
-            return ""
-        load_local_env()
-        return os.getenv("CARTESIA_API_KEY", "").strip()
 
     def _synthesize_live(self, *, text: str, api_key: str, model: str) -> tuple[bytes, float, float]:
         started_at = time.perf_counter()
@@ -129,7 +196,10 @@ class CartesiaClient:
                 },
                 method="POST",
             ),
-            timeout=120,
+            timeout=_resolve_live_timeout_seconds(
+                "NERDY_LIVE_TTS_TIMEOUT_SECONDS",
+                DEFAULT_CARTESIA_LIVE_TIMEOUT_SECONDS,
+            ),
         )
 
         audio_chunks: list[bytes] = []
@@ -202,3 +272,27 @@ def _measure_wav_duration_ms(audio_bytes: bytes) -> float:
     bytes_per_sample = bits_per_sample / 8
     frame_count = data_size / (num_channels * bytes_per_sample)
     return round((frame_count / sample_rate) * 1000, 1)
+
+
+def _summarize_tts_event(event: dict[str, object]) -> dict[str, object]:
+    timestamps = event.get("timestamps", [])
+    return {
+        "type": str(event.get("type") or ""),
+        "provider": str(event.get("provider") or ""),
+        "model": str(event.get("model") or ""),
+        "is_final": bool(event.get("is_final")),
+        "audio_b64_length": len(str(event.get("audio_b64") or "")),
+        "audio_mime_type": str(event.get("audio_mime_type") or event.get("audio_mime") or ""),
+        "duration_ms": timestamps[-1]["end_ms"] if isinstance(timestamps, list) and timestamps else None,
+        "timestamps": len(timestamps) if isinstance(timestamps, list) else 0,
+    }
+
+
+def _resolve_live_timeout_seconds(env_name: str, default: float) -> float:
+    raw_value = os.getenv(env_name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        return max(0.1, float(raw_value))
+    except ValueError:
+        return default

@@ -726,6 +726,37 @@ h4,
   line-height: 1.5;
 }
 
+.turn-debug {
+  margin-left: 12px;
+}
+
+.turn-debug__summary {
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.turn-debug__summary::-webkit-details-marker {
+  display: none;
+}
+
+.turn-debug__payload {
+  background: rgba(10, 24, 38, 0.92);
+  border: 1px solid rgba(110, 183, 214, 0.22);
+  border-radius: 12px;
+  color: #d8eef8;
+  margin: 10px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* Lessons List */
 .lessons-list {
   display: flex;

@@ -1,16 +1,24 @@
 from __future__ import annotations
 
-import json
+import logging
 import os
 import time
-from urllib import error, parse, request
 
 from backend.benchmarks.run_latency_benchmark import load_local_env
+from backend.ai.call_logging import run_logged_ai_call
+from backend.llm.langchain_bridge import (
+    build_langchain_prompt_value,
+    summarize_langchain_llm_input,
+    summarize_langchain_llm_output,
+)
 from backend.llm.response_policy import shape_tutor_response
 from backend.monitoring.latency_tracker import LatencyTracker
+from langchain_google_genai import ChatGoogleGenerativeAI
 
-GEMINI_STREAM_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_LIVE_TIMEOUT_SECONDS = 10.0
+MIN_GEMINI_LIVE_TIMEOUT_SECONDS = 10.0
+logger = logging.getLogger(__name__)
 
 
 class GeminiFallbackClient:
@@ -24,35 +32,58 @@ class GeminiFallbackClient:
         first_token_ts_ms: float,
         options: dict[str, str] | None = None,
     ) -> dict[str, str]:
+        model = (options or {}).get("model", DEFAULT_GEMINI_MODEL)
+        request_payload = summarize_langchain_llm_input(messages, model=model)
         live_api_key = self._resolve_api_key()
         if live_api_key:
             try:
-                return self._stream_live_response(
-                    messages=messages,
-                    model=(options or {}).get("model", DEFAULT_GEMINI_MODEL),
-                    tracker=tracker,
-                    speech_end_ts_ms=first_token_ts_ms,
-                    api_key=live_api_key,
+                return run_logged_ai_call(
+                    logger=logger,
+                    provider=self.provider_name,
+                    operation="llm.stream_response",
+                    request_payload={**request_payload, "mode": "live"},
+                    call=lambda: self._stream_live_response(
+                        messages=messages,
+                        model=model,
+                        tracker=tracker,
+                        speech_end_ts_ms=first_token_ts_ms,
+                        api_key=live_api_key,
+                    ),
+                    response_summarizer=summarize_langchain_llm_output,
+                    langsmith_project="nerdy-runtime-llm",
+                    langsmith_run_type="llm",
                 )
             except Exception:
                 pass
 
-        if token_stream:
-            tracker.mark(
-                "llm_first_token",
-                first_token_ts_ms,
-                {
-                    "provider": self.provider_name,
-                    "mode": "stub",
-                    "model": (options or {}).get("model", DEFAULT_GEMINI_MODEL),
-                },
-            )
-        return {
-            "provider": self.provider_name,
-            "model": (options or {}).get("model", DEFAULT_GEMINI_MODEL),
-            "text": shape_tutor_response("".join(token_stream)),
-            "input_messages": str(len(messages)),
-        }
+        def _build_stub_response() -> dict[str, str]:
+            if token_stream:
+                tracker.mark(
+                    "llm_first_token",
+                    first_token_ts_ms,
+                    {
+                        "provider": self.provider_name,
+                        "mode": "stub",
+                        "model": model,
+                    },
+                )
+            return {
+                "provider": self.provider_name,
+                "model": model,
+                "text": shape_tutor_response("".join(token_stream)),
+                "input_messages": str(len(messages)),
+            }
+
+        return run_logged_ai_call(
+            logger=logger,
+            provider=self.provider_name,
+            operation="llm.stream_response",
+            request_payload={**request_payload, "mode": "stub"},
+            call=_build_stub_response,
+            response_summarizer=summarize_langchain_llm_output,
+            langsmith_project="nerdy-runtime-llm",
+            langsmith_run_type="llm",
+        )
 
     def _stream_live_response(
         self,
@@ -65,63 +96,27 @@ class GeminiFallbackClient:
     ) -> dict[str, str]:
         started_at = time.perf_counter()
         model = model.strip() or DEFAULT_GEMINI_MODEL
-        body = {
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": "\n\n".join(
-                                f"{message['role'].upper()}: {message['content']}" for message in messages
-                            ),
-                        }
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "temperature": 0.4,
-                "maxOutputTokens": 256,
-            },
-        }
-        stream_url = (
-            f"{GEMINI_STREAM_URL.format(model=model)}"
-            f"?alt=sse&key={parse.quote(api_key)}"
+        prompt_value = build_langchain_prompt_value(messages)
+        llm = ChatGoogleGenerativeAI(
+            model=model,
+            api_key=api_key,
+            temperature=0.4,
+            max_tokens=256,
+            request_timeout=_resolve_live_timeout_seconds(
+                "NERDY_LIVE_LLM_TIMEOUT_SECONDS",
+                DEFAULT_GEMINI_LIVE_TIMEOUT_SECONDS,
+            ),
         )
-        try:
-            response = request.urlopen(
-                request.Request(
-                    stream_url,
-                    data=json.dumps(body).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                ),
-                timeout=120,
-            )
-        except error.HTTPError as http_error:
-            if http_error.code == 404 and model != DEFAULT_GEMINI_MODEL:
-                os.environ["NERDY_RUNTIME_LLM_MODEL"] = DEFAULT_GEMINI_MODEL
-                return self._stream_live_response(
-                    messages=messages,
-                    model=DEFAULT_GEMINI_MODEL,
-                    tracker=tracker,
-                    speech_end_ts_ms=speech_end_ts_ms,
-                    api_key=api_key,
-                )
-            raise
 
         text_parts: list[str] = []
         first_token_delta_ms: float | None = None
-        with response:
-            for raw_line in response:
-                line = raw_line.decode("utf-8").strip()
-                if not line.startswith("data:"):
-                    continue
-                payload = json.loads(line[5:].strip())
-                text = _extract_gemini_text(payload)
-                if not text:
-                    continue
-                if first_token_delta_ms is None:
-                    first_token_delta_ms = round((time.perf_counter() - started_at) * 1000, 1)
-                text_parts.append(text)
+        for chunk in llm.stream(prompt_value.messages):
+            text = _extract_langchain_chunk_text(chunk)
+            if not text:
+                continue
+            if first_token_delta_ms is None:
+                first_token_delta_ms = round((time.perf_counter() - started_at) * 1000, 1)
+            text_parts.append(text)
 
         if first_token_delta_ms is None:
             raise RuntimeError("Gemini did not emit a text chunk")
@@ -146,18 +141,28 @@ class GeminiFallbackClient:
         return (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_AI_API_KEY") or "").strip()
 
 
-def _extract_gemini_text(payload: dict[str, object]) -> str:
-    texts: list[str] = []
-    for candidate in payload.get("candidates", []):
-        if not isinstance(candidate, dict):
-            continue
-        content = candidate.get("content", {})
-        if not isinstance(content, dict):
-            continue
-        for part in content.get("parts", []):
-            if not isinstance(part, dict):
-                continue
-            text = part.get("text")
-            if isinstance(text, str):
-                texts.append(text)
-    return "".join(texts)
+def _extract_langchain_chunk_text(chunk: object) -> str:
+    content = getattr(chunk, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        texts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                texts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    texts.append(text)
+        return "".join(texts)
+    return str(content or "")
+
+
+def _resolve_live_timeout_seconds(env_name: str, default: float) -> float:
+    raw_value = os.getenv(env_name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        return max(MIN_GEMINI_LIVE_TIMEOUT_SECONDS, float(raw_value))
+    except ValueError:
+        return default

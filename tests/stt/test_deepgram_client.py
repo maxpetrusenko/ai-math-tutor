@@ -131,7 +131,7 @@ def test_deepgram_client_logs_connect_and_audio_payload_summary(caplog) -> None:
                     {
                         "type": "Results",
                         "is_final": True,
-                        "channel": {"alternatives": [{"transcript": "logged final"}]},
+                        "channel": {"alternatives": [{"transcript": "logged final", "confidence": 0.98}]},
                     }
                 ]
             ],
@@ -149,3 +149,28 @@ def test_deepgram_client_logs_connect_and_audio_payload_summary(caplog) -> None:
     assert '"chunk_bytes": 9' in caplog.text
     assert '"payload_type": "Metadata"' in caplog.text
     assert '"control_type": "Finalize"' in caplog.text
+    assert '"confidence": 0.98' in caplog.text
+
+
+def test_deepgram_client_loads_local_env_before_requiring_api_key(monkeypatch) -> None:
+    async def run() -> list[tuple[str, str]]:
+        tracker = LatencyTracker()
+        connection = _FakeConnection()
+        transport = _FakeTransport(connection)
+        monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)
+
+        def _load_env() -> list[str]:
+            monkeypatch.setenv("DEEPGRAM_API_KEY", "loaded-from-env")
+            return [".env"]
+
+        monkeypatch.setattr("backend.stt.deepgram_client.load_local_env", _load_env)
+
+        client = DeepgramStreamingClient(api_key=None, transport=transport)
+        session = await client.open_session(tracker)
+        await session.close()
+        return transport.calls
+
+    calls = asyncio.run(run())
+
+    assert calls
+    assert calls[0][0] == "loaded-from-env"

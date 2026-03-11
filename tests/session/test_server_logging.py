@@ -8,9 +8,11 @@ from backend.turn_taking.controller import SessionController
 class _FakeSTTSession:
     def __init__(self) -> None:
         self.audio_payloads: list[bytes] = []
+        self.audio_timestamps: list[float | None] = []
 
     async def push_audio(self, chunk: bytes, *, ts_ms: float | None = None) -> list[dict[str, str]]:
         self.audio_payloads.append(chunk)
+        self.audio_timestamps.append(ts_ms)
         return []
 
     async def finalize(self, *, ts_ms: float) -> list[dict[str, str]]:
@@ -40,6 +42,7 @@ def test_handle_message_logs_audio_chunk_summary(caplog) -> None:
                 "size": 1024,
                 "bytes_b64": "YWJjZA==",
                 "mime_type": "audio/webm;codecs=opus",
+                "ts_ms": 1234,
             },
             provider,
             None,
@@ -51,6 +54,7 @@ def test_handle_message_logs_audio_chunk_summary(caplog) -> None:
 
     assert stt_session is provider.session
     assert provider.session.audio_payloads == [b"abcd"]
+    assert provider.session.audio_timestamps == [1234.0]
     assert events[0]["type"] == "state.changed"
     assert "session websocket audio chunk" in caplog.text
     assert "session websocket opening stt session" in caplog.text
@@ -58,6 +62,7 @@ def test_handle_message_logs_audio_chunk_summary(caplog) -> None:
     assert '"bytes_b64_length": 8' in caplog.text
     assert '"decoded_bytes": 4' in caplog.text
     assert '"mime_type": "audio/webm;codecs=opus"' in caplog.text
+    assert '"ts_ms": 1234.0' in caplog.text
 
 
 def test_handle_message_logs_missing_transcript_once(caplog) -> None:

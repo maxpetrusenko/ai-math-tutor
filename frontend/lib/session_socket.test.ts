@@ -73,6 +73,7 @@ test("session transport sends audio bytes before speech end", async () => {
     size: 3,
     bytes_b64: "YWJj",
     mime_type: "audio/webm;codecs=opus",
+    ts_ms: expect.any(Number),
   });
   expect(sentPayloads[1]).toMatchObject({
     type: "speech.end",
@@ -297,16 +298,59 @@ test("session transport times out a hung turn", async () => {
   runPromise.catch(() => {});
 
   await Promise.resolve();
-  await vi.advanceTimersByTimeAsync(8_000);
+  await vi.advanceTimersByTimeAsync(15_000);
 
-  await expect(runPromise).rejects.toThrow("Tutor turn timed out");
+  await expect(runPromise).rejects.toThrow("Tutor turn timed out during speech transcription");
   expect(warnSpy).toHaveBeenCalledWith(
     "[session_socket]",
     "turn.timeout",
     expect.objectContaining({
-      timeoutMs: 8000,
+      phase: "stt",
+      timeoutMs: 15000,
     })
   );
+});
+
+test("session transport reports llm timeout after transcript final arrives", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+
+  const transport = createSessionSocketTransport();
+  const runPromise = transport.runTurn({
+    studentText: "",
+    subject: "math",
+    gradeBand: "6-8",
+    audioChunks: [{ sequence: 1, size: 3, bytesBase64: "YWJj", mimeType: "audio/webm;codecs=opus" }],
+  });
+  runPromise.catch(() => {});
+
+  await vi.advanceTimersByTimeAsync(0);
+  FakeWebSocket.instances[0]?.emit({ type: "transcript.final", text: "2+2" });
+  await vi.advanceTimersByTimeAsync(15_000);
+
+  await expect(runPromise).rejects.toThrow("Tutor turn timed out during tutor response generation");
+});
+
+test("session transport reports tts timeout after tutor text starts streaming", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+
+  const transport = createSessionSocketTransport();
+  const runPromise = transport.runTurn({
+    studentText: "",
+    subject: "math",
+    gradeBand: "6-8",
+    audioChunks: [{ sequence: 1, size: 3, bytesBase64: "YWJj", mimeType: "audio/webm;codecs=opus" }],
+  });
+  runPromise.catch(() => {});
+
+  await vi.advanceTimersByTimeAsync(0);
+  const socket = FakeWebSocket.instances[0];
+  socket?.emit({ type: "transcript.final", text: "2+2" });
+  socket?.emit({ type: "tutor.text.committed", text: "Start here." });
+  await vi.advanceTimersByTimeAsync(15_000);
+
+  await expect(runPromise).rejects.toThrow("Tutor turn timed out during speech synthesis");
 });
 
 test("session transport sends interrupt on the open socket", async () => {

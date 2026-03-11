@@ -1,6 +1,8 @@
 from backend.providers import create_provider
+from backend.providers.llm.anthropic import AnthropicProvider
 from backend.providers.llm.gemini import GeminiProvider
 from backend.providers.llm.minimax import MiniMaxProvider
+from backend.providers.llm.openai import OpenAIProvider
 from backend.providers.stt.deepgram import DeepgramProvider
 from backend.providers.tts.cartesia import CartesiaProvider
 from backend.providers.tts.minimax import MiniMaxTTSProvider
@@ -42,3 +44,19 @@ def test_create_provider_resolves_gemini_llm(monkeypatch) -> None:
     provider = create_provider("llm")
 
     assert isinstance(provider, GeminiProvider)
+
+
+def test_create_provider_resolves_openai_llm(monkeypatch) -> None:
+    monkeypatch.setenv("NERDY_LLM_PROVIDER", "openai")
+
+    provider = create_provider("llm")
+
+    assert isinstance(provider, OpenAIProvider)
+
+
+def test_create_provider_resolves_anthropic_llm(monkeypatch) -> None:
+    monkeypatch.setenv("NERDY_LLM_PROVIDER", "anthropic")
+
+    provider = create_provider("llm")
+
+    assert isinstance(provider, AnthropicProvider)

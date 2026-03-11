@@ -8,13 +8,19 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.135,<1.0",
+  "firebase-admin>=7.1,<8.0",
+  "langchain-core>=1.2,<2.0",
+  "langchain-anthropic>=1.0,<2.0",
+  "langchain-google-genai>=4.2,<5.0",
+  "langchain-openai>=1.0,<2.0",
   "uvicorn>=0.35,<1.0",
   "websockets>=15,<16"
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.0"
+  "pytest>=8.0",
+  "pytest-asyncio>=1.0,<2.0"
 ]
 
 [tool.pytest.ini_options]

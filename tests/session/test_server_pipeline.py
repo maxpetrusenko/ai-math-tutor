@@ -1,4 +1,6 @@
 import base64
+import json
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 import pytest
@@ -36,6 +38,7 @@ def disable_live_runtime(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("NERDY_DISABLE_LIVE_LLM", "1")
     monkeypatch.setenv("NERDY_DISABLE_LIVE_TTS", "1")
     monkeypatch.setenv("NERDY_SESSION_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("NERDY_TURN_TRACE_DIR", str(tmp_path / "turn-traces"))
 
 
 def test_session_server_streams_transcript_tutor_text_and_tts_audio(monkeypatch) -> None:
@@ -87,6 +90,16 @@ def test_session_server_streams_transcript_tutor_text_and_tts_audio(monkeypatch)
     assert tts_flush["type"] == "tts.flush"
     assert fake_session.audio_payloads == [b"real-audio"]
     assert fake_session.closed is True
+
+    trace_files = sorted((Path(server.os.getenv("NERDY_TURN_TRACE_DIR", ""))).glob("*.json"))
+    assert len(trace_files) == 1
+    trace_payload = json.loads(trace_files[0].read_text())
+    assert trace_payload["stt"]["source"] == "stt"
+    assert trace_payload["stt"]["transcript_text"] == "heard from audio"
+    assert trace_payload["llm"]["messages"][-1]["content"] == "heard from audio"
+    assert trace_payload["llm"]["result"]["text"] == committed_text["text"]
+    assert trace_payload["tts"]["chunks"][0]["provider"] == "cartesia"
+    assert trace_payload["latency"]["events"][0]["name"] == "speech_end"
 
 
 def test_session_server_rejects_invalid_runtime_model_and_recovers_idle() -> None:

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 import os
 import struct
 import time
 from typing import Any
 from urllib import error, parse, request
 
+from backend.ai.call_logging import run_logged_ai_call
 from backend.benchmarks.run_latency_benchmark import (
     BenchmarkOutcome,
     BenchmarkPrompt,
@@ -15,6 +17,7 @@ from backend.benchmarks.run_latency_benchmark import (
     load_canned_prompts,
     load_local_env,
 )
+from backend.llm.langchain_bridge import summarize_langchain_llm_input, summarize_langchain_llm_output
 from backend.llm.prompt_builder import build_tutor_messages
 from backend.monitoring.latency_tracker import LatencyTracker
 
@@ -28,6 +31,7 @@ DEFAULT_CARTESIA_VOICE_ID = "694f9389-aac1-45b6-b726-9d9369183238"
 DEFAULT_CARTESIA_LANGUAGE = "en"
 DEFAULT_WAV_SAMPLE_RATE = 22050
 CARTESIA_VERSION = "2025-04-16"
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,14 +192,26 @@ def transcribe_with_deepgram(audio_bytes: bytes, *, config: LiveProviderStackCon
         }
     )
     started_at = time.perf_counter()
-    payload = _post_json(
-        f"{DEEPGRAM_LISTEN_URL}?{query}",
-        audio_bytes,
-        headers={
-            "Authorization": f"Token {config.deepgram_api_key}",
-            "Content-Type": "audio/wav",
+    payload = run_logged_ai_call(
+        logger=logger,
+        provider="deepgram",
+        operation="benchmark.transcribe",
+        request_payload={"model": config.deepgram_model, "audio_bytes": audio_bytes},
+        call=lambda: _post_json(
+            f"{DEEPGRAM_LISTEN_URL}?{query}",
+            audio_bytes,
+            headers={
+                "Authorization": f"Token {config.deepgram_api_key}",
+                "Content-Type": "audio/wav",
+            },
+            timeout_s=120,
+        ),
+        response_summarizer=lambda result: {
+            "has_results": bool(result.get("results")),
+            "transcript_preview": str(
+                result.get("results", {}).get("channels", [{}])[0].get("alternatives", [{}])[0].get("transcript", "")
+            )[:120],
         },
-        timeout_s=120,
     )
     elapsed_ms = _elapsed_ms(started_at)
     transcript = (
@@ -235,15 +251,23 @@ def generate_tutor_text(
         f"?alt=sse&key={parse.quote(config.gemini_api_key)}"
     )
     try:
-        response = request.urlopen(
-            request.Request(
-                stream_url,
-                data=json.dumps(body).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST",
+        result = run_logged_ai_call(
+            logger=logger,
+            provider="gemini",
+            operation="benchmark.generate",
+            request_payload={**summarize_langchain_llm_input(messages, model=config.gemini_model), "mode": "live"},
+            call=lambda: _generate_tutor_text_live(
+                stream_url=stream_url,
+                body=body,
+                started_at=started_at,
+                messages=messages,
+                config=config,
             ),
-            timeout=120,
+            response_summarizer=summarize_langchain_llm_output,
+            langsmith_project="nerdy-live-benchmark",
+            langsmith_run_type="llm",
         )
+        return str(result["text"]), float(result["first_token_ms"])
     except error.HTTPError as http_error:
         error_body = http_error.read().decode("utf-8", errors="ignore")
         if http_error.code == 404 and config.gemini_model != "gemini-2.5-flash":
@@ -260,30 +284,6 @@ def generate_tutor_text(
             )
             return generate_tutor_text(messages, config=fallback_config)
         raise RuntimeError(f"Gemini request failed: {http_error.code} {error_body}") from http_error
-
-    text_parts: list[str] = []
-    first_token_ms: float | None = None
-    with response:
-        for raw_line in response:
-            line = raw_line.decode("utf-8").strip()
-            if not line.startswith("data:"):
-                continue
-            payload = json.loads(line[5:].strip())
-            text = extract_gemini_text(payload)
-            if not text:
-                continue
-            if first_token_ms is None:
-                first_token_ms = _elapsed_ms(started_at)
-            text_parts.append(text)
-
-    if first_token_ms is None:
-        raise RuntimeError("Gemini did not emit a text chunk")
-
-    tutor_text = "".join(text_parts).strip()
-    if not tutor_text:
-        raise RuntimeError("Gemini returned an empty tutor response")
-    return tutor_text, first_token_ms
-
 
 def synthesize_speech_bytes(
     text: str,
@@ -305,18 +305,22 @@ def synthesize_speech_bytes(
         },
     }
     started_at = time.perf_counter()
-    response = request.urlopen(
-        request.Request(
-            CARTESIA_BYTES_URL,
-            data=json.dumps(body).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {config.cartesia_api_key}",
-                "Cartesia-Version": CARTESIA_VERSION,
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        ),
-        timeout=120,
+    return run_logged_ai_call(
+        logger=logger,
+        provider="cartesia",
+        operation="benchmark.synthesize",
+        request_payload={
+            "model": config.cartesia_model,
+            "voice_id": config.cartesia_voice_id,
+            "language": config.cartesia_language,
+            "text": text,
+        },
+        call=lambda: _synthesize_speech_bytes_live(body=body, config=config, started_at=started_at),
+        response_summarizer=lambda result: {
+            "audio_bytes": len(result[0]),
+            "first_audio_ms": result[1],
+            "duration_ms": result[2],
+        },
     )
 
     audio_chunks: list[bytes] = []
@@ -405,6 +409,92 @@ def _post_json(
     if not isinstance(payload, dict):
         raise RuntimeError("Expected JSON object response")
     return payload
+
+
+def _generate_tutor_text_live(
+    *,
+    stream_url: str,
+    body: dict[str, Any],
+    started_at: float,
+    messages: list[dict[str, str]],
+    config: LiveProviderStackConfig,
+) -> dict[str, str | float]:
+    response = request.urlopen(
+        request.Request(
+            stream_url,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        ),
+        timeout=120,
+    )
+
+    text_parts: list[str] = []
+    first_token_ms: float | None = None
+    with response:
+        for raw_line in response:
+            line = raw_line.decode("utf-8").strip()
+            if not line.startswith("data:"):
+                continue
+            payload = json.loads(line[5:].strip())
+            text = extract_gemini_text(payload)
+            if not text:
+                continue
+            if first_token_ms is None:
+                first_token_ms = _elapsed_ms(started_at)
+            text_parts.append(text)
+
+    if first_token_ms is None:
+        raise RuntimeError("Gemini did not emit a text chunk")
+
+    tutor_text = "".join(text_parts).strip()
+    if not tutor_text:
+        raise RuntimeError("Gemini returned an empty tutor response")
+    return {
+        "provider": "gemini",
+        "model": config.gemini_model,
+        "text": tutor_text,
+        "first_token_ms": first_token_ms,
+        "input_messages": str(len(messages)),
+    }
+
+
+def _synthesize_speech_bytes_live(
+    *,
+    body: dict[str, Any],
+    config: LiveProviderStackConfig,
+    started_at: float,
+) -> tuple[bytes, float, float]:
+    response = request.urlopen(
+        request.Request(
+            CARTESIA_BYTES_URL,
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {config.cartesia_api_key}",
+                "Cartesia-Version": CARTESIA_VERSION,
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        ),
+        timeout=120,
+    )
+
+    audio_chunks: list[bytes] = []
+    first_audio_ms: float | None = None
+    with response:
+        while True:
+            chunk = response.read(4096)
+            if not chunk:
+                break
+            if first_audio_ms is None:
+                first_audio_ms = _elapsed_ms(started_at)
+            audio_chunks.append(chunk)
+
+    if first_audio_ms is None:
+        raise RuntimeError("Cartesia returned no audio bytes")
+
+    audio_bytes = b"".join(audio_chunks)
+    return audio_bytes, first_audio_ms, measure_wav_duration_ms(audio_bytes)
 
 
 def _resolve_config() -> LiveProviderStackConfig:

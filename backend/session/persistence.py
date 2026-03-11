@@ -46,73 +46,78 @@ class PersistedLessonStore(TypedDict):
     version: int
 
 
-class PersistedSessionData(TypedDict):
+class PersistedNamespaceData(TypedDict):
     lessons: PersistedLessonStore
     snapshots: dict[str, SessionSnapshot]
+
+
+class PersistedSessionData(TypedDict):
+    namespaces: dict[str, PersistedNamespaceData]
     version: int
 
 
 _PERSISTENCE_LOCK = Lock()
-_CURRENT_VERSION = 1
+_CURRENT_VERSION = 2
 
 
-def load_session_snapshot(session_id: str) -> SessionSnapshot | None:
+def load_session_snapshot(session_id: str, namespace: str | None = None) -> SessionSnapshot | None:
     with _PERSISTENCE_LOCK:
         store = _read_store()
-        snapshot = store["snapshots"].get(session_id)
+        snapshot = _namespace_data(store, namespace)["snapshots"].get(session_id)
         if snapshot is None:
             return None
         return _clone_session_snapshot(snapshot)
 
 
-def save_session_snapshot(session_id: str, snapshot: SessionSnapshot) -> None:
+def save_session_snapshot(session_id: str, snapshot: SessionSnapshot, namespace: str | None = None) -> None:
     with _PERSISTENCE_LOCK:
         store = _read_store()
-        store["snapshots"][session_id] = _clone_session_snapshot(snapshot)
+        _namespace_data(store, namespace)["snapshots"][session_id] = _clone_session_snapshot(snapshot)
         _write_store(store)
 
 
-def clear_session_snapshot(session_id: str) -> None:
+def clear_session_snapshot(session_id: str, namespace: str | None = None) -> None:
     with _PERSISTENCE_LOCK:
         store = _read_store()
-        store["snapshots"].pop(session_id, None)
+        _namespace_data(store, namespace)["snapshots"].pop(session_id, None)
         _write_store(store)
 
 
-def read_lesson_store() -> PersistedLessonStore:
+def read_lesson_store(namespace: str | None = None) -> PersistedLessonStore:
     with _PERSISTENCE_LOCK:
-        return _clone_lesson_store(_read_store()["lessons"])
+        return _clone_lesson_store(_namespace_data(_read_store(), namespace)["lessons"])
 
 
-def write_active_lesson_thread(thread: PersistedLessonThread) -> PersistedLessonStore:
+def write_active_lesson_thread(thread: PersistedLessonThread, namespace: str | None = None) -> PersistedLessonStore:
     with _PERSISTENCE_LOCK:
         store = _read_store()
-        store["lessons"]["activeThread"] = _clone_lesson_thread(thread)
+        _namespace_data(store, namespace)["lessons"]["activeThread"] = _clone_lesson_thread(thread)
         _write_store(store)
-        return _clone_lesson_store(store["lessons"])
+        return _clone_lesson_store(_namespace_data(store, namespace)["lessons"])
 
 
-def clear_active_lesson_thread() -> PersistedLessonStore:
+def clear_active_lesson_thread(namespace: str | None = None) -> PersistedLessonStore:
     with _PERSISTENCE_LOCK:
         store = _read_store()
-        store["lessons"]["activeThread"] = None
+        _namespace_data(store, namespace)["lessons"]["activeThread"] = None
         _write_store(store)
-        return _clone_lesson_store(store["lessons"])
+        return _clone_lesson_store(_namespace_data(store, namespace)["lessons"])
 
 
-def archive_lesson_thread(entry: PersistedLessonArchiveEntry) -> PersistedLessonStore:
+def archive_lesson_thread(entry: PersistedLessonArchiveEntry, namespace: str | None = None) -> PersistedLessonStore:
     with _PERSISTENCE_LOCK:
         store = _read_store()
-        archive = [item for item in store["lessons"]["archive"] if item["id"] != entry["id"]]
+        lessons = _namespace_data(store, namespace)["lessons"]
+        archive = [item for item in lessons["archive"] if item["id"] != entry["id"]]
         archive.insert(0, _clone_archive_entry(entry))
-        store["lessons"]["archive"] = archive[:8]
+        lessons["archive"] = archive[:8]
         _write_store(store)
-        return _clone_lesson_store(store["lessons"])
+        return _clone_lesson_store(lessons)
 
 
-def load_archived_lesson_thread(lesson_id: str) -> PersistedLessonThread | None:
+def load_archived_lesson_thread(lesson_id: str, namespace: str | None = None) -> PersistedLessonThread | None:
     with _PERSISTENCE_LOCK:
-        archive = _read_store()["lessons"]["archive"]
+        archive = _namespace_data(_read_store(), namespace)["lessons"]["archive"]
         for entry in archive:
             if entry["id"] == lesson_id:
                 return _clone_lesson_thread(entry["thread"])
@@ -142,13 +147,19 @@ def _store_path() -> Path:
 
 def _empty_store() -> PersistedSessionData:
     return {
+        "namespaces": {"default": _empty_namespace()},
+        "version": _CURRENT_VERSION,
+    }
+
+
+def _empty_namespace() -> PersistedNamespaceData:
+    return {
         "lessons": {
             "activeThread": None,
             "archive": [],
             "version": 2,
         },
         "snapshots": {},
-        "version": _CURRENT_VERSION,
     }
 
 
@@ -165,21 +176,38 @@ def _read_store() -> PersistedSessionData:
     if not isinstance(payload, dict):
         return _empty_store()
 
+    namespaces = payload.get("namespaces")
+    if isinstance(namespaces, dict):
+        normalized_namespaces: dict[str, PersistedNamespaceData] = {}
+        for namespace, value in namespaces.items():
+            if not isinstance(namespace, str) or not isinstance(value, dict):
+                continue
+            normalized_namespaces[namespace] = _coerce_namespace(value)
+        if normalized_namespaces:
+            return {
+                "namespaces": normalized_namespaces,
+                "version": _CURRENT_VERSION,
+            }
+
     snapshots = payload.get("snapshots", {})
     lessons = payload.get("lessons", {})
     if not isinstance(snapshots, dict) or not isinstance(lessons, dict):
         return _empty_store()
 
     return {
-        "lessons": {
-            "activeThread": _coerce_lesson_thread(lessons.get("activeThread")),
-            "archive": _coerce_archive(lessons.get("archive")),
-            "version": 2,
-        },
-        "snapshots": {
-            str(session_id): _coerce_session_snapshot(snapshot)
-            for session_id, snapshot in snapshots.items()
-            if isinstance(session_id, str)
+        "namespaces": {
+            "default": {
+                "lessons": {
+                    "activeThread": _coerce_lesson_thread(lessons.get("activeThread")),
+                    "archive": _coerce_archive(lessons.get("archive")),
+                    "version": 2,
+                },
+                "snapshots": {
+                    str(session_id): _coerce_session_snapshot(snapshot)
+                    for session_id, snapshot in snapshots.items()
+                    if isinstance(session_id, str)
+                },
+            }
         },
         "version": _CURRENT_VERSION,
     }
@@ -190,6 +218,38 @@ def _write_store(store: PersistedSessionData) -> None:
     temp_path = path.with_suffix(".tmp")
     temp_path.write_text(json.dumps(store, indent=2, sort_keys=True))
     temp_path.replace(path)
+
+
+def _namespace_key(namespace: str | None) -> str:
+    normalized = (namespace or "").strip()
+    return normalized or "default"
+
+
+def _namespace_data(store: PersistedSessionData, namespace: str | None) -> PersistedNamespaceData:
+    key = _namespace_key(namespace)
+    existing = store["namespaces"].get(key)
+    if existing is None:
+        existing = _empty_namespace()
+        store["namespaces"][key] = existing
+    return existing
+
+
+def _coerce_namespace(value: dict[object, object]) -> PersistedNamespaceData:
+    snapshots = value.get("snapshots", {})
+    lessons = value.get("lessons", {})
+    snapshot_items = snapshots.items() if isinstance(snapshots, dict) else []
+    return {
+        "lessons": {
+            "activeThread": _coerce_lesson_thread(lessons.get("activeThread")) if isinstance(lessons, dict) else None,
+            "archive": _coerce_archive(lessons.get("archive")) if isinstance(lessons, dict) else [],
+            "version": 2,
+        },
+        "snapshots": {
+            str(session_id): _coerce_session_snapshot(snapshot)
+            for session_id, snapshot in snapshot_items
+            if isinstance(session_id, str)
+        },
+    }
 
 
 def _coerce_session_snapshot(value: object) -> SessionSnapshot:

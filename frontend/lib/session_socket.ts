@@ -1,9 +1,10 @@
 import { createSessionMetrics, snapshotSessionMetrics, toLatencyMetrics } from "./session_metrics";
 import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/TutorSession";
+import { getCurrentFirebaseIdToken } from "./firebase_auth";
 import type { PersistedLessonThread } from "./lesson_thread_store";
 
 const SESSION_SOCKET_LOG_PREFIX = "[session_socket]";
-const TURN_TIMEOUT_MS = 8_000;
+const TURN_TIMEOUT_MS = 15_000;
 const QUIET_SEND_TYPES = new Set(["audio.chunk"]);
 const QUIET_RECEIVE_TYPES = new Set([
   "audio.received",
@@ -86,6 +87,7 @@ function summarizePayload(payload: Record<string, unknown>) {
     summary.sequence = payload.sequence;
     summary.size = payload.size;
     summary.mimeType = payload.mime_type;
+    summary.tsMs = payload.ts_ms;
     summary.bytesBase64Length = bytesBase64.length;
     summary.bytesBase64Prefix = bytesBase64.slice(0, 24);
   }
@@ -123,6 +125,25 @@ function summarizePayload(payload: Record<string, unknown>) {
   return summary;
 }
 
+type TurnPhase = "stt" | "llm" | "tts";
+
+function resolveInitialTurnPhase(request: TutorTurnRequest): TurnPhase {
+  const hasAudioBytes = (request.audioChunks ?? []).some((chunk) => Boolean(chunk.bytesBase64));
+  return hasAudioBytes ? "stt" : "llm";
+}
+
+function describeTurnPhase(phase: TurnPhase) {
+  switch (phase) {
+    case "stt":
+      return "speech transcription";
+    case "tts":
+      return "speech synthesis";
+    case "llm":
+    default:
+      return "tutor response generation";
+  }
+}
+
 function summarizeCloseEvent(event?: CloseEvent) {
   return {
     code: event?.code,
@@ -149,6 +170,7 @@ export function createSessionSocketTransport(): SessionTransport {
         transcript: string;
         tutorText: string;
         state: string;
+        phase: TurnPhase;
         timestamps: TutorTurnResult["timestamps"];
         audioSegments: NonNullable<TutorTurnResult["audioSegments"]>;
         pendingSegmentTexts: string[];
@@ -173,9 +195,15 @@ export function createSessionSocketTransport(): SessionTransport {
     return currentSessionId;
   };
 
-  const buildWsUrl = () => {
+  const buildWsUrl = async () => {
     const url = new URL(baseWsUrl);
     url.searchParams.set("session_id", ensureCurrentSessionId());
+    const idToken = await getCurrentFirebaseIdToken();
+    if (idToken) {
+      url.searchParams.set("auth_token", idToken);
+    } else {
+      url.searchParams.delete("auth_token");
+    }
     return url.toString();
   };
 
@@ -225,6 +253,7 @@ export function createSessionSocketTransport(): SessionTransport {
     }
     if (payload.type === "transcript.final") {
       activeTurn.transcript = String(payload.text);
+      activeTurn.phase = "llm";
       activeTurn.onTranscriptFinal?.(activeTurn.transcript);
       activeTurn.metrics.mark({ name: "stt_final", tsMs: performance.now() });
     }
@@ -233,6 +262,7 @@ export function createSessionSocketTransport(): SessionTransport {
     }
     if (payload.type === "tutor.text.committed") {
       const committedText = String(payload.text);
+      activeTurn.phase = "tts";
       activeTurn.tutorText = appendCommittedText(activeTurn.tutorText, committedText);
       activeTurn.pendingSegmentTexts.push(committedText);
       activeTurn.metrics.mark({ name: "llm_first_token", tsMs: performance.now() });
@@ -281,65 +311,70 @@ export function createSessionSocketTransport(): SessionTransport {
     }
 
     return new Promise<WebSocket>((resolve, reject) => {
-      const url = buildWsUrl();
-      const sessionId = ensureCurrentSessionId();
-      const nextSocket = new WebSocket(url);
-      let didOpen = false;
-      let preOpenFailureLogged = false;
+      void buildWsUrl()
+        .then((url) => {
+          const sessionId = ensureCurrentSessionId();
+          const nextSocket = new WebSocket(url);
+          let didOpen = false;
+          let preOpenFailureLogged = false;
 
-      nextSocket.onopen = () => {
-        didOpen = true;
-        socket = nextSocket;
-        socketSessionId = ensureCurrentSessionId();
-        logSessionInfo("open", { sessionId: socketSessionId, url: nextSocket.url });
-        resolve(nextSocket);
-      };
+          nextSocket.onopen = () => {
+            didOpen = true;
+            socket = nextSocket;
+            socketSessionId = ensureCurrentSessionId();
+            logSessionInfo("open", { sessionId: socketSessionId, url: nextSocket.url });
+            resolve(nextSocket);
+          };
 
-      nextSocket.onmessage = handleMessage;
-      nextSocket.onerror = () => {
-        const errorDetails = {
-          readyState: nextSocket.readyState,
-          sessionId: ensureCurrentSessionId(),
-          url: nextSocket.url,
-        };
-        if (!didOpen) {
-          preOpenFailureLogged = true;
-          logSessionWarn("connect.failed", errorDetails);
-        } else {
-          logSessionError("error", errorDetails);
-        }
-        if (socket === nextSocket) {
-          failActiveTurn("WebSocket connection failed");
-          pendingReset?.reject(new Error("WebSocket connection failed"));
-          pendingReset = null;
-          pendingRestore?.reject(new Error("WebSocket connection failed"));
-          pendingRestore = null;
-          return;
-        }
+          nextSocket.onmessage = handleMessage;
+          nextSocket.onerror = () => {
+            const errorDetails = {
+              readyState: nextSocket.readyState,
+              sessionId,
+              url: nextSocket.url,
+            };
+            if (!didOpen) {
+              preOpenFailureLogged = true;
+              logSessionWarn("connect.failed", errorDetails);
+            } else {
+              logSessionError("error", errorDetails);
+            }
+            if (socket === nextSocket) {
+              failActiveTurn("WebSocket connection failed");
+              pendingReset?.reject(new Error("WebSocket connection failed"));
+              pendingReset = null;
+              pendingRestore?.reject(new Error("WebSocket connection failed"));
+              pendingRestore = null;
+              return;
+            }
 
-        reject(new Error("WebSocket connection failed"));
-      };
-      nextSocket.onclose = (event) => {
-        if (preOpenFailureLogged && !didOpen) {
-          socket = null;
-          socketSessionId = null;
-          return;
-        }
-        logSessionWarn("close", {
-          sessionId: ensureCurrentSessionId(),
-          url: nextSocket.url,
-          ...summarizeCloseEvent(event),
+            reject(new Error("WebSocket connection failed"));
+          };
+          nextSocket.onclose = (event) => {
+            if (preOpenFailureLogged && !didOpen) {
+              socket = null;
+              socketSessionId = null;
+              return;
+            }
+            logSessionWarn("close", {
+              sessionId: ensureCurrentSessionId(),
+              url: nextSocket.url,
+              ...summarizeCloseEvent(event),
+            });
+            if (socket === nextSocket) {
+              failActiveTurn("WebSocket connection closed");
+              pendingReset?.reject(new Error("WebSocket connection closed"));
+              pendingReset = null;
+              pendingRestore?.reject(new Error("WebSocket connection closed"));
+              pendingRestore = null;
+            }
+            socket = null;
+            socketSessionId = null;
+          };
+        })
+        .catch((error) => {
+          reject(error instanceof Error ? error : new Error("WebSocket URL build failed"));
         });
-        if (socket === nextSocket) {
-          failActiveTurn("WebSocket connection closed");
-          pendingReset?.reject(new Error("WebSocket connection closed"));
-          pendingReset = null;
-          pendingRestore?.reject(new Error("WebSocket connection closed"));
-          pendingRestore = null;
-        }
-        socket = null;
-        socketSessionId = null;
-      };
     });
   };
 
@@ -419,18 +454,22 @@ export function createSessionSocketTransport(): SessionTransport {
           transcript: request.studentText,
           tutorText: "",
           state: "thinking",
+          phase: resolveInitialTurnPhase(request),
           timestamps: [],
           audioSegments: [],
           pendingSegmentTexts: [],
           timeoutId: null,
         };
         activeTurn.timeoutId = setTimeout(() => {
+          const phase = activeTurn?.phase ?? resolveInitialTurnPhase(request);
           logSessionWarn("turn.timeout", {
+            phase,
+            phaseLabel: describeTurnPhase(phase),
             sessionId: ensureCurrentSessionId(),
             timeoutMs: TURN_TIMEOUT_MS,
             transcriptLength: activeTurn?.transcript.length ?? 0,
           });
-          failActiveTurn("Tutor turn timed out");
+          failActiveTurn(`Tutor turn timed out during ${describeTurnPhase(phase)}`);
         }, TURN_TIMEOUT_MS);
 
         for (const chunk of request.audioChunks ?? [{ sequence: 1, size: 320 }]) {
@@ -440,6 +479,7 @@ export function createSessionSocketTransport(): SessionTransport {
             size: chunk.size,
             bytes_b64: chunk.bytesBase64,
             mime_type: chunk.mimeType,
+            ts_ms: Date.now(),
           };
           logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
           connectedSocket.send(JSON.stringify(payload));

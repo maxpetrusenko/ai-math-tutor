@@ -23,10 +23,11 @@ def load_local_env(
     target_env = env if env is not None else os.environ
     root = base_dir or REPO_ROOT
     loaded_paths: list[str] = []
+    protected_keys = set(target_env)
 
     for relative_path in files:
         path = root / relative_path
-        if _load_env_file(path, target_env):
+        if _load_env_file(path, target_env, protected_keys=protected_keys):
             loaded_paths.append(str(path))
 
     _apply_env_aliases(target_env)
@@ -48,7 +49,7 @@ def shell_export_commands(
     return "\n".join(lines)
 
 
-def _load_env_file(path: Path, env: MutableMapping[str, str]) -> bool:
+def _load_env_file(path: Path, env: MutableMapping[str, str], *, protected_keys: set[str]) -> bool:
     if not path.exists():
         return False
 
@@ -61,7 +62,7 @@ def _load_env_file(path: Path, env: MutableMapping[str, str]) -> bool:
         key, raw_value = line.split("=", 1)
         key = key.strip()
         value = raw_value.strip().strip("'").strip('"')
-        if key and key not in env:
+        if key and key not in protected_keys:
             env[key] = value
 
     return True

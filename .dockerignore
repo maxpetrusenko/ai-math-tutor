@@ -1,0 +1,15 @@
+.git
+.github
+.next
+.venv
+.pytest_cache
+.mypy_cache
+.nerdy-data
+node_modules
+frontend/node_modules
+frontend/.next
+frontend/.turbo
+images
+docs
+tests
+nerdy.egg-info

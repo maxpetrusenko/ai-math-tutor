@@ -6,6 +6,8 @@
 
 <p align="center">
   <strong>Open source realtime voice tutoring with pluggable STT, LLM, TTS, and avatar providers.</strong>
+
+  URL: ai-math-tutor--ai-math-tutor-b39b3.us-east4.hosted.app
 </p>
 
 <p align="center">
@@ -85,7 +87,7 @@ Browser mic / text
 | Frontend | `Next.js 15` + `React 19` + `TypeScript` | shell, tutor UI, avatar UI, latency UI |
 | Backend | `FastAPI` + `uvicorn` | websocket session authority |
 | STT | `Deepgram` | default provider |
-| LLM | `MiniMax` + `Gemini` fallback | registry-backed switch |
+| LLM | `Gemini`, `MiniMax`, `OpenAI`, or `Anthropic` | runtime switch, LangChain-backed for Gemini/OpenAI/Anthropic |
 | TTS | `Cartesia` or `MiniMax` | streamed speech path |
 | Avatar | `2D CSS` or lazy-loaded `Three.js` | default plus richer branch |
 | Tests | `pytest`, `vitest`, `playwright` | backend, frontend, browser smoke |
@@ -136,12 +138,26 @@ pnpm dev --hostname 127.0.0.1 --port 3000
 Backend:
 
 ```bash
+NERDY_AI_LOG_PATH=.nerdy-data/ai-calls.jsonl
+NERDY_ENABLE_LANGSMITH=0
 NERDY_STT_PROVIDER=deepgram
 NERDY_LLM_PROVIDER=minimax
 NERDY_LLM_FALLBACK_PROVIDER=gemini
+NERDY_RUNTIME_LLM_PROVIDER=gemini
+NERDY_RUNTIME_LLM_FALLBACK_PROVIDER=minimax
+GOOGLE_AI_API_KEY=
+LANGSMITH_API_KEY=
+LANGCHAIN_API_KEY=
+MINIMAX_API_KEY=
 NERDY_TTS_PROVIDER=cartesia
+CARTESIA_API_KEY=
 NERDY_AVATAR_PROVIDER=threejs
 DEEPGRAM_API_KEY=
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+LANGSMITH_PROJECT=nerdy
+LANGCHAIN_PROJECT=nerdy
+LANGCHAIN_TRACING_V2=false
 ```
 
 Frontend:
@@ -151,6 +167,19 @@ NEXT_PUBLIC_SESSION_WS_URL=ws://127.0.0.1:8000/ws/session
 ```
 
 If you only want the typed demo path, the frontend still runs without live mic credentials.
+
+To refresh local AI keys from Doppler into `.env.local`:
+
+```bash
+python3 scripts/pull_doppler_env.py --project api_keys --config dev
+```
+
+The script writes only the requested keys and reports any missing ones. In this repo, `load_local_env()` now allows `.env.local` to override `.env`, while still respecting already-exported shell variables.
+
+Every provider call now writes a structured JSONL record to `NERDY_AI_LOG_PATH` so prompt input, model output, latency, and failures can be inspected after a run.
+Every LLM call is now wrapped in a LangSmith trace span. Tracing enables if either `NERDY_ENABLE_LANGSMITH=1` or `LANGCHAIN_TRACING_V2=true`, plus `LANGSMITH_API_KEY` or `LANGCHAIN_API_KEY`.
+`LANGCHAIN_PROJECT` is accepted as an alias for `LANGSMITH_PROJECT`.
+Runtime websocket defaults now allow `gemini`, `minimax`, `openai`, and `anthropic` for `llm_provider`.
 
 ---
 
@@ -206,6 +235,7 @@ Backend:
 
 ```bash
 python3 -m pytest -q
+python3 -m eval.langchain_golden_eval --provider draft
 ```
 
 Frontend:

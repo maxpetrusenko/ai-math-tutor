@@ -12,6 +12,7 @@ vi.mock("./Avatar3D", () => ({
 
 afterEach(() => {
   clearPersistedLessonThread();
+  window.localStorage.clear();
   vi.restoreAllMocks();
 });
 

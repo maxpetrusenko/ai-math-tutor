@@ -9,6 +9,8 @@ frontend/.next/
 frontend/.next-dev/
 frontend/node_modules/
 frontend/.env.local
+.env.local
+.nerdy-data/
 frontend/coverage/
 frontend/test-results/
 __pycache__/

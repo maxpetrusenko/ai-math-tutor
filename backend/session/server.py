@@ -4,9 +4,10 @@ import base64
 import json
 import logging
 import os
+from urllib.parse import urlparse
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.llm.draft_policy import build_draft_tutor_reply
@@ -14,6 +15,10 @@ from backend.llm.prompt_builder import build_tutor_messages
 from backend.llm.topic_shift import filter_history_for_latest_turn
 from backend.llm.provider_switch import ProviderSwitch
 from backend.providers import create_provider
+from backend.session.firebase_auth import (
+    verify_firebase_bearer_token,
+    verify_firebase_websocket_token,
+)
 from backend.session.persistence import (
     archive_lesson_thread,
     clear_active_lesson_thread,
@@ -21,8 +26,10 @@ from backend.session.persistence import (
     read_lesson_store,
     write_active_lesson_thread,
 )
+from backend.session.openai_realtime import create_realtime_client_secret
 from backend.session.runtime_options import runtime_options_payload, validate_runtime_config
 from backend.session.registry import clear_session_snapshot, load_session_snapshot, save_session_snapshot
+from backend.session.turn_trace import summarize_latency_tracker, write_turn_trace
 from backend.stt.provider import STTProviderFactory, StreamingSTTProvider, StreamingSTTSession
 from backend.tts.commit_manager import CommitManager
 from backend.tts.provider import TTSProviderFactory
@@ -39,6 +46,7 @@ app.add_middleware(
         "http://127.0.0.1:3001",
         *[origin.strip() for origin in os.getenv("NERDY_ALLOWED_ORIGINS", "").split(",") if origin.strip()],
     ],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_headers=["*"],
     allow_methods=["*"],
@@ -49,9 +57,32 @@ def create_stt_provider() -> StreamingSTTProvider:
     return STTProviderFactory().create()
 
 
+def _auth_namespace(claims: dict[str, object] | None) -> str:
+    uid = str((claims or {}).get("uid") or "").strip()
+    return uid or "default"
+
+
+def _is_allowed_websocket_origin(origin: str | None) -> bool:
+    if not origin:
+        return True
+
+    parsed = urlparse(origin)
+    host = parsed.hostname or ""
+    if host in {"localhost", "127.0.0.1"}:
+        return True
+
+    allowed = {
+        entry.strip()
+        for entry in os.getenv("NERDY_ALLOWED_ORIGINS", "").split(",")
+        if entry.strip()
+    }
+    return origin in allowed
+
+
 @app.get("/api/lessons")
-def get_lessons() -> dict[str, object]:
-    return read_lesson_store()
+def get_lessons(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    claims = verify_firebase_bearer_token(authorization)
+    return read_lesson_store(namespace=_auth_namespace(claims))
 
 
 @app.get("/api/runtime-options")
@@ -59,24 +90,37 @@ def get_runtime_options() -> dict[str, object]:
     return runtime_options_payload()
 
 
+@app.post("/api/realtime/client-secret")
+def post_realtime_client_secret(
+    payload: dict[str, object] | None = None,
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    verify_firebase_bearer_token(authorization)
+    return create_realtime_client_secret(payload or {})
+
+
 @app.put("/api/lessons/active")
-def put_active_lesson(thread: dict[str, object]) -> dict[str, object]:
-    return write_active_lesson_thread(thread)  # type: ignore[arg-type]
+def put_active_lesson(thread: dict[str, object], authorization: str | None = Header(default=None)) -> dict[str, object]:
+    claims = verify_firebase_bearer_token(authorization)
+    return write_active_lesson_thread(thread, namespace=_auth_namespace(claims))  # type: ignore[arg-type]
 
 
 @app.delete("/api/lessons/active")
-def delete_active_lesson() -> dict[str, object]:
-    return clear_active_lesson_thread()
+def delete_active_lesson(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    claims = verify_firebase_bearer_token(authorization)
+    return clear_active_lesson_thread(namespace=_auth_namespace(claims))
 
 
 @app.post("/api/lessons/archive")
-def post_archived_lesson(entry: dict[str, object]) -> dict[str, object]:
-    return archive_lesson_thread(entry)  # type: ignore[arg-type]
+def post_archived_lesson(entry: dict[str, object], authorization: str | None = Header(default=None)) -> dict[str, object]:
+    claims = verify_firebase_bearer_token(authorization)
+    return archive_lesson_thread(entry, namespace=_auth_namespace(claims))  # type: ignore[arg-type]
 
 
 @app.get("/api/lessons/archive/{lesson_id}")
-def get_archived_lesson(lesson_id: str) -> dict[str, object]:
-    thread = load_archived_lesson_thread(lesson_id)
+def get_archived_lesson(lesson_id: str, authorization: str | None = Header(default=None)) -> dict[str, object]:
+    claims = verify_firebase_bearer_token(authorization)
+    thread = load_archived_lesson_thread(lesson_id, namespace=_auth_namespace(claims))
     if thread is None:
         raise HTTPException(status_code=404, detail="Lesson not found")
     return thread
@@ -84,11 +128,20 @@ def get_archived_lesson(lesson_id: str) -> dict[str, object]:
 
 @app.websocket("/ws/session")
 async def session_websocket(websocket: WebSocket) -> None:
+    try:
+        if not _is_allowed_websocket_origin(websocket.headers.get("origin")):
+            raise HTTPException(status_code=403, detail="WebSocket origin not allowed")
+        claims = verify_firebase_websocket_token(websocket.query_params.get("auth_token"))
+    except HTTPException as error:
+        await websocket.close(code=4403 if error.status_code == 403 else 4401)
+        return
+
     await websocket.accept()
+    namespace = _auth_namespace(claims)
     session_id = websocket.query_params.get("session_id") or str(uuid4())
     logger.info("session websocket opened %s", _json_summary({"session_id": session_id}))
     controller = SessionController(session_id=session_id)
-    snapshot = load_session_snapshot(session_id)
+    snapshot = load_session_snapshot(session_id, namespace=namespace)
     if snapshot is not None:
         controller.restore(snapshot)
     stt_provider = create_stt_provider()
@@ -113,7 +166,13 @@ async def session_websocket(websocket: WebSocket) -> None:
                 _json_summary(_summarize_browser_message(controller.session_id, message)),
             )
             try:
-                events, stt_session = await _handle_message(controller, message, stt_provider, stt_session)
+                events, stt_session = await _handle_message(
+                    controller,
+                    message,
+                    stt_provider,
+                    stt_session,
+                    namespace=namespace,
+                )
             except Exception as error:
                 logger.exception(
                     "session websocket message failed %s",
@@ -134,6 +193,8 @@ async def _handle_message(
     message: dict[str, object],
     stt_provider: StreamingSTTProvider,
     stt_session: StreamingSTTSession | None,
+    *,
+    namespace: str = "default",
 ) -> tuple[list[dict[str, object]], StreamingSTTSession | None]:
     message_type = message["type"]
 
@@ -170,19 +231,46 @@ async def _handle_message(
                 }
             ),
         )
-        transcript_events = await stt_session.push_audio(audio_bytes)
+        chunk_ts_ms = float(message.get("ts_ms")) if message.get("ts_ms") is not None else None
+        transcript_events = await stt_session.push_audio(audio_bytes, ts_ms=chunk_ts_ms)
         events.extend(transcript_events)
         return events, stt_session
     if message_type == "speech.end":
-        events = controller.handle_speech_end(ts_ms=float(message["ts_ms"]))
+        speech_end_ts_ms = float(message["ts_ms"])
+        events = controller.handle_speech_end(ts_ms=speech_end_ts_ms)
         transcript_text = ""
         transcript_source = "missing"
+        logger.info(
+            "session speech.end received %s",
+            _json_summary(
+                {
+                    "has_stt_session": stt_session is not None,
+                    "session_id": controller.session_id,
+                    "text_length": len(str(message.get("text") or "")),
+                    "ts_ms": speech_end_ts_ms,
+                }
+            ),
+        )
         if stt_session is not None:
+            logger.info(
+                "session stt.finalize start %s",
+                _json_summary({"session_id": controller.session_id, "ts_ms": speech_end_ts_ms + 120}),
+            )
             transcript_events = [
                 event
-                for event in await stt_session.finalize(ts_ms=float(message["ts_ms"]) + 120)
+                for event in await stt_session.finalize(ts_ms=speech_end_ts_ms + 120)
                 if not _is_empty_transcript_event(event)
             ]
+            logger.info(
+                "session stt.finalize end %s",
+                _json_summary(
+                    {
+                        "event_count": len(transcript_events),
+                        "session_id": controller.session_id,
+                        "transcript_length": len(_latest_final_transcript(transcript_events)),
+                    }
+                ),
+            )
             events.extend(transcript_events)
             transcript_text = _latest_final_transcript(transcript_events)
             await stt_session.close()
@@ -194,7 +282,7 @@ async def _handle_message(
             transcript_text = str(message.get("text", "")).strip()
             if transcript_text:
                 tracker = controller.latency_tracker
-                tracker.mark("stt_final", float(message["ts_ms"]), {"provider": "text_fallback"})
+                tracker.mark("stt_final", speech_end_ts_ms, {"provider": "text_fallback"})
                 events.append({"type": "transcript.final", "text": transcript_text})
                 transcript_source = "text_fallback"
         _log_transcript_resolution(
@@ -220,7 +308,6 @@ async def _handle_message(
             )
 
         tracker = controller.latency_tracker
-        speech_end_ts_ms = float(message["ts_ms"])
         try:
             runtime_config = validate_runtime_config(message)
         except ValueError as error:
@@ -243,21 +330,40 @@ async def _handle_message(
             primary=create_provider("llm", runtime_config["llm_provider"]),
             fallback=create_provider("llm", os.getenv("NERDY_RUNTIME_LLM_FALLBACK_PROVIDER", "minimax")),
         )
+        draft_reply = build_draft_tutor_reply(
+            subject=controller.subject,
+            grade_band=controller.grade_band,
+            latest_student_text=transcript_text,
+            student_profile=controller.student_profile,
+            history=relevant_history,
+        )
+        logger.info(
+            "session llm start %s",
+            _json_summary(
+                {
+                    "llm_model": runtime_config["llm_model"],
+                    "llm_provider": runtime_config["llm_provider"],
+                    "session_id": controller.session_id,
+                    "transcript_length": len(transcript_text),
+                }
+            ),
+        )
         llm_result = provider_switch.stream_response(
             messages=messages,
-            token_stream=[
-                build_draft_tutor_reply(
-                    subject=controller.subject,
-                    grade_band=controller.grade_band,
-                    latest_student_text=transcript_text,
-                    student_profile=controller.student_profile,
-                    history=relevant_history,
-                )
-            ],
+            token_stream=[draft_reply],
             tracker=tracker,
             first_token_ts_ms=speech_end_ts_ms,
             use_fallback=bool(message.get("use_fallback", False)),
             options={"model": runtime_config["llm_model"]},
+        )
+        logger.info(
+            "session llm end %s",
+            _json_summary(
+                {
+                    "response_length": len(str(llm_result.get("text") or "")),
+                    "session_id": controller.session_id,
+                }
+            ),
         )
         turn_id = str(uuid4())
         events.extend(controller.begin_tutor_turn(turn_id=turn_id))
@@ -283,26 +389,77 @@ async def _handle_message(
                 }
             )
         events.append(tts_provider.start_context(turn_id=turn_id, voice_config=voice_config))
+        logger.info(
+            "session tts start %s",
+            _json_summary(
+                {
+                    "chunk_count": len(committed_chunks),
+                    "session_id": controller.session_id,
+                    "tts_model": runtime_config["tts_model"],
+                    "tts_provider": runtime_config["tts_provider"],
+                }
+            ),
+        )
 
+        tts_trace_chunks: list[dict[str, object]] = []
         for index, chunk in enumerate(committed_chunks):
             events.append({"type": "tutor.text.committed", "text": chunk})
-            events.append(
-                tts_provider.send_phrase(
-                    chunk,
-                    tracker=tracker,
-                    first_audio_ts_ms=speech_end_ts_ms,
-                    is_final=index == len(committed_chunks) - 1,
-                    options={"model": runtime_config["tts_model"]},
-                )
+            tts_event = tts_provider.send_phrase(
+                chunk,
+                tracker=tracker,
+                first_audio_ts_ms=speech_end_ts_ms,
+                is_final=index == len(committed_chunks) - 1,
+                options={"model": runtime_config["tts_model"]},
+            )
+            events.append(tts_event)
+            tts_trace_chunks.append(
+                {
+                    "event_type": str(tts_event.get("type") or ""),
+                    "is_final": bool(tts_event.get("is_final")),
+                    "model": str(tts_event.get("model") or runtime_config["tts_model"]),
+                    "provider": str(tts_event.get("provider") or runtime_config["tts_provider"]),
+                    "text": chunk,
+                    "timestamp_count": len(tts_event.get("timestamps", [])) if isinstance(tts_event.get("timestamps"), list) else 0,
+                }
             )
         events.append(tts_provider.flush())
+        logger.info(
+            "session tts end %s",
+            _json_summary({"chunk_count": len(committed_chunks), "session_id": controller.session_id}),
+        )
         controller.history.extend(
             [
                 {"role": "user", "content": transcript_text},
                 {"role": "assistant", "content": llm_result["text"]},
             ]
         )
-        save_session_snapshot(controller.session_id, controller.snapshot())
+        write_turn_trace(
+            {
+                "session_id": controller.session_id,
+                "turn_id": turn_id,
+                "subject": controller.subject,
+                "grade_band": controller.grade_band,
+                "student_profile": controller.student_profile,
+                "runtime_config": runtime_config,
+                "stt": {
+                    "source": transcript_source,
+                    "transcript_text": transcript_text,
+                    "transcript_length": len(transcript_text),
+                },
+                "llm": {
+                    "messages": messages,
+                    "result": llm_result,
+                    "token_stream": [draft_reply],
+                },
+                "tts": {
+                    "provider": runtime_config["tts_provider"],
+                    "voice_config": voice_config,
+                    "chunks": tts_trace_chunks,
+                },
+                "latency": summarize_latency_tracker(tracker),
+            }
+        )
+        save_session_snapshot(controller.session_id, controller.snapshot(), namespace=namespace)
         return events, stt_session
     if message_type == "tutor.turn.start":
         return controller.begin_tutor_turn(turn_id=str(message["turn_id"])), stt_session
@@ -336,13 +493,13 @@ async def _handle_message(
             "student_profile": student_profile,
             "subject": str(message.get("subject") or "general"),
         }
-        save_session_snapshot(controller.session_id, snapshot)
+        save_session_snapshot(controller.session_id, snapshot, namespace=namespace)
         return controller.restore(snapshot), stt_session
     if message_type == "session.reset":
         if stt_session is not None:
             await stt_session.close()
             stt_session = None
-        clear_session_snapshot(controller.session_id)
+        clear_session_snapshot(controller.session_id, namespace=namespace)
         return controller.reset(), stt_session
     return [{"type": "session.error", "detail": f"unknown message type: {message_type}"}], stt_session
 
@@ -390,6 +547,7 @@ def _summarize_browser_message(session_id: str, message: dict[str, object]) -> d
                 "mime_type": str(message.get("mime_type") or "") or None,
                 "sequence": int(message.get("sequence") or 0),
                 "size": int(message.get("size") or 0),
+                "ts_ms": float(message.get("ts_ms") or 0) or None,
             }
         )
     elif summary["type"] == "speech.end":

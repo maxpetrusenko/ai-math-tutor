@@ -1,5 +1,7 @@
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from backend.session.server import app
 
@@ -176,3 +178,120 @@ def test_session_websocket_surfaces_provider_errors_before_close(monkeypatch) ->
 
     assert error_event["type"] == "session.error"
     assert "unsupported audio" in error_event["detail"]
+
+
+def test_session_websocket_pushes_audio_once_with_chunk_timestamp(monkeypatch) -> None:
+    class _RecordingSTTSession:
+        def __init__(self) -> None:
+            self.push_audio_calls: list[tuple[bytes, float | None]] = []
+
+        async def push_audio(self, chunk: bytes, *, ts_ms: float | None = None) -> list[dict[str, str]]:
+            self.push_audio_calls.append((chunk, ts_ms))
+            return []
+
+        async def finalize(self, *, ts_ms: float) -> list[dict[str, str]]:
+            return []
+
+        async def close(self) -> None:
+            return None
+
+    class _RecordingSTTProvider:
+        def __init__(self) -> None:
+            self.session = _RecordingSTTSession()
+
+        async def open_session(self, tracker: object) -> _RecordingSTTSession:
+            return self.session
+
+    provider = _RecordingSTTProvider()
+    monkeypatch.setattr("backend.session.server.create_stt_provider", lambda: provider)
+    client = TestClient(app)
+
+    with client.websocket_connect("/ws/session") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "audio.chunk",
+                "sequence": 1,
+                "size": 320,
+                "bytes_b64": "YWJj",
+                "mime_type": "audio/webm;codecs=opus",
+                "ts_ms": 1234,
+            }
+        )
+        websocket.receive_json()
+        websocket.receive_json()
+
+    assert provider.session.push_audio_calls == [(b"abc", 1234.0)]
+
+
+def test_lessons_api_accepts_local_dev_origin_preflight() -> None:
+    client = TestClient(app)
+
+    response = client.options(
+        "/api/lessons",
+        headers={
+            "Origin": "http://127.0.0.1:3012",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3012"
+
+
+def test_lessons_api_requires_bearer_token_when_firebase_auth_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("NERDY_REQUIRE_FIREBASE_AUTH", "1")
+    client = TestClient(app)
+
+    response = client.get("/api/lessons")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Missing Authorization bearer token"}
+
+
+def test_lessons_api_scopes_fallback_store_per_firebase_uid(monkeypatch) -> None:
+    def fake_verify_bearer_token(authorization: str | None) -> dict[str, str]:
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Missing Authorization bearer token")
+        return {"uid": authorization.removeprefix("Bearer ").strip()}
+
+    monkeypatch.setenv("NERDY_REQUIRE_FIREBASE_AUTH", "1")
+    monkeypatch.setattr("backend.session.server.verify_firebase_bearer_token", fake_verify_bearer_token)
+    client = TestClient(app)
+    active_thread = {
+        "avatarProviderId": "human-css-2d",
+        "conversation": [{"id": "1", "transcript": "What is x?", "tutorText": "Start with the variable."}],
+        "gradeBand": "6-8",
+        "llmModel": "gemini-2.5-flash",
+        "llmProvider": "gemini",
+        "preference": "slow down",
+        "sessionId": "lesson-123",
+        "studentPrompt": "What is x?",
+        "subject": "math",
+        "transcript": "What is x?",
+        "ttsModel": "sonic-2",
+        "ttsProvider": "cartesia",
+        "tutorText": "Start with the variable.",
+        "version": 1,
+    }
+
+    user_a_put = client.put("/api/lessons/active", json=active_thread, headers={"Authorization": "Bearer user-a"})
+    user_a_list = client.get("/api/lessons", headers={"Authorization": "Bearer user-a"})
+    user_b_list = client.get("/api/lessons", headers={"Authorization": "Bearer user-b"})
+
+    assert user_a_put.status_code == 200
+    assert user_a_list.status_code == 200
+    assert user_b_list.status_code == 200
+    assert user_a_list.json()["activeThread"]["sessionId"] == "lesson-123"
+    assert user_b_list.json()["activeThread"] is None
+
+
+def test_session_websocket_rejects_disallowed_origin(monkeypatch) -> None:
+    monkeypatch.setenv("NERDY_ALLOWED_ORIGINS", "https://ai-math-tutor--ai-math-tutor-b39b3.us-east4.hosted.app")
+    client = TestClient(app)
+
+    with pytest.raises(WebSocketDisconnect) as error:
+        with client.websocket_connect("/ws/session", headers={"Origin": "https://evil.example.com"}):
+            pass
+
+    assert error.value.code == 4403

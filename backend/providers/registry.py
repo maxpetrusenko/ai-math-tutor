@@ -89,7 +89,10 @@ def get_provider(
 def auto_register_providers() -> None:
     """Auto-discover and register provider implementations."""
     stt_modules = os.getenv("STT_MODULES", "backend.providers.stt.deepgram").split(",")
-    llm_modules = os.getenv("LLM_MODULES", "backend.providers.llm.minimax,backend.providers.llm.gemini").split(",")
+    llm_modules = os.getenv(
+        "LLM_MODULES",
+        "backend.providers.llm.minimax,backend.providers.llm.gemini,backend.providers.llm.openai,backend.providers.llm.anthropic",
+    ).split(",")
     tts_modules = os.getenv("TTS_MODULES", "backend.providers.tts.cartesia,backend.providers.tts.minimax").split(",")
     avatar_modules = os.getenv("AVATAR_MODULES", "backend.providers.avatar.threejs").split(",")
 

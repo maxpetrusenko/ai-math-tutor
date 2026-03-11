@@ -2,9 +2,10 @@
 
 import React from "react";
 
-import type { PersistedLessonSummary } from "../lib/lesson_thread_store";
+import type { PersistedLessonSummary, PersistedTurnDebug } from "../lib/lesson_thread_store";
 
 export type LessonConversationTurn = {
+  debug?: PersistedTurnDebug;
   id: string;
   transcript: string;
   tutorText: string;

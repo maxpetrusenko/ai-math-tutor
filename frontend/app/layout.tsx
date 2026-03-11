@@ -2,6 +2,7 @@ import React from "react";
 import type { ReactNode } from "react";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 
+import { AppProviders } from "../components/AppProviders";
 import "./globals.css";
 
 const headingFont = Space_Grotesk({
@@ -18,7 +19,9 @@ const bodyFont = IBM_Plex_Mono({
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html className={`${headingFont.variable} ${bodyFont.variable}`} lang="en">
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }

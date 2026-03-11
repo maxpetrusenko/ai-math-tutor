@@ -1,0 +1,561 @@
+import { createSessionMetrics, snapshotSessionMetrics, toLatencyMetrics } from "./session_metrics";
+import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/TutorSession";
+import type { PersistedLessonThread } from "./lesson_thread_store";
+
+const REALTIME_SOCKET_URL = "wss://api.openai.com/v1/realtime";
+const REALTIME_API_TIMEOUT_MS = 20_000;
+const REALTIME_SAMPLE_RATE = 24_000;
+const REALTIME_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
+const REALTIME_VOICE = "marin";
+
+type TransportDeps = {
+  apiUrl?: string;
+  fetchImpl?: typeof fetch;
+  WebSocketImpl?: typeof WebSocket;
+};
+
+type RealtimeTurnPhase = "input" | "response";
+
+type ActiveTurn = {
+  audioBase64Chunks: string[];
+  metrics: ReturnType<typeof createSessionMetrics>;
+  onTranscriptFinal?: (text: string) => void;
+  phase: RealtimeTurnPhase;
+  reject: (error: Error) => void;
+  resolve: (result: TutorTurnResult) => void;
+  responseDone: boolean;
+  timeoutId: ReturnType<typeof setTimeout> | null;
+  transcript: string;
+  tutorText: string;
+};
+
+function generateSessionId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `lesson-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeSessionId(sessionId: string | null | undefined): string {
+  const normalized = typeof sessionId === "string" ? sessionId.trim() : "";
+  if (normalized && normalized !== "undefined" && normalized !== "null") {
+    return normalized;
+  }
+  return generateSessionId();
+}
+
+function resolveRealtimeApiUrl() {
+  if (typeof process !== "undefined" && process.env.NODE_ENV === "test") {
+    return "";
+  }
+
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_LESSON_API_URL) {
+    return process.env.NEXT_PUBLIC_LESSON_API_URL.replace(/\/lessons$/, "/realtime/client-secret");
+  }
+
+  const baseWsUrl =
+    typeof process !== "undefined" && process.env.NEXT_PUBLIC_SESSION_WS_URL
+      ? process.env.NEXT_PUBLIC_SESSION_WS_URL
+      : "ws://localhost:8000/ws/session";
+
+  try {
+    const url = new URL(baseWsUrl);
+    url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+    url.pathname = "/api/realtime/client-secret";
+    url.search = "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function buildRealtimeInstructions(request: TutorTurnRequest) {
+  const preference = request.studentProfile?.preference?.trim();
+  const pacing = request.studentProfile?.pacing?.trim();
+  return [
+    "You are Nerdy's live tutor.",
+    `Subject: ${request.subject}.`,
+    `Grade band: ${request.gradeBand}.`,
+    "Teach Socratically, keep responses concise, and end with a short next-step question when appropriate.",
+    preference ? `Student preference: ${preference}.` : "",
+    pacing ? `Student pacing: ${pacing}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isRealtimeRequest(request: TutorTurnRequest) {
+  return request.llmProvider === "openai-realtime" && request.ttsProvider === "openai-realtime";
+}
+
+function isAudioTurn(request: TutorTurnRequest) {
+  return (request.audioChunks ?? []).some((chunk) => Boolean(chunk.bytesBase64));
+}
+
+function joinBase64PcmChunks(chunks: string[]) {
+  const bytes = chunks.flatMap((chunk) => Array.from(base64ToUint8Array(chunk)));
+  return new Uint8Array(bytes);
+}
+
+function pcm16ToWavBase64(pcmBytes: Uint8Array, sampleRate: number) {
+  const wavBytes = new Uint8Array(44 + pcmBytes.length);
+  const view = new DataView(wavBytes.buffer);
+  const writeString = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + pcmBytes.length, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, pcmBytes.length, true);
+  wavBytes.set(pcmBytes, 44);
+
+  let binary = "";
+  for (const byte of wavBytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+function base64ToUint8Array(value: string) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+async function capturedChunksToPcmBase64Chunks(chunks: NonNullable<TutorTurnRequest["audioChunks"]>) {
+  const populatedChunks = chunks.filter((chunk) => chunk.bytesBase64);
+  if (populatedChunks.length === 0) {
+    return [];
+  }
+
+  const mimeType = populatedChunks[0]?.mimeType ?? "audio/webm;codecs=opus";
+  const blob = new Blob(
+    populatedChunks.map((chunk) => base64ToUint8Array(chunk.bytesBase64 as string)),
+    { type: mimeType }
+  );
+  const audioBuffer = await decodeAndResample(blob, REALTIME_SAMPLE_RATE);
+  const pcmBytes = audioBufferToPcm16(audioBuffer);
+  const encodedChunks: string[] = [];
+  const chunkByteSize = 4_800;
+  for (let offset = 0; offset < pcmBytes.length; offset += chunkByteSize) {
+    const slice = pcmBytes.slice(offset, offset + chunkByteSize);
+    let binary = "";
+    for (const byte of slice) {
+      binary += String.fromCharCode(byte);
+    }
+    encodedChunks.push(btoa(binary));
+  }
+  return encodedChunks;
+}
+
+async function decodeAndResample(blob: Blob, sampleRate: number) {
+  const inputBuffer = await blob.arrayBuffer();
+  const audioContext = new AudioContext();
+  try {
+    const decoded = await audioContext.decodeAudioData(inputBuffer.slice(0));
+    if (decoded.sampleRate === sampleRate) {
+      return mixToMono(decoded);
+    }
+
+    const offlineContext = new OfflineAudioContext(
+      1,
+      Math.max(1, Math.ceil(decoded.duration * sampleRate)),
+      sampleRate
+    );
+    const source = offlineContext.createBufferSource();
+    source.buffer = decoded;
+    source.connect(offlineContext.destination);
+    source.start(0);
+    const rendered = await offlineContext.startRendering();
+    return mixToMono(rendered);
+  } finally {
+    await audioContext.close();
+  }
+}
+
+function mixToMono(audioBuffer: AudioBuffer) {
+  if (audioBuffer.numberOfChannels === 1) {
+    return audioBuffer;
+  }
+
+  const offlineContext = new OfflineAudioContext(1, audioBuffer.length, audioBuffer.sampleRate);
+  const monoBuffer = offlineContext.createBuffer(1, audioBuffer.length, audioBuffer.sampleRate);
+  const monoChannel = monoBuffer.getChannelData(0);
+  for (let channel = 0; channel < audioBuffer.numberOfChannels; channel += 1) {
+    const channelData = audioBuffer.getChannelData(channel);
+    for (let index = 0; index < channelData.length; index += 1) {
+      monoChannel[index] += channelData[index] / audioBuffer.numberOfChannels;
+    }
+  }
+  return monoBuffer;
+}
+
+function audioBufferToPcm16(audioBuffer: AudioBuffer) {
+  const channelData = audioBuffer.getChannelData(0);
+  const pcm = new Uint8Array(channelData.length * 2);
+  const view = new DataView(pcm.buffer);
+  for (let index = 0; index < channelData.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, channelData[index]));
+    view.setInt16(index * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+  return pcm;
+}
+
+export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): SessionTransport {
+  const apiUrl = deps.apiUrl ?? resolveRealtimeApiUrl();
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const WebSocketImpl = deps.WebSocketImpl ?? WebSocket;
+  let currentSessionId = normalizeSessionId(generateSessionId());
+  let socket: WebSocket | null = null;
+  let socketModel = "";
+  let seededHistorySessionId = "";
+  let conversationHistory: Array<{ transcript: string; tutorText: string }> = [];
+  let activeTurn: ActiveTurn | null = null;
+
+  const closeSocket = () => {
+    if (socket) {
+      socket.onopen = null;
+      socket.onclose = null;
+      socket.onerror = null;
+      socket.onmessage = null;
+      try {
+        socket.close();
+      } catch {
+        // ignore close failures
+      }
+    }
+    socket = null;
+    socketModel = "";
+  };
+
+  const finalizeTurn = () => {
+    if (!activeTurn) {
+      return;
+    }
+    if (activeTurn.timeoutId) {
+      clearTimeout(activeTurn.timeoutId);
+    }
+    const resolvedTurn = activeTurn;
+    const wavBase64 = pcm16ToWavBase64(joinBase64PcmChunks(resolvedTurn.audioBase64Chunks), REALTIME_SAMPLE_RATE);
+    resolvedTurn.resolve({
+      transcript: resolvedTurn.transcript,
+      tutorText: resolvedTurn.tutorText.trim(),
+      state: "speaking",
+      latency: toLatencyMetrics(resolvedTurn.metrics),
+      metricEvents: snapshotSessionMetrics(resolvedTurn.metrics),
+      timestamps: [],
+      audioSegments: resolvedTurn.audioBase64Chunks.length > 0
+        ? [{
+            text: resolvedTurn.tutorText.trim(),
+            audioBase64: wavBase64,
+            audioMimeType: "audio/wav",
+          }]
+        : undefined,
+    });
+    conversationHistory.push({
+      transcript: resolvedTurn.transcript,
+      tutorText: resolvedTurn.tutorText.trim(),
+    });
+    activeTurn = null;
+  };
+
+  const failActiveTurn = (message: string) => {
+    if (!activeTurn) {
+      return;
+    }
+    if (activeTurn.timeoutId) {
+      clearTimeout(activeTurn.timeoutId);
+    }
+    activeTurn.reject(new Error(message));
+    activeTurn = null;
+  };
+
+  const handleMessage = (event: MessageEvent<string>) => {
+    const payload = JSON.parse(event.data) as Record<string, unknown>;
+    if (payload.type === "error") {
+      const message = String((payload.error as Record<string, unknown> | undefined)?.message ?? payload.message ?? "Realtime error");
+      failActiveTurn(message);
+      return;
+    }
+    if (!activeTurn) {
+      return;
+    }
+
+    if (payload.type === "conversation.item.input_audio_transcription.completed") {
+      const transcript = typeof payload.transcript === "string" ? payload.transcript : String(payload.transcript ?? "");
+      activeTurn.transcript = transcript;
+      activeTurn.onTranscriptFinal?.(transcript);
+      activeTurn.metrics.mark({ name: "stt_final", tsMs: performance.now() });
+      return;
+    }
+
+    if (payload.type === "response.text.delta" || payload.type === "response.output_text.delta") {
+      const textDelta = String(payload.delta ?? "");
+      if (textDelta) {
+        activeTurn.tutorText += textDelta;
+        activeTurn.metrics.mark({ name: "llm_first_token", tsMs: performance.now() });
+      }
+      return;
+    }
+
+    if (payload.type === "response.audio_transcript.delta" || payload.type === "response.output_audio_transcript.delta") {
+      const textDelta = String(payload.delta ?? "");
+      if (textDelta) {
+        activeTurn.tutorText += textDelta;
+        activeTurn.metrics.mark({ name: "llm_first_token", tsMs: performance.now() });
+      }
+      return;
+    }
+
+    if (payload.type === "response.audio.delta" || payload.type === "response.output_audio.delta") {
+      const delta = String(payload.delta ?? "");
+      if (delta) {
+        activeTurn.audioBase64Chunks.push(delta);
+        activeTurn.metrics.mark({ name: "tts_first_audio", tsMs: performance.now() });
+      }
+      return;
+    }
+
+    if (payload.type === "response.audio.done" || payload.type === "response.output_audio.done") {
+      activeTurn.responseDone = true;
+      return;
+    }
+
+    if (payload.type === "response.done") {
+      activeTurn.responseDone = true;
+      finalizeTurn();
+    }
+  };
+
+  const sendEvent = (payload: Record<string, unknown>) => {
+    if (!socket || socket.readyState !== WebSocketImpl.OPEN) {
+      throw new Error("Realtime socket is not connected");
+    }
+    socket.send(JSON.stringify(payload));
+  };
+
+  const replayHistory = () => {
+    if (seededHistorySessionId === currentSessionId) {
+      return;
+    }
+    for (const turn of conversationHistory) {
+      sendEvent({
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: turn.transcript }],
+        },
+      });
+      sendEvent({
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: turn.tutorText }],
+        },
+      });
+    }
+    seededHistorySessionId = currentSessionId;
+  };
+
+  const mintClientSecret = async (request: TutorTurnRequest) => {
+    if (!apiUrl) {
+      throw new Error("Realtime token endpoint is not configured");
+    }
+    const response = await fetchImpl(apiUrl, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        instructions: buildRealtimeInstructions(request),
+        model: request.llmModel || "gpt-realtime-mini",
+        voice: REALTIME_VOICE,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error("Realtime token request failed");
+    }
+    const payload = await response.json() as { client_secret?: { value?: string } };
+    const secret = payload.client_secret?.value;
+    if (!secret) {
+      throw new Error("Realtime token response was missing client_secret");
+    }
+    return secret;
+  };
+
+  const ensureSocket = async (request: TutorTurnRequest) => {
+    const requestedModel = request.llmModel || "gpt-realtime-mini";
+    if (socket?.readyState === WebSocketImpl.OPEN && socketModel === requestedModel) {
+      return socket;
+    }
+
+    closeSocket();
+    const clientSecret = await mintClientSecret(request);
+    const ws = new WebSocketImpl(`${REALTIME_SOCKET_URL}?model=${encodeURIComponent(requestedModel)}`, [
+      "realtime",
+      `openai-insecure-api-key.${clientSecret}`,
+    ]);
+
+    return new Promise<WebSocket>((resolve, reject) => {
+      ws.onopen = () => {
+        socket = ws;
+        socketModel = requestedModel;
+        ws.onmessage = handleMessage;
+        ws.onclose = () => {
+          failActiveTurn("Realtime socket closed");
+          closeSocket();
+        };
+        ws.onerror = () => {
+          failActiveTurn("Realtime socket failed");
+          closeSocket();
+        };
+        sendEvent({
+          type: "session.update",
+          session: {
+            type: "realtime",
+            instructions: buildRealtimeInstructions(request),
+            output_modalities: ["audio", "text"],
+            audio: {
+              input: {
+                format: { type: "audio/pcm", rate: REALTIME_SAMPLE_RATE },
+                transcription: { language: "en", model: REALTIME_TRANSCRIPTION_MODEL },
+                turn_detection: null,
+              },
+              output: {
+                format: { type: "audio/pcm", rate: REALTIME_SAMPLE_RATE },
+                voice: REALTIME_VOICE,
+              },
+            },
+          },
+        });
+        replayHistory();
+        resolve(ws);
+      };
+      ws.onerror = () => reject(new Error("Realtime socket failed"));
+    });
+  };
+
+  return {
+    async connect() {
+      return "connected";
+    },
+    getSessionId() {
+      return normalizeSessionId(currentSessionId);
+    },
+    async runTurn(request) {
+      if (typeof window === "undefined") {
+        return {
+          transcript: request.studentText,
+          tutorText: "Realtime response",
+          state: "speaking",
+          latency: {
+            speechEndToSttFinalMs: 0,
+            sttFinalToLlmFirstTokenMs: 0,
+            llmFirstTokenToTtsFirstAudioMs: 0,
+          },
+          timestamps: [],
+        };
+      }
+
+      if (!isRealtimeRequest(request)) {
+        throw new Error("OpenAI Realtime transport received a non-realtime request");
+      }
+      if (activeTurn) {
+        throw new Error("A tutor turn is already in progress");
+      }
+
+      await ensureSocket(request);
+
+      return new Promise<TutorTurnResult>(async (resolve, reject) => {
+        const metrics = createSessionMetrics();
+        metrics.mark({ name: "speech_end", tsMs: performance.now() });
+        const turn = {
+          audioBase64Chunks: [],
+          metrics,
+          onTranscriptFinal: request.onTranscriptFinal,
+          phase: isAudioTurn(request) ? "input" : "response",
+          reject,
+          resolve,
+          responseDone: false,
+          timeoutId: null,
+          transcript: request.studentText,
+          tutorText: "",
+        } as ActiveTurn;
+        turn.timeoutId = setTimeout(() => {
+          failActiveTurn(`OpenAI Realtime turn timed out during ${turn.phase === "input" ? "audio input" : "response generation"}`);
+        }, REALTIME_API_TIMEOUT_MS);
+        activeTurn = turn;
+
+        try {
+          if (isAudioTurn(request)) {
+            const pcmChunks = await capturedChunksToPcmBase64Chunks(request.audioChunks ?? []);
+            for (const chunk of pcmChunks) {
+              sendEvent({ type: "input_audio_buffer.append", audio: chunk });
+            }
+            sendEvent({ type: "input_audio_buffer.commit" });
+          } else {
+            turn.metrics.mark({ name: "stt_final", tsMs: performance.now() });
+            sendEvent({
+              type: "conversation.item.create",
+              item: {
+                type: "message",
+                role: "user",
+                content: [{ type: "input_text", text: request.studentText }],
+              },
+            });
+          }
+
+          turn.phase = "response";
+          sendEvent({
+            type: "response.create",
+            response: {
+              modalities: ["audio", "text"],
+            },
+          });
+        } catch (error) {
+          failActiveTurn(error instanceof Error ? error.message : "Could not start OpenAI Realtime turn");
+        }
+      });
+    },
+    async interrupt() {
+      if (!socket || socket.readyState !== WebSocketImpl.OPEN) {
+        return;
+      }
+      sendEvent({ type: "response.cancel" });
+      sendEvent({ type: "input_audio_buffer.clear" });
+      failActiveTurn("Tutor turn interrupted");
+    },
+    async reset() {
+      conversationHistory = [];
+      seededHistorySessionId = "";
+      currentSessionId = normalizeSessionId(generateSessionId());
+      closeSocket();
+    },
+    async switchSession(sessionId, thread) {
+      currentSessionId = normalizeSessionId(sessionId);
+      conversationHistory = thread
+        ? thread.conversation.map((turn) => ({ transcript: turn.transcript, tutorText: turn.tutorText }))
+        : [];
+      seededHistorySessionId = "";
+      closeSocket();
+    },
+  };
+}

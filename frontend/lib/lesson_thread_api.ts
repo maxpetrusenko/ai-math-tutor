@@ -1,4 +1,5 @@
 import type { PersistedLessonArchiveEntry, PersistedLessonThreadStore, PersistedLessonThread } from "./lesson_thread_store";
+import { getCurrentFirebaseIdToken } from "./firebase_auth";
 
 function resolveLessonApiUrl() {
   if (typeof process !== "undefined" && process.env.NODE_ENV === "test") {
@@ -32,9 +33,11 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T | nul
   }
 
   try {
+    const idToken = await getCurrentFirebaseIdToken();
     const response = await fetch(path ? `${baseUrl}${path}` : baseUrl, {
       credentials: "include",
       headers: {
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         "Content-Type": "application/json",
       },
       ...init,

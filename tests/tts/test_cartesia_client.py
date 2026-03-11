@@ -63,15 +63,19 @@ def test_cartesia_client_uses_live_bytes_api_when_key_present(monkeypatch) -> No
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    perf_values = iter([20.0, 20.18])
+    perf_values = iter([20.0, 20.0, 20.18, 20.18])
     tracker = LatencyTracker()
     client = CartesiaClient()
     audio_bytes = _build_wav(duration_ms=320)
+    captured_timeout: list[float] = []
 
     monkeypatch.setenv("CARTESIA_API_KEY", "cartesia-test")
     monkeypatch.setenv("NERDY_TTS_VOICE_CARTESIA", "voice-live")
     monkeypatch.setattr("backend.tts.cartesia_client.load_local_env", lambda: [])
-    monkeypatch.setattr("backend.tts.cartesia_client.request.urlopen", lambda *args, **kwargs: _FakeResponse(audio_bytes))
+    monkeypatch.setattr(
+        "backend.tts.cartesia_client.request.urlopen",
+        lambda *args, **kwargs: captured_timeout.append(kwargs["timeout"]) or _FakeResponse(audio_bytes),
+    )
     monkeypatch.setattr("backend.tts.cartesia_client.time.perf_counter", lambda: next(perf_values))
 
     client.start_context(turn_id="turn-live", voice_config={"voice_id": "voice-live"})
@@ -90,6 +94,7 @@ def test_cartesia_client_uses_live_bytes_api_when_key_present(monkeypatch) -> No
     assert tracker.events[0].name == "tts_first_audio"
     assert tracker.events[0].ts_ms == 1180.0
     assert tracker.events[0].metadata["mode"] == "live"
+    assert captured_timeout == [4.0]
 
 
 def _build_wav(*, duration_ms: int) -> bytes:

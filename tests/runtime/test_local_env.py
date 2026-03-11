@@ -28,6 +28,16 @@ def test_load_local_env_does_not_override_existing_environment(tmp_path: Path) -
     assert env["DEEPGRAM_API_KEY"] == "dg-existing"
 
 
+def test_load_local_env_allows_later_files_to_override_earlier_loaded_values(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("DEEPGRAM_API_KEY=dg-base\n")
+    (tmp_path / ".env.local").write_text("DEEPGRAM_API_KEY=dg-local\n")
+    env: dict[str, str] = {}
+
+    load_local_env(base_dir=tmp_path, env=env, files=(".env", ".env.local"))
+
+    assert env["DEEPGRAM_API_KEY"] == "dg-local"
+
+
 def test_shell_export_commands_include_loaded_values(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text("DEEPGRAM_API_KEY=dg-shell\n")
 

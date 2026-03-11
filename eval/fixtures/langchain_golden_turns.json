@@ -1,0 +1,60 @@
+{
+  "cases": [
+    {
+      "id": "math_expression_intro",
+      "subject": "math",
+      "grade_band": "6-8",
+      "latest_student_text": "2+2",
+      "history": [],
+      "student_profile": {},
+      "expected_concept": "linear equations",
+      "expected_prompt_contains": [
+        "Subject: math.",
+        "Prioritize the latest student turn.",
+        "2+2"
+      ],
+      "expected_reply": "Let's work on 2+2. What total do you get when you add 2 and 2?"
+    },
+    {
+      "id": "science_photosynthesis_intro",
+      "subject": "science",
+      "grade_band": "9-10",
+      "latest_student_text": "What about photosynthesis?",
+      "history": [],
+      "student_profile": {
+        "pacing": "slow"
+      },
+      "expected_concept": "photosynthesis basics",
+      "expected_prompt_contains": [
+        "Subject: science.",
+        "Student profile: pacing: slow.",
+        "What about photosynthesis?"
+      ],
+      "expected_reply": "Good question. What do plants use from light to start making food?"
+    },
+    {
+      "id": "math_follow_up_short_answer",
+      "subject": "math",
+      "grade_band": "6-8",
+      "latest_student_text": "4",
+      "history": [
+        {
+          "role": "assistant",
+          "content": "Let's work on 2+2. What total do you get when you add 2 and 2?"
+        },
+        {
+          "role": "user",
+          "content": "2+2"
+        }
+      ],
+      "student_profile": {},
+      "expected_concept": "linear equations",
+      "expected_prompt_contains": [
+        "Subject: math.",
+        "Let's work on 2+2.",
+        "4"
+      ],
+      "expected_reply": "That's right; 2+2 gives 4. How did you get 4?"
+    }
+  ]
+}

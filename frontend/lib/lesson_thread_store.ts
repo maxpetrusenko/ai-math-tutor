@@ -6,6 +6,13 @@ import {
   saveActiveLessonThread,
 } from "./lesson_thread_api";
 import {
+  archiveFirebaseLessonThread,
+  clearFirebaseActiveLessonThread,
+  fetchFirebaseArchivedLessonThread,
+  fetchFirebaseLessonStore,
+  saveFirebaseActiveLessonThread,
+} from "./firebase_lessons";
+import {
   DEFAULT_LLM_MODEL,
   DEFAULT_LLM_PROVIDER,
   DEFAULT_TTS_MODEL,
@@ -13,9 +20,45 @@ import {
 } from "./runtime_options";
 
 export type PersistedConversationTurn = {
+  debug?: PersistedTurnDebug;
   id: string;
   transcript: string;
   tutorText: string;
+};
+
+export type PersistedTurnDebug = {
+  audio?: {
+    chunkCount: number;
+    mimeTypes: string[];
+    totalBytes: number;
+    withPayloadCount: number;
+  };
+  latency?: {
+    llmFirstTokenToTtsFirstAudioMs: number;
+    speechEndToSttFinalMs: number;
+    sttFinalToLlmFirstTokenMs: number;
+  };
+  request: {
+    gradeBand: string;
+    llmModel: string;
+    llmProvider: string;
+    preference: string;
+    source: "mic" | "text";
+    studentTextLength: number;
+    subject: string;
+    ttsModel: string;
+    ttsProvider: string;
+  };
+  response: {
+    audioSegmentCount: number;
+    state: string;
+    timestampCount: number;
+    transcriptLength: number;
+    tutorTextLength: number;
+  };
+  sessionId: string;
+  startedAt: string;
+  transport: "openai-realtime" | "session-socket";
 };
 
 export type PersistedLessonThread = {
@@ -296,6 +339,12 @@ export function clearPersistedLessonThread() {
 }
 
 export async function hydrateLessonThreadStore() {
+  const firebaseStore = await fetchFirebaseLessonStore().catch(() => null);
+  if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
+    writeStore(firebaseStore);
+    return firebaseStore;
+  }
+
   const remoteStore = await fetchLessonStore();
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
     writeStore(remoteStore);
@@ -307,6 +356,13 @@ export async function hydrateLessonThreadStore() {
 
 export async function persistActiveLessonThread(thread: PersistedLessonThread) {
   writePersistedLessonThread(thread);
+  const localStore = readStore();
+  const firebaseStore = await saveFirebaseActiveLessonThread(thread, localStore).catch(() => null);
+  if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
+    writeStore(firebaseStore);
+    return;
+  }
+
   const remoteStore = await saveActiveLessonThread(thread);
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
     writeStore(remoteStore);
@@ -319,6 +375,12 @@ export async function persistArchivedLessonThread(thread: PersistedLessonThread)
   store.archive = [nextEntry, ...store.archive].slice(0, MAX_ARCHIVED_THREADS);
   writeStore(store);
 
+  const firebaseStore = await archiveFirebaseLessonThread(nextEntry, store).catch(() => null);
+  if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
+    writeStore(firebaseStore);
+    return firebaseStore.archive.map(({ thread: _thread, ...summary }) => summary);
+  }
+
   const remoteStore = await archiveRemoteLessonThread(nextEntry);
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
     writeStore(remoteStore);
@@ -330,6 +392,13 @@ export async function persistArchivedLessonThread(thread: PersistedLessonThread)
 
 export async function clearPersistedLessonThreadRemote() {
   clearPersistedLessonThread();
+  const localStore = readStore();
+  const firebaseStore = await clearFirebaseActiveLessonThread(localStore).catch(() => null);
+  if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
+    writeStore(firebaseStore);
+    return;
+  }
+
   const remoteStore = await clearRemoteActiveLessonThread();
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
     writeStore(remoteStore);
@@ -337,6 +406,21 @@ export async function clearPersistedLessonThreadRemote() {
 }
 
 export async function refreshArchivedLessonThread(id: string) {
+  const firebaseThread = await fetchFirebaseArchivedLessonThread(id).catch(() => null);
+  if (firebaseThread) {
+    const store = readStore();
+    const entryIndex = store.archive.findIndex((entry) => entry.id === id);
+    if (entryIndex >= 0) {
+      store.archive[entryIndex] = {
+        ...store.archive[entryIndex],
+        thread: firebaseThread,
+      };
+      writeStore(store);
+    }
+
+    return firebaseThread;
+  }
+
   const thread = await fetchArchivedLessonThread(id);
   if (!thread) {
     return readArchivedLessonThread(id);

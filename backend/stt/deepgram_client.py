@@ -11,7 +11,9 @@ from urllib.parse import urlencode
 from websockets.asyncio.client import connect as websocket_connect
 from websockets.exceptions import ConnectionClosed
 
+from backend.ai.call_logging import run_logged_ai_call_async
 from backend.monitoring.latency_tracker import LatencyTracker
+from backend.runtime.local_env import load_local_env
 from backend.stt.provider import StreamingSTTSession, TranscriptEvent
 from backend.turn_taking.transcript_commit import TranscriptCommitter
 
@@ -98,6 +100,10 @@ class DeepgramStreamingClient:
     async def open_session(self, tracker: LatencyTracker) -> StreamingSTTSession:
         api_key = self.config.api_key
         if not api_key:
+            load_local_env()
+            api_key = os.getenv("DEEPGRAM_API_KEY")
+            self.config.api_key = api_key
+        if not api_key:
             raise RuntimeError("DEEPGRAM_API_KEY is required for audio streaming STT")
 
         url = _build_listen_url(self.config)
@@ -105,7 +111,14 @@ class DeepgramStreamingClient:
             "deepgram session opening %s",
             _json_summary({"model": self.config.model, "url": url}),
         )
-        connection = await self.transport.connect(api_key, url)
+        connection = await run_logged_ai_call_async(
+            logger=logger,
+            provider="deepgram",
+            operation="stt.open_session",
+            request_payload={"model": self.config.model, "url": url},
+            call=lambda: self.transport.connect(api_key, url),
+            response_summarizer=lambda _connection: {"session": "opened", "model": self.config.model},
+        )
         return DeepgramStreamingSession(
             connection=connection,
             tracker=tracker,
@@ -127,17 +140,32 @@ class DeepgramStreamingSession:
         self._tracker = tracker
         self._committer = TranscriptCommitter(stability_repeats=stability_repeats)
         self._model = model
+        self._chunk_count = 0
+        self._audio_bytes_sent = 0
+        self._last_chunk_ts_ms: float | None = None
 
     async def push_audio(self, chunk: bytes, *, ts_ms: float | None = None) -> list[TranscriptEvent]:
         logger.info(
             "deepgram audio send %s",
             _json_summary({"chunk_bytes": len(chunk), "ts_ms": ts_ms}),
         )
-        try:
-            await self._connection.send_bytes(chunk)
-        except ConnectionClosed as error:
-            raise RuntimeError(_format_connection_closed(error)) from error
-        return await self._drain_events(ts_ms=ts_ms)
+        chunk_delta_ms = round(ts_ms - self._last_chunk_ts_ms, 1) if ts_ms is not None and self._last_chunk_ts_ms is not None else None
+        return await run_logged_ai_call_async(
+            logger=logger,
+            provider="deepgram",
+            operation="stt.push_audio",
+            request_payload={
+                "chunk": chunk,
+                "chunk_bytes": len(chunk),
+                "chunk_delta_ms": chunk_delta_ms,
+                "chunk_index": self._chunk_count + 1,
+                "model": self._model,
+                "total_audio_bytes_after_send": self._audio_bytes_sent + len(chunk),
+                "ts_ms": ts_ms,
+            },
+            call=lambda: self._push_audio_impl(chunk, ts_ms=ts_ms),
+            response_summarizer=_summarize_transcript_events,
+        )
 
     async def finalize(self, *, ts_ms: float) -> list[TranscriptEvent]:
         payload = {"type": "Finalize"}
@@ -145,6 +173,26 @@ class DeepgramStreamingSession:
             "deepgram control send %s",
             _json_summary({"control_type": payload["type"], "ts_ms": ts_ms}),
         )
+        return await run_logged_ai_call_async(
+            logger=logger,
+            provider="deepgram",
+            operation="stt.finalize",
+            request_payload={"payload": payload, "ts_ms": ts_ms},
+            call=lambda: self._finalize_impl(payload, ts_ms=ts_ms),
+            response_summarizer=_summarize_transcript_events,
+        )
+
+    async def _push_audio_impl(self, chunk: bytes, *, ts_ms: float | None) -> list[TranscriptEvent]:
+        self._chunk_count += 1
+        self._audio_bytes_sent += len(chunk)
+        self._last_chunk_ts_ms = ts_ms
+        try:
+            await self._connection.send_bytes(chunk)
+        except ConnectionClosed as error:
+            raise RuntimeError(_format_connection_closed(error)) from error
+        return await self._drain_events(ts_ms=ts_ms)
+
+    async def _finalize_impl(self, payload: dict[str, object], *, ts_ms: float) -> list[TranscriptEvent]:
         try:
             await self._connection.send_json(payload)
         except ConnectionClosed as error:
@@ -248,10 +296,15 @@ def _summarize_payload(payload: dict[str, object]) -> dict[str, object]:
         channel = payload.get("channel", {})
         alternatives = channel.get("alternatives", []) if isinstance(channel, dict) else []
         transcript = ""
+        confidence: float | None = None
         if alternatives:
             transcript = str(alternatives[0].get("transcript", "")).strip()
+            raw_confidence = alternatives[0].get("confidence")
+            if isinstance(raw_confidence, (float, int)):
+                confidence = round(float(raw_confidence), 4)
         summary.update(
             {
+                "confidence": confidence,
                 "is_final": bool(payload.get("is_final")),
                 "transcript_length": len(transcript),
                 "transcript_preview": transcript[:120],
@@ -263,3 +316,11 @@ def _summarize_payload(payload: dict[str, object]) -> dict[str, object]:
 
 def _format_connection_closed(error: ConnectionClosed) -> str:
     return f"deepgram connection closed: code={error.code} reason={error.reason or 'unknown'}"
+
+
+def _summarize_transcript_events(events: list[TranscriptEvent]) -> dict[str, object]:
+    return {
+        "event_count": len(events),
+        "event_types": [event.get("type", "unknown") for event in events],
+        "texts": [str(event.get("text") or "")[:120] for event in events],
+    }
