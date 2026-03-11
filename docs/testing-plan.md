@@ -54,6 +54,12 @@ Backend:
 python3 -m pytest -q
 ```
 
+Local env contract:
+
+```bash
+python3 -m backend.runtime.env_contract --mode local
+```
+
 Frontend:
 
 ```bash
@@ -61,6 +67,24 @@ cd frontend
 pnpm test
 pnpm typecheck
 pnpm build
+```
+
+Hosted smoke after deploy:
+
+```bash
+pnpm smoke:prod -- --frontend-url https://your-hosted-frontend --expect-firebase --expect-auth
+```
+
+Hosted staging gate before prod:
+
+```bash
+pnpm deploy:stage --stage-project your-staging-firebase-project --stage-backend-env-file .env.deploy.staging --git-commit "$(git rev-parse HEAD)"
+```
+
+Promotion after staging smoke:
+
+```bash
+pnpm promote:prod --stage-project your-staging-firebase-project --stage-backend-env-file .env.deploy.staging --prod-project ai-math-tutor-b39b3 --prod-backend-env-file .env.deploy.prod --git-commit "$(git rev-parse HEAD)"
 ```
 
 Future browser smoke gate after Task 18:

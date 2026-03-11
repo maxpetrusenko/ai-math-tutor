@@ -133,6 +133,37 @@ pnpm install
 pnpm dev --hostname 127.0.0.1 --port 3000
 ```
 
+### Deploy
+
+Hosted deploys use a separate staging Firebase and GCP project, then promote the same git commit to prod after smoke passes.
+
+Stage:
+
+```bash
+pnpm deploy:stage \
+  --stage-project your-staging-firebase-project \
+  --stage-backend-env-file .env.deploy.staging \
+  --git-commit "$(git rev-parse HEAD)"
+```
+
+Promote:
+
+```bash
+pnpm promote:prod \
+  --stage-project your-staging-firebase-project \
+  --stage-backend-env-file .env.deploy.staging \
+  --prod-project ai-math-tutor-b39b3 \
+  --prod-backend-env-file .env.deploy.prod \
+  --git-commit "$(git rev-parse HEAD)"
+```
+
+Keep the backend deploy env in local ignored files:
+
+- `.env.deploy.staging`
+- `.env.deploy.prod`
+
+Full operator flow: [`docs/staging-rollout.md`](docs/staging-rollout.md)
+
 ### Environment
 
 Backend:

@@ -10,7 +10,7 @@ env:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_SESSION_WS_URL
-    value: wss://ai-math-tutor-session-287553407736.us-east4.run.app/ws/session
+    secret: SESSION_WS_URL
     availability:
       - BUILD
       - RUNTIME

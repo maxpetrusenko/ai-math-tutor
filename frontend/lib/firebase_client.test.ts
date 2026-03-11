@@ -46,3 +46,24 @@ test("firebase client reports enabled when public JSON config is present", async
 
   expect(module.isFirebaseEnabled()).toBe(true);
 });
+
+test("firebase client treats a no-content runtime config response as disabled", async () => {
+  delete process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  const fetchMock = vi.fn(async () => ({
+    ok: true,
+    status: 204,
+    async json() {
+      return null;
+    },
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("window", {} as Window & typeof globalThis);
+
+  const module = await import("./firebase_client");
+
+  await expect(module.ensureFirebaseApp()).resolves.toBeNull();
+  expect(fetchMock).toHaveBeenCalledWith("/api/firebase/config", {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
+});

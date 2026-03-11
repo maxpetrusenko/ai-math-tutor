@@ -1,5 +1,18 @@
 import { afterEach, vi } from "vitest";
 
+const { getCurrentFirebaseIdToken, getFirebaseAuthClient } = vi.hoisted(() => ({
+  getCurrentFirebaseIdToken: vi.fn<() => Promise<string | null>>(),
+  getFirebaseAuthClient: vi.fn<() => object | null>(),
+}));
+
+vi.mock("./firebase_auth", () => ({
+  getCurrentFirebaseIdToken,
+}));
+
+vi.mock("./firebase_client", () => ({
+  getFirebaseAuthClient,
+}));
+
 import { createSessionSocketTransport } from "./session_socket";
 
 
@@ -43,6 +56,10 @@ class FakeWebSocket {
 
 afterEach(() => {
   FakeWebSocket.instances = [];
+  getCurrentFirebaseIdToken.mockReset();
+  getCurrentFirebaseIdToken.mockResolvedValue(null);
+  getFirebaseAuthClient.mockReset();
+  getFirebaseAuthClient.mockReturnValue(null);
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -130,7 +147,7 @@ test("session transport exposes transcript final before the turn resolves", asyn
   await expect(runPromise).resolves.toMatchObject({ transcript: "2+2" });
 });
 
-test("session transport logs speech end summary and close details without chunk spam", async () => {
+test("session transport logs audio chunk and speech end summaries before socket close", async () => {
   vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
   const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
   const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -152,6 +169,17 @@ test("session transport logs speech end summary and close details without chunk 
     ([prefix, event]) => prefix === "[session_socket]" && event === "send"
   );
   expect(sendLogs).toEqual([
+    [
+      "[session_socket]",
+      "send",
+      expect.objectContaining({
+        bytesBase64Length: 8,
+        mimeType: "audio/webm",
+        sequence: 2,
+        size: 1280,
+        type: "audio.chunk",
+      }),
+    ],
     [
       "[session_socket]",
       "send",
@@ -201,6 +229,26 @@ test("session transport returns failed when websocket connect errors", async () 
   vi.stubGlobal("WebSocket", ErrorWebSocket as unknown as typeof WebSocket);
 
   await expect(createSessionSocketTransport().connect()).resolves.toBe("failed");
+});
+
+test("session transport refuses websocket connect before firebase auth is ready", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+  getFirebaseAuthClient.mockReturnValue({ currentUser: null });
+  getCurrentFirebaseIdToken.mockResolvedValue(null);
+
+  await expect(createSessionSocketTransport().connect()).resolves.toBe("failed");
+  expect(FakeWebSocket.instances).toHaveLength(0);
+});
+
+test("session transport appends firebase auth token to websocket url when available", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+  getFirebaseAuthClient.mockReturnValue({ currentUser: { uid: "user-1" } });
+  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
+
+  await expect(createSessionSocketTransport().connect()).resolves.toBe("connected");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(FakeWebSocket.instances[0]?.url).toContain("auth_token=firebase-id-token");
 });
 
 test("session transport logs a single warning when websocket connect fails before open", async () => {
@@ -424,6 +472,72 @@ test("session transport sends text-only turns without fake audio chunks", async 
   await expect(runPromise).resolves.toMatchObject({ transcript: "text only" });
 });
 
+test("session transport can transcribe audio without starting a tutor reply", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+
+  const updates: string[] = [];
+  const transport = createSessionSocketTransport();
+  const transcribePromise = transport.transcribeAudio?.({
+    studentText: "",
+    subject: "math",
+    gradeBand: "6-8",
+    audioChunks: [{ sequence: 1, size: 320, bytesBase64: "YWJj", mimeType: "audio/webm" }],
+    onTranscriptUpdate(text) {
+      updates.push(text);
+    },
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const socket = FakeWebSocket.instances[0];
+  const sentPayloads = socket.sent.map((payload) => JSON.parse(payload) as Record<string, unknown>);
+
+  expect(sentPayloads[0]).toMatchObject({ type: "audio.chunk" });
+  expect(sentPayloads[1]).toMatchObject({
+    type: "speech.end",
+    transcribe_only: true,
+  });
+
+  socket.emit({ type: "transcript.partial_stable", text: "2 plus" });
+  socket.emit({ type: "transcript.final", text: "2 plus 2" });
+
+  await expect(transcribePromise).resolves.toBe("2 plus 2");
+  expect(updates).toEqual(["2 plus", "2 plus 2"]);
+});
+
+test("session transport combines multi-chunk browser audio before transcription", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+
+  const transport = createSessionSocketTransport();
+  const transcribePromise = transport.transcribeAudio?.({
+    studentText: "",
+    subject: "math",
+    gradeBand: "6-8",
+    audioChunks: [
+      { sequence: 1, size: 3, bytesBase64: "YWJj", mimeType: "audio/webm;codecs=opus" },
+      { sequence: 2, size: 2, bytesBase64: "ZGU=", mimeType: "audio/webm;codecs=opus" },
+    ],
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const socket = FakeWebSocket.instances[0];
+  const sentPayloads = socket.sent.map((payload) => JSON.parse(payload) as Record<string, unknown>);
+
+  expect(sentPayloads[0]).toMatchObject({
+    type: "audio.chunk",
+    sequence: 1,
+    size: 5,
+    mime_type: "audio/webm;codecs=opus",
+    bytes_b64: "YWJjZGU=",
+  });
+  expect(sentPayloads[1]).toMatchObject({
+    type: "speech.end",
+    transcribe_only: true,
+  });
+
+  socket.emit({ type: "transcript.final", text: "abcde" });
+  await expect(transcribePromise).resolves.toBe("abcde");
+});
+
 test("session transport waits for the final tts chunk before resolving the turn", async () => {
   vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
 
@@ -489,6 +603,52 @@ test("session transport waits for the final tts chunk before resolving the turn"
   });
 });
 
+test("session transport preserves a conversational multi-chunk tutor reply", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+
+  const transport = createSessionSocketTransport();
+  const runPromise = transport.runTurn({
+    studentText: "please help me solve it",
+    subject: "math",
+    gradeBand: "6-8",
+    audioChunks: [],
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const socket = FakeWebSocket.instances[0];
+
+  socket.emit({ type: "transcript.final", text: "please help me solve it" });
+  socket.emit({ type: "state.changed", state: "speaking" });
+  socket.emit({ type: "tutor.text.committed", text: "Great," });
+  socket.emit({
+    type: "tts.audio",
+    audio_b64: "YQ==",
+    audio_mime_type: "audio/wav",
+    is_final: false,
+    timestamps: [{ word: "Great", start_ms: 0, end_ms: 90 }],
+  });
+  socket.emit({
+    type: "tutor.text.committed",
+    text: "let's go step by step. What do you get if you start with 2 and add 2?",
+  });
+  socket.emit({
+    type: "tts.audio",
+    audio_b64: "Yg==",
+    audio_mime_type: "audio/wav",
+    is_final: true,
+    timestamps: [{ word: "let's", start_ms: 0, end_ms: 120 }],
+  });
+
+  await expect(runPromise).resolves.toMatchObject({
+    transcript: "please help me solve it",
+    tutorText: "Great, let's go step by step. What do you get if you start with 2 and add 2?",
+    audioSegments: [
+      { text: "Great," },
+      { text: "let's go step by step. What do you get if you start with 2 and add 2?" },
+    ],
+  });
+});
+
 test("session transport resets the active lesson", async () => {
   vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
 
@@ -518,7 +678,7 @@ test("session transport can switch websocket sessions and restore lesson history
       },
     ],
     gradeBand: "6-8",
-    llmModel: "gemini-2.5-flash",
+    llmModel: "gemini-3-flash-preview",
     llmProvider: "gemini",
     preference: "slow down",
     sessionId: "lesson-42",

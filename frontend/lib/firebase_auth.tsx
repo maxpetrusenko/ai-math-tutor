@@ -11,6 +11,9 @@ import {
 
 import { ensureFirebaseApp, getFirebaseAuthClient, isFirebaseEnabled } from "./firebase_client";
 
+export const FIREBASE_AUTH_NOT_CONFIGURED_MESSAGE =
+  "Firebase auth is not configured on this dev server. Set FIREBASE_WEBAPP_CONFIG in .env.local and restart bash scripts/dev.sh.";
+
 type FirebaseAuthContextValue = {
   authReady: boolean;
   firebaseEnabled: boolean;
@@ -78,9 +81,10 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
         authReady,
         firebaseEnabled,
         async signInWithGoogle() {
+          await ensureFirebaseApp();
           const auth = getFirebaseAuthClient();
           if (!auth) {
-            return;
+            throw new Error(FIREBASE_AUTH_NOT_CONFIGURED_MESSAGE);
           }
 
           await signInWithPopup(auth, new GoogleAuthProvider());

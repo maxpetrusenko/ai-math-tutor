@@ -6,8 +6,13 @@
 	},
 	"scripts": {
 		"build": "pnpm install --frozen-lockfile --dir frontend && pnpm --dir frontend build",
+		"check:env:local": "python3 -m backend.runtime.env_contract --mode local",
+		"check:env:prod": "python3 -m backend.runtime.env_contract --mode prod",
+		"deploy:stage": "python3 scripts/rollout_hosted.py stage",
+		"promote:prod": "python3 scripts/rollout_hosted.py promote",
 		"start": "pnpm --dir frontend start",
 		"dev": "pnpm --dir frontend dev",
+		"smoke:prod": "python3 scripts/smoke_hosted.py",
 		"test": "pnpm --dir frontend test",
 		"typecheck": "pnpm --dir frontend typecheck"
 	},

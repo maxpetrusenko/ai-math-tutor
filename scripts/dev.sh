@@ -19,6 +19,7 @@ trap cleanup EXIT INT TERM
 cd "${ROOT_DIR}"
 if command -v python3 >/dev/null 2>&1; then
   eval "$(python3 -m backend.runtime.local_env --shell)"
+  python3 -m backend.runtime.env_contract --mode local
 fi
 uvicorn backend.session.server:app --host "${HOST}" --port "${BACKEND_PORT}" &
 BACKEND_PID=$!
