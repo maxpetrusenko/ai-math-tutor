@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback } from "react";
+import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -115,21 +115,12 @@ const navSections: NavSection[] = [
 
 type SidebarProps = {
   collapsed?: boolean;
-  onToggle?: () => void;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
 };
 
-export function Sidebar({ collapsed = false, onToggle, mobileOpen, onMobileClose }: SidebarProps) {
+export function Sidebar({ collapsed = false, mobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
-
-  const isItemActive = useCallback((item: NavItem): boolean => {
-    if (pathname === item.href) return true;
-    if (item.children) {
-      return item.children.some((child) => pathname === child.href);
-    }
-    return false;
-  }, [pathname]);
 
   return (
     <aside
@@ -143,11 +134,13 @@ export function Sidebar({ collapsed = false, onToggle, mobileOpen, onMobileClose
             {!collapsed ? <div className="app-sidebar__section-label">{section.label}</div> : null}
             {section.items.map((item) => {
               const hasChildren = item.children && item.children.length > 0;
-              const isActive = isItemActive(item);
+              const isActive = pathname === item.href
+                || (item.children ? item.children.some((child) => pathname === child.href) : false);
 
               return (
                 <div key={item.id}>
                   <Link
+                    aria-current={isActive ? "page" : undefined}
                     href={item.href}
                     className={`nav-item ${isActive ? "nav-item--active" : ""}`}
                     onClick={onMobileClose}

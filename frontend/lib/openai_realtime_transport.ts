@@ -1,5 +1,5 @@
 import { createSessionMetrics, snapshotSessionMetrics, toLatencyMetrics } from "./session_metrics";
-import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/TutorSession";
+import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/session/session_types";
 import { getCurrentFirebaseIdToken } from "./firebase_auth";
 import { getFirebaseAuthClient } from "./firebase_client";
 import type { PersistedLessonThread } from "./lesson_thread_store";

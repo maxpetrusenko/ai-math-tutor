@@ -43,6 +43,7 @@ bash scripts/dev.sh
 ## UI behavior
 
 - Select a managed avatar in `/avatar`
+- The avatar picker shows a local looped preview clip so browsing does not consume provider sessions
 - Open `/session`
 - The avatar panel switches to a LiveKit room surface
 - Click `Start Live Session`

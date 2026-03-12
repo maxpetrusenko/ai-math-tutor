@@ -6,6 +6,7 @@ import { BrowserAudioCapture } from "../lib/audio_capture";
 import {
   clearPersistedLessonThread,
   persistArchivedLessonThread,
+  readPersistedLessonThread,
   writePersistedLessonThread,
 } from "../lib/lesson_thread_store";
 import { writeSessionPreferences } from "../lib/session_preferences";
@@ -396,6 +397,42 @@ test("send text turn appends conversation history and new lesson clears it", asy
   expect(screen.getByLabelText("Student prompt")).toHaveValue("");
 });
 
+test("send text turns persist unique conversation ids", async () => {
+  let callCount = 0;
+
+  await renderSession(createConnectedTransport({
+    async runTurn(request) {
+      callCount += 1;
+      return {
+        transcript: String(request.studentText),
+        tutorText: `reply ${callCount}`,
+        state: "speaking",
+        latency: {
+          speechEndToSttFinalMs: 10,
+          sttFinalToLlmFirstTokenMs: 20,
+          llmFirstTokenToTtsFirstAudioMs: 30,
+        },
+        timestamps: [{ word: "Tutor", startMs: 0, endMs: 100 }],
+      };
+    },
+  }));
+
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "Persist this lesson" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(screen.getAllByText("reply 1").length).toBeGreaterThan(0));
+
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "Persist this lesson again" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(screen.getAllByText("reply 2").length).toBeGreaterThan(0));
+
+  const persistedThread = readPersistedLessonThread();
+  expect(persistedThread?.conversation.map((turn) => turn.id)).toEqual(["1", "2"]);
+});
+
 test("restores persisted lessons using saved defaults and conversation state", async () => {
   writePersistedLessonThread({
     avatarProviderId: "robot-css-2d",
@@ -467,7 +504,7 @@ test("restores persisted lesson progress and leads with the saved next question"
 
   await renderSession();
 
-  await waitFor(() => expect(screen.getByText("Intro to Fractions")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getAllByText("Intro to Fractions").length).toBeGreaterThan(0));
   expect(screen.getByText("Step 2 of 3")).toBeInTheDocument();
   expect(screen.getByText("Convert each fraction to twelfths")).toBeInTheDocument();
   expect(screen.getByText("How do we rewrite 1/4 as a fraction with denominator 12?")).toBeInTheDocument();

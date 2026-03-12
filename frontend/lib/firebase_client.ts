@@ -2,7 +2,6 @@
 
 import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
-import { getFirestore, type Firestore } from "firebase/firestore";
 import { readFirebaseWebConfigFromEnv, type FirebaseWebConfig } from "./firebase_config";
 
 let resolvedConfig: FirebaseWebConfig | null | undefined;
@@ -108,17 +107,4 @@ export function getFirebaseAuthClient(): Auth | null {
   }
 
   return getAuth(app);
-}
-
-export function getFirebaseFirestore(): Firestore | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const app = getFirebaseApp();
-  if (!app) {
-    return null;
-  }
-
-  return getFirestore(app);
 }

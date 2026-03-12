@@ -50,6 +50,10 @@ test("renders the tutor-style session shell", async () => {
   expect(screen.queryByTestId("session-chat")).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getAllByText("Intro to Fractions").length).toBeGreaterThan(0));
   expect(screen.queryByText("Ready for a new lesson?")).not.toBeInTheDocument();
+  expect(screen.getAllByText("Sage").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Patient guide").length).toBeGreaterThan(0);
+  expect(screen.getByText("Grade 3-5")).toBeInTheDocument();
+  expect(screen.getByText("Tutor approach")).toBeInTheDocument();
   expect(screen.getByPlaceholderText("What common denominator can we use for 1/4 and 2/3?")).toBeInTheDocument();
   expect(screen.getByText("Step 1 of 3")).toBeInTheDocument();
   expect(screen.getAllByText("Add fractions with unlike denominators").length).toBeGreaterThan(0);

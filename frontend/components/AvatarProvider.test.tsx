@@ -92,12 +92,12 @@ test("svg avatars render inside the 2d shell", async () => {
   expect(Number(screen.getByTestId("avatar-mouth").getAttribute("data-open"))).toBeGreaterThan(0.8);
 });
 
-test("managed avatars render a remote-session placeholder shell", async () => {
+test("managed avatars render a remote-session placeholder shell when no preview clip exists", async () => {
   const { AvatarProvider } = await import("./AvatarProvider");
 
   render(
     <AvatarProvider
-      config={{ provider: "simli", providerId: "simli-b97a7777-live", type: "video" }}
+      avatarId="heygen-liveavatar-default"
       energy={0.2}
       nowMs={0}
       state="idle"
@@ -108,6 +108,23 @@ test("managed avatars render a remote-session placeholder shell", async () => {
   );
 
   expect(screen.getByTestId("avatar-surface-managed")).toBeInTheDocument();
-  expect(screen.getByText("Remote LiveKit avatar.")).toBeInTheDocument();
   expect(screen.getByText("Remote tutor ready")).toBeInTheDocument();
+});
+
+test("managed avatars use a local non-room surface in gallery mode", async () => {
+  const { AvatarProvider } = await import("./AvatarProvider");
+
+  render(
+    <AvatarProvider
+      avatarId="simli-b97a7777-live"
+      energy={0.2}
+      nowMs={0}
+      state="idle"
+      timestamps={[]}
+      variant="gallery"
+    />
+  );
+
+  expect(screen.getByTestId("avatar-surface-managed")).toBeInTheDocument();
+  expect(document.querySelector(".avatar__managed-gallery-video, .avatar__managed-gallery-card")).toBeTruthy();
 });

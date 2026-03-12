@@ -1,5 +1,5 @@
 import { resolveAvatarProvider } from "../components/avatar_registry";
-import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/TutorSession";
+import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/session/session_types";
 
 type FixtureScenarioId = "guided-fractions" | "science-observation";
 

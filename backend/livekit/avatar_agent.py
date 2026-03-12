@@ -12,6 +12,7 @@ logger.setLevel(logging.INFO)
 
 DEFAULT_INSTRUCTIONS = "Talk to me like a clear, encouraging tutor."
 DEFAULT_VOICE = "alloy"
+DEFAULT_OPENING_LINE = ""
 
 
 def _room_metadata(ctx: JobContext) -> dict[str, object]:
@@ -63,6 +64,7 @@ async def entrypoint(ctx: JobContext) -> None:
     metadata = _room_metadata(ctx)
     instructions = str(metadata.get("instructions") or DEFAULT_INSTRUCTIONS).strip() or DEFAULT_INSTRUCTIONS
     voice = str(metadata.get("voice") or DEFAULT_VOICE).strip() or DEFAULT_VOICE
+    opening_line = str(metadata.get("opening_line") or os.getenv("NERDY_LIVEKIT_OPENING_LINE") or DEFAULT_OPENING_LINE).strip()
 
     session = AgentSession(
         llm=openai.realtime.RealtimeModel(voice=voice),
@@ -73,6 +75,13 @@ async def entrypoint(ctx: JobContext) -> None:
         agent=Agent(instructions=instructions),
         room=ctx.room,
     )
+    if opening_line:
+        speech = session.say(
+            opening_line,
+            add_to_chat_ctx=False,
+            allow_interruptions=False,
+        )
+        await speech.wait_for_playout()
 
 
 if __name__ == "__main__":

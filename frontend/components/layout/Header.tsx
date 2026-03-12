@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -45,6 +45,43 @@ export function Header({ onToggleSidebar, onSignOut, user }: HeaderProps) {
     }
     router.push(`/lessons${params.size ? `?${params.toString()}` : ""}`);
   };
+
+  useEffect(() => {
+    setShowMenu(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!showMenu) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      if (target.closest(".app-header__menu") || target.closest(".app-header__avatar")) {
+        return;
+      }
+
+      setShowMenu(false);
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowMenu(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [showMenu]);
 
   return (
     <header className="app-header">
@@ -97,8 +134,9 @@ export function Header({ onToggleSidebar, onSignOut, user }: HeaderProps) {
 
         <button
           className="icon-button"
-          aria-label="Notifications"
-          style={{ border: "none", background: "transparent" }}
+          aria-label="Learning updates"
+          onClick={() => router.push("/dashboard")}
+          type="button"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" strokeLinecap="round" strokeLinejoin="round"/>
@@ -106,70 +144,46 @@ export function Header({ onToggleSidebar, onSignOut, user }: HeaderProps) {
           </svg>
         </button>
 
-        <div className="app-header__avatar" onClick={() => setShowMenu(!showMenu)}>
+        <button
+          aria-label="Open account menu"
+          aria-expanded={showMenu}
+          aria-haspopup="menu"
+          className="app-header__avatar"
+          onClick={() => setShowMenu((current) => !current)}
+          type="button"
+        >
           {user?.avatar ? (
-            <img src={user.avatar} alt="" style={{ width: "100%", height: "100%", borderRadius: "10px" }} />
+            <img alt="" className="app-header__avatar-image" src={user.avatar} />
           ) : (
             getInitials(user?.name, user?.email)
           )}
-        </div>
+        </button>
 
         {showMenu && (
-          <div
-            style={{
-              position: "absolute",
-              top: "var(--header-height)",
-              right: "24px",
-              background: "var(--bg-elevated)",
-              border: "1px solid var(--line)",
-              borderRadius: "12px",
-              padding: "8px 0",
-              minWidth: "180px",
-              boxShadow: "var(--shadow)",
-              zIndex: 20,
-            }}
-            onClick={() => setShowMenu(false)}
-          >
+          <div className="app-header__menu" onClick={() => setShowMenu(false)} role="menu">
             <Link
+              className="app-header__menu-link"
               href="/profile"
-              style={{
-                display: "block",
-                padding: "10px 16px",
-                color: "var(--ink)",
-                textDecoration: "none",
-                fontSize: "0.9rem",
-              }}
+              role="menuitem"
             >
               Profile
             </Link>
             <Link
+              className="app-header__menu-link"
               href="/settings"
-              style={{
-                display: "block",
-                padding: "10px 16px",
-                color: "var(--ink)",
-                textDecoration: "none",
-                fontSize: "0.9rem",
-              }}
+              role="menuitem"
             >
               Settings
             </Link>
-            <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "8px 0" }} />
+            <hr className="app-header__menu-separator" />
             <button
+              className="app-header__menu-button"
               onClick={() => {
                 setShowMenu(false);
                 void onSignOut?.();
               }}
-              style={{
-                width: "100%",
-                padding: "10px 16px",
-                border: "none",
-                background: "transparent",
-                textAlign: "left",
-                cursor: "pointer",
-                fontSize: "0.9rem",
-                color: "var(--danger)",
-              }}
+              role="menuitem"
+              type="button"
             >
               Sign out
             </button>

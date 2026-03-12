@@ -241,6 +241,84 @@ def test_lesson_history_api_persists_active_and_archived_threads() -> None:
     assert clear_response.json()["activeThread"] is None
 
 
+def test_lessons_analytics_endpoint_summarizes_saved_history() -> None:
+    client = TestClient(app)
+    active_thread = {
+        "avatarProviderId": "human-css-2d",
+        "conversation": [
+            {"id": "1", "transcript": "What is x?", "tutorText": "Start with the variable."},
+            {"id": "2", "transcript": "Subtract 5", "tutorText": "Good, keep going."},
+        ],
+        "gradeBand": "6-8",
+        "lessonState": {
+            "currentStepIndex": 2,
+            "currentTask": "Undo the addition",
+            "lessonId": 6,
+            "lessonTitle": "Linear Equations",
+            "nextQuestion": "What should you do first to isolate x?",
+            "program": [
+                "Identify the variable",
+                "Undo operations step by step",
+                "Check the solution",
+            ],
+            "startedFromCatalog": True,
+        },
+        "llmModel": "gemini-3-flash-preview",
+        "llmProvider": "gemini",
+        "preference": "slow down",
+        "sessionId": "lesson-123",
+        "studentPrompt": "What is x?",
+        "subject": "math",
+        "transcript": "What is x?",
+        "ttsModel": "sonic-2",
+        "ttsProvider": "cartesia",
+        "tutorText": "Start with the variable.",
+        "version": 1,
+    }
+    archive_entry = {
+        "gradeBand": "6-8",
+        "id": "archive-1",
+        "subject": "math",
+        "thread": active_thread,
+        "title": "Linear Equations",
+        "turnCount": 3,
+        "updatedAt": "2026-03-11T00:00:00.000Z",
+    }
+
+    client.put("/api/lessons/active", json=active_thread)
+    client.post("/api/lessons/archive", json=archive_entry)
+    analytics_response = client.get("/api/lessons/analytics")
+
+    assert analytics_response.status_code == 200
+    assert analytics_response.json() == {
+        "achievements": [
+            {
+                "detail": "Practiced 2 days in a row",
+                "id": "streak",
+                "label": "2-day streak",
+            },
+            {
+                "detail": "Built strong completion across recent lesson steps",
+                "id": "mastery",
+                "label": "Mastery climbing",
+            },
+            {
+                "detail": "15 guided minutes banked this cycle",
+                "id": "deep-practice",
+                "label": "Deep practice",
+            },
+        ],
+        "completedLessons": 1,
+        "currentStreakDays": 2,
+        "estimatedMinutes": 15,
+        "masteryScore": 100,
+        "practiceDays": 2,
+        "recentLessonTitles": ["Linear Equations"],
+        "strongestSubject": "Math",
+        "tutorTurns": 5,
+    }
+
+
 def test_session_websocket_surfaces_provider_errors_before_close(monkeypatch) -> None:
     class _ExplodingSTTSession:
         async def push_audio(self, chunk: bytes, *, ts_ms: float | None = None) -> list[dict[str, str]]:

@@ -85,15 +85,25 @@ export function AvatarProvider({
   const frame = buildAvatarFrame(signal);
 
   if (avatarConfig.type === "video" || avatarOption.kind === "managed") {
+    if (variant === "gallery") {
+      return (
+        <div
+          className="avatar-surface avatar-surface--managed avatar-surface--gallery avatar-surface--managed-gallery"
+          data-testid="avatar-surface-managed"
+        >
+          <div className="avatar avatar--managed-gallery">
+            <div className="avatar__managed-gallery-card">
+              <div className="avatar__managed-gallery-orb" />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className={`avatar-surface avatar-surface--managed avatar-surface--${variant}`} data-testid="avatar-surface-managed">
         <div className="avatar avatar--managed">
           <div className="avatar__managed-card">
-            <div className="avatar__managed-chip">{avatarOption.label}</div>
-            <div className="avatar__managed-provider">{avatarConfig.provider}</div>
-            <div className="avatar__managed-copy">
-              Remote LiveKit avatar.
-            </div>
             {subtitle ? (
               <div className="avatar__subtitle" data-testid="avatar-subtitle">
                 {subtitle}

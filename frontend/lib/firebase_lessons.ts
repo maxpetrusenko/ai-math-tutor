@@ -7,7 +7,7 @@ import {
 } from "firebase/firestore";
 
 import { getCurrentFirebaseUser } from "./firebase_auth";
-import { getFirebaseFirestore } from "./firebase_client";
+import { getFirebaseFirestore } from "./firebase_firestore";
 import type {
   PersistedLessonArchiveEntry,
   PersistedLessonThread,
@@ -80,6 +80,13 @@ export async function archiveFirebaseLessonThread(
       entry,
       ...currentStore.archive.filter((item) => item.id !== entry.id),
     ].slice(0, 8),
+  });
+}
+
+export async function clearFirebaseArchivedLessonThreads(currentStore: PersistedLessonThreadStore) {
+  return writeFirebaseStore({
+    ...currentStore,
+    archive: [],
   });
 }
 

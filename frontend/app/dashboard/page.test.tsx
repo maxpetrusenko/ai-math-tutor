@@ -104,7 +104,11 @@ test("dashboard surfaces active lesson progress and archived resume links", asyn
   render(<DashboardPage />);
 
   await waitFor(() => expect(screen.getByText("Resume Intro to Fractions")).toBeInTheDocument());
+  expect(screen.getByText("Where you stopped")).toBeInTheDocument();
+  expect(screen.getByText("Learning momentum")).toBeInTheDocument();
+  expect(screen.getByText("Strongest subject")).toBeInTheDocument();
   expect(screen.getAllByText("Convert each fraction to twelfths").length).toBeGreaterThan(0);
+  expect(screen.getByText("Saved lesson library")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Resume now" })).toHaveAttribute("href", "/session");
   expect(screen.getByRole("link", { name: "Continue lesson" })).toHaveAttribute("href", "/session");
   expect(screen.getByRole("link", { name: "Resume Linear Equations" })).toHaveAttribute("href", "/session?resume=archive-1");

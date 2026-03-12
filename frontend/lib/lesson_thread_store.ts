@@ -1,5 +1,6 @@
 import {
   archiveRemoteLessonThread,
+  clearRemoteArchivedLessonThreads,
   clearRemoteActiveLessonThread,
   fetchArchivedLessonThread,
   fetchLessonStore,
@@ -7,6 +8,7 @@ import {
 } from "./lesson_thread_api";
 import {
   archiveFirebaseLessonThread,
+  clearFirebaseArchivedLessonThreads,
   clearFirebaseActiveLessonThread,
   fetchFirebaseArchivedLessonThread,
   fetchFirebaseLessonStore,
@@ -259,10 +261,19 @@ function normalizeConversation(
     return [];
   }
 
-  return thread.conversation.map((turn) => ({
-    ...turn,
-    debug: turn.debug ?? synthesizeLegacyTurnDebug(thread, turn),
-  }));
+  const seenIds = new Set<string>();
+
+  return thread.conversation.map((turn, index) => {
+    const baseId = typeof turn.id === "string" && turn.id.trim() ? turn.id.trim() : `${index + 1}`;
+    const nextId = seenIds.has(baseId) ? `${baseId}-${index + 1}` : baseId;
+    seenIds.add(nextId);
+
+    return {
+      ...turn,
+      id: nextId,
+      debug: turn.debug ?? synthesizeLegacyTurnDebug(thread, turn),
+    };
+  });
 }
 
 function normalizeThread(thread: Partial<PersistedLessonThread>): PersistedLessonThread {
@@ -428,6 +439,10 @@ export function readPersistedLessonThread(): PersistedLessonThread | null {
   return readStore().activeThread;
 }
 
+export function readPersistedLessonThreadStore() {
+  return readStore();
+}
+
 export function writePersistedLessonThread(thread: PersistedLessonThread) {
   const store = readStore();
   store.activeThread = thread;
@@ -517,6 +532,26 @@ export async function clearPersistedLessonThreadRemote() {
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
     writeStore(remoteStore);
   }
+}
+
+export async function clearArchivedLessonThreadsRemote() {
+  const store = readStore();
+  store.archive = [];
+  writeStore(store);
+
+  const firebaseStore = await clearFirebaseArchivedLessonThreads(store).catch(() => null);
+  if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
+    writeStore(firebaseStore);
+    return firebaseStore.archive.map(({ thread: _thread, ...summary }) => summary);
+  }
+
+  const remoteStore = await clearRemoteArchivedLessonThreads();
+  if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
+    writeStore(remoteStore);
+    return remoteStore.archive.map(({ thread: _thread, ...summary }) => summary);
+  }
+
+  return [];
 }
 
 export async function refreshArchivedLessonThread(id: string) {

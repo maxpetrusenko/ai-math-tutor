@@ -6,12 +6,18 @@ import Link from "next/link";
 import { DashboardLayout } from "../../components/layout";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { SurfaceCard } from "../../components/ui/SurfaceCard";
+import { clearLessonHistory, exportLearnerSnapshot } from "../../lib/account_snapshot";
 import { useFirebaseAuth } from "../../lib/firebase_auth";
-import { readSessionPreferences, writeSessionPreferences } from "../../lib/session_preferences";
+import {
+  readSessionPreferences,
+  resetSessionPreferences,
+  writeSessionPreferences,
+} from "../../lib/session_preferences";
 
 export default function SettingsPage() {
   const { signOutUser, user } = useFirebaseAuth();
   const [preferences, setPreferences] = useState(() => readSessionPreferences());
+  const [accountActionStatus, setAccountActionStatus] = useState("");
 
   const updatePreferences = (nextPreferences: Partial<typeof preferences>) => {
     const saved = writeSessionPreferences({
@@ -19,6 +25,29 @@ export default function SettingsPage() {
       ...nextPreferences,
     });
     setPreferences(saved);
+  };
+
+  const handleExportData = () => {
+    const snapshot = exportLearnerSnapshot();
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `nerdy-learner-data-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(objectUrl);
+    setAccountActionStatus("Learner data exported.");
+  };
+
+  const handleClearLessonHistory = async () => {
+    await clearLessonHistory();
+    setAccountActionStatus("Saved lesson history cleared on this device.");
+  };
+
+  const handleResetDefaults = () => {
+    const resetPreferences = resetSessionPreferences();
+    setPreferences(resetPreferences);
+    setAccountActionStatus("Tutor defaults reset.");
   };
 
   return (
@@ -30,7 +59,7 @@ export default function SettingsPage() {
         />
 
         <SurfaceCard>
-          <div className="section-title" style={{ marginBottom: "20px" }}>Preferences</div>
+          <div className="section-title section-title--bottom-lg">Preferences</div>
 
           <div className="settings-page__item">
             <div className="settings-page__item-info">
@@ -63,7 +92,7 @@ export default function SettingsPage() {
               <h3>Language</h3>
               <p>Choose your preferred interface language.</p>
             </div>
-            <div className="settings-page__item-control" style={{ minWidth: "180px" }}>
+            <div className="settings-page__item-control settings-page__item-control--wide">
               <select
                 aria-label="Interface language"
                 onChange={(event) => updatePreferences({ interfaceLanguage: event.target.value })}
@@ -78,7 +107,7 @@ export default function SettingsPage() {
         </SurfaceCard>
 
         <SurfaceCard>
-          <div className="section-title" style={{ marginBottom: "20px" }}>Learning defaults</div>
+          <div className="section-title section-title--bottom-lg">Learning defaults</div>
           <div className="field-grid">
             <label className="field">
               <span>Preferred subject</span>
@@ -100,14 +129,15 @@ export default function SettingsPage() {
                 onChange={(event) => updatePreferences({ gradeBand: event.target.value })}
                 value={preferences.gradeBand}
               >
+                <option value="K-2">K-2</option>
+                <option value="3-5">3-5</option>
                 <option value="6-8">6-8</option>
-                <option value="9-10">9-10</option>
-                <option value="11-12">11-12</option>
+                <option value="9-12">9-12</option>
               </select>
             </label>
           </div>
 
-          <label className="field" style={{ marginTop: "16px" }}>
+          <label className="field field--top-md">
             <span>Study style</span>
             <textarea
               aria-label="Study style preference"
@@ -119,7 +149,7 @@ export default function SettingsPage() {
         </SurfaceCard>
 
         <SurfaceCard className="surface-card--soft">
-          <div className="section-title" style={{ marginBottom: "16px" }}>Current setup</div>
+          <div className="section-title section-title--bottom-md">Current setup</div>
           <div className="info-list">
             <div className="info-list__row">
               <div className="info-list__label">Subject</div>
@@ -143,14 +173,14 @@ export default function SettingsPage() {
         </SurfaceCard>
 
         <SurfaceCard>
-          <div className="section-title" style={{ marginBottom: "20px" }}>Account</div>
+          <div className="section-title section-title--bottom-lg">Account</div>
           <div className="info-list">
             <div className="info-list__row">
               <div className="info-list__label">Signed in as</div>
               <div className="info-list__value">{user?.email ?? "Guest mode"}</div>
             </div>
           </div>
-          <div className="pill-row" style={{ marginTop: "20px" }}>
+          <div className="pill-row pill-row--top-lg">
             <Link className="secondary-button" href="/profile">
               Review profile
             </Link>
@@ -164,6 +194,27 @@ export default function SettingsPage() {
               Sign out
             </button>
           </div>
+        </SurfaceCard>
+
+        <SurfaceCard className="surface-card--soft">
+          <div className="section-title section-title--bottom-md">Account actions</div>
+          <div className="section-copy">
+            Export learner data, clear saved lesson history, or reset tutor defaults without leaving Settings.
+          </div>
+          <div className="pill-row pill-row--top-lg">
+            <button className="secondary-button" onClick={handleExportData} type="button">
+              Export learner data
+            </button>
+            <button className="secondary-button" onClick={() => void handleClearLessonHistory()} type="button">
+              Clear saved lessons
+            </button>
+            <button className="secondary-button" onClick={handleResetDefaults} type="button">
+              Reset tutor defaults
+            </button>
+          </div>
+          {accountActionStatus ? (
+            <p className="section-copy section-copy--top-sm" role="status">{accountActionStatus}</p>
+          ) : null}
         </SurfaceCard>
 
         <SurfaceCard className="surface-card--soft">

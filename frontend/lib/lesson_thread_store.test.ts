@@ -88,3 +88,27 @@ test("archives use lesson titles when lesson progress exists", () => {
     title: "Intro to Fractions",
   });
 });
+
+test("normalizes duplicate persisted conversation ids on read", () => {
+  writePersistedLessonThread({
+    avatarProviderId: "sage-svg-2d",
+    conversation: [
+      { id: "1", transcript: "Persist this lesson", tutorText: "reply 1" },
+      { id: "1", transcript: "Persist this lesson again", tutorText: "reply 2" },
+    ],
+    gradeBand: "6-8",
+    llmModel: "gpt-realtime-mini",
+    llmProvider: "openai-realtime",
+    preference: "",
+    sessionId: "lesson-duplicate-ids",
+    studentPrompt: "",
+    subject: "math",
+    transcript: "",
+    ttsModel: "gpt-realtime-mini",
+    ttsProvider: "openai-realtime",
+    tutorText: "",
+    version: 1,
+  });
+
+  expect(readPersistedLessonThread()?.conversation.map((turn) => turn.id)).toEqual(["1", "1-2"]);
+});

@@ -191,8 +191,8 @@ export const AVATAR_MANIFEST: AvatarManifestEntry[] = [
       livekit: { provider: "simli" },
     },
     bestFor: "remote realtime lip sync",
-    description: "LiveKit room with a Simli face published into the lesson.",
-    persona: "Remote avatar",
+    description: "Realtime face with fast lip sync.",
+    persona: "Studio tutor",
   },
   {
     id: "heygen-liveavatar-default",
@@ -209,8 +209,8 @@ export const AVATAR_MANIFEST: AvatarManifestEntry[] = [
       livekit: { provider: "liveavatar" },
     },
     bestFor: "managed wow-factor demos",
-    description: "LiveKit room with a LiveAvatar stream published by HeyGen.",
-    persona: "Remote avatar",
+    description: "Polished studio presenter.",
+    persona: "Studio tutor",
   },
 ];
 

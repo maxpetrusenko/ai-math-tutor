@@ -127,6 +127,15 @@ def archive_lesson_thread(entry: PersistedLessonArchiveEntry, namespace: str | N
         return _clone_lesson_store(lessons)
 
 
+def clear_archived_lesson_threads(namespace: str | None = None) -> PersistedLessonStore:
+    with _PERSISTENCE_LOCK:
+        store = _read_store()
+        lessons = _namespace_data(store, namespace)["lessons"]
+        lessons["archive"] = []
+        _write_store(store)
+        return _clone_lesson_store(lessons)
+
+
 def load_archived_lesson_thread(lesson_id: str, namespace: str | None = None) -> PersistedLessonThread | None:
     with _PERSISTENCE_LOCK:
         archive = _namespace_data(_read_store(), namespace)["lessons"]["archive"]

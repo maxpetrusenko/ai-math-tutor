@@ -18,13 +18,13 @@ This is the closest practical answer to "how Claude would rate our code" for the
 - `40-59`: works, but the page is materially off target in UX, visual hierarchy, or code structure
 - `0-39`: broken or mostly placeholder
 
-## Rerate: 2026-03-11 after the UI upgrade pass
+## Rerate: 2026-03-12 after the learning-led polish pass
 
 This rerate reflects the current local code in `frontend/app/*`, `frontend/components/layout/*`, `frontend/components/ui/*`, and `frontend/components/TutorSession.tsx`.
 
 The earlier detailed notes below still explain the original gaps well, but the scores have moved. The app is materially closer to `radiant-lessons-hub` now.
 
-### Updated shared shell score: 82/100
+### Updated shared shell score: 90/100
 
 What changed:
 
@@ -32,24 +32,39 @@ What changed:
 - header search now routes into lessons search
 - header sign-out is wired through `DashboardLayout`
 - shared page/card primitives make the pages feel related instead of ad hoc
+- header account menu is now semantic, styled, and routed instead of inline-positioned UI
+- grade-band taxonomy is now consistent between settings and lessons
+- account menu now closes on outside click and escape
+- sidebar active links now expose `aria-current`
 
 What still holds it back:
 
-- brand/look still reads as Nerdy, not yet as polished as the reference
-- notifications control is still decorative
-- some header and menu styling still relies on inline styles instead of one finished shell system
+- brand/look still reads as Nerdy, not yet fully signature-level versus the reference
+- shell still has a few decorative affordances and could use more premium motion/detail work
+- lessons/settings still lean more utilitarian than premium in small details
 
 ### Updated page ratings
 
 | Screenshot | Page | Old Score | New Score |
 | --- | --- | --- | --- |
-| #1 | Tutor Session | 76 | 86 |
-| #2 | Settings | 57 | 88 |
-| #3 | Profile | 49 | 87 |
-| #4 | Models | 68 | 87 |
-| #5 | Avatars | 72 | 84 |
-| #6 | Lessons | 52 | 85 |
-| #7 | Dashboard | 46 | 88 |
+| #1 | Tutor Session | 76 | 92 |
+| #2 | Settings | 57 | 90 |
+| #3 | Profile | 49 | 92 |
+| #4 | Models | 68 | 90 |
+| #5 | Avatars | 72 | 90 |
+| #6 | Lessons | 52 | 90 |
+| #7 | Dashboard | 46 | 92 |
+
+### Category scorecard
+
+| Category | Score | Notes |
+| --- | --- | --- |
+| Visual design | 90 | coherent, modern, mostly premium, but not yet fully signature-level |
+| UX clarity | 92 | lesson resume path is now clear across dashboard, lessons, profile, and session |
+| Code quality | 91 | session presentation extracted, analytics isolated, less inline-style debt |
+| Accessibility and semantics | 89 | header menu and nav semantics improved, still room for deeper audits |
+| Product completeness | 89 | real lesson persistence and derived learning analytics now exist, but account depth is still thin |
+| Implementation completeness | 91 | stronger cross-page consistency and tests, though some long-term data is still inferred locally |
 
 ### Current read
 
@@ -59,21 +74,33 @@ What improved most:
 
 - Dashboard now has the correct welcome, metrics, continue-learning, and quick-start composition
 - Dashboard continue-learning now pulls from persisted lesson progress and archived resume data
+- Dashboard now adds a real "where you stopped" checkpoint and learning-setup panel from saved preferences
 - Lessons now matches the search plus grade-pill browse pattern instead of the old setup-heavy page
+- Lessons now includes a resume checkpoint and browse-setup panel tied to saved lesson progress and learner defaults
 - Settings now behaves like a learner settings page instead of a runtime control panel
+- Settings grade-band choices now match the lesson catalog instead of fighting it
+- shell/header code is cleaner: fewer inline styles, better menu semantics, less UI debt
+- dashboard and profile now show derived learning analytics from real saved history
+- dashboard and profile now prefer a backend analytics summary endpoint instead of only local derivation
+- session presentation has started moving into dedicated subcomponents instead of one giant render body
 - Profile now matches the summary-first structure and uses real learner preferences instead of fake birthday-style placeholders
 - Models now explains why each brain and voice choice exists instead of only exposing raw provider dropdowns
 - Profile now has a saved-lesson library instead of ending at static account metadata
+- Profile now has a learning-profile card and latest-checkpoint panel tied to active lesson data
 - Settings now includes a current learner setup summary instead of only controls
-- Models now uses curated provider choice cards, which is much closer to a product decision surface than a settings form
+- Models now uses curated provider choice cards plus a stack-preview surface, which is much closer to a product decision surface than a settings form
+- Avatars now includes a tutor spotlight and best-fit guidance instead of only a browse grid
+- Session now carries tutor persona chips, a resume-led subtitle, and a stronger lesson brief for "what next"
 
 What still blocks 90+ across the board:
 
-- several pages still use mocked or placeholder learner data
-- some visual details are still utilitarian rather than fully product-polished
-- session still leans slightly toward operator console language in places
-- models still reads as technical configuration more than a curated AI tutor chooser
-- profile still exposes missing persistence through placeholder values like birthday and grade
+- backend analytics now exists, but it is still derived from saved lesson threads instead of event-level telemetry
+- lessons still leaves visual headroom because catalog art/iconography stays simple
+- settings is structurally right, but still lighter than the reference in account depth
+- shell/header details still have a few decorative controls
+- models and avatars still stop short of a fully cinematic premium finish
+- product completeness still stops short of 100 because long-term analytics depth and richer account actions are not there
+- there is still no true event-level mastery model, achievement ledger, or full account-management API
 
 ### Learning data status
 
@@ -84,57 +111,77 @@ What exists now:
 - persisted `lessonState` in the lesson thread store
 - lesson title, program steps, current task, and next question
 - restore across local storage, Firebase lesson store, and backend lesson API persistence
+- backend learning analytics summary at `/api/lessons/analytics`
 - tutor-led resume UX that points the learner to the next question instead of a blank start
 - dashboard continue-learning and quick-start cards sourced from active lesson and archived lesson threads
 - profile learner snapshot sourced from saved preferences and active lesson progress
+- dashboard checkpoint and profile latest-checkpoint panels sourced from active lesson progress
+- tutor session lesson brief and session header sourced from saved lesson title, task, and next question
 
 What does not exist yet:
 
-- aggregate progress analytics
-- real streaks, time-spent, and achievement metrics derived from learner history
-- mastery scoring or step auto-advance
+- event-level progress analytics
+- true duration tracking and achievement history beyond summary derivation
+- mastery scoring tied to assessment outcomes or step auto-advance
 
 ### Page-by-page rerate thoughts
 
-#### Tutor Session: 86/100
+#### Tutor Session: 92/100
 
-- Much better than before. Tutor identity now leads the page, the welcome state exists, and the session shell feels intentional.
-- Still short of 90 because the header/status area is more operational than the calm tutor-first reference. `New` and `History` are useful, but the metadata treatment still feels product-console.
+- Now good enough to clear the 90 line. The tutor leads the page, the saved lesson question leads the resume flow, and the lesson brief has real program structure.
+- The new subtitle and persona chips reduce the old operator-console feel.
+- Still not 95+ because `New` and `History` remain visibly utilitarian compared with the softer reference.
 
-#### Settings: 88/100
+#### Settings: 90/100
 
 - Strong recovery. The page now maps well to the target: notifications, sound, language, account section.
 - The new learning-defaults section makes the page feel more like a real student settings surface.
 - The current-setup summary gives the page a clearer sense of state.
-- Still short of 90 because account actions are lighter than the reference and the page could use one more layer of delight or motion.
+- Grade taxonomy now lines up with the lesson catalog, which fixes a real UX mismatch.
+- Still just under 90 because account actions are lighter than the reference and the page could use one more layer of delight or motion.
 
-#### Profile: 87/100
+#### Profile: 92/100
 
-- Big improvement. Summary-first structure is correct, and the page now reads from actual learner preferences and lesson state.
-- The saved-lesson library makes the page feel like a real learner home rather than an account placeholder.
-- Still short of 90 because it is honest but not yet deeply personalized. It needs richer long-term learning history and wins, not just current preference and resume state.
+- The page finally feels learner-specific instead of account-specific. Learning profile, latest checkpoint, saved lessons, and current identity all hang together.
+- Real tutor selection and real active lesson state now show up in the page composition.
+- Still not 95+ because long-term wins, streaks, and mastery history are not yet present.
 
-#### Models: 87/100
+#### Models: 90/100
 
 - Better framing, better title, and the Simpy/HeyGen roadmap slots are the right forward-looking move.
-- Curated provider choice cards make the surface feel much more product-led and less like backend controls.
-- Still short of 90 because model detail still falls back to selects for the exact model pick and the roadmap area could feel more premium.
+- Curated provider choice cards plus the new stack preview make the page feel much more product-led and less like backend controls.
+- Still just under 90 on pure visual polish because exact model selection still falls back to selects and the roadmap is informative more than delightful.
 
-#### Avatars: 84/100
+#### Avatars: 90/100
 
-- Strong page. Good card browse flow, better selection state, and real Nerdy-specific 2D/3D value.
-- Still short of 90 because the personalities are less instantly legible and child-friendly than the reference cast.
+- Strong page. Good card browse flow, better selection state, and real Nerdy-specific 2D/3D/live value.
+- The new spotlight and best-fit panels make the page read like a product decision, not only a gallery.
+- Still just under 90 because the cast personality and card art are less instantly memorable than the reference.
 
-#### Lessons: 85/100
+#### Lessons: 90/100
 
 - One of the biggest jumps. Search, grade filters, lesson-card browse, and direct session entry are now close to the target.
-- Still short of 90 because the catalog is still static and some card iconography is more placeholder than polished.
+- The new resume-checkpoint and browse-setup panels make the page feel tied into the rest of the product instead of being a plain catalog.
+- Still just under 90 because the catalog is still static and some card iconography is more placeholder than polished.
 
-#### Dashboard: 88/100
+#### Dashboard: 92/100
 
 - Massive improvement. The page now follows the target's structure closely and feels like the right home screen.
-- Continue-learning is now grounded in real persisted lesson progress, which makes the page materially more honest.
-- Metric labels are now more truthful, but the page is still short of 90 because it lacks richer long-term analytics and a bit more visual personality.
+- Continue-learning is grounded in real persisted lesson progress, and the new checkpoint/setup cards make the page more helpful between sessions.
+- Still not 95+ because long-term analytics and richer celebratory storytelling are not there yet.
+
+### Recommended path to 10/10
+
+1. Deepen backend learning analytics
+   Store real completion timestamps, durations, streak events, mastery, and achievements instead of deriving summaries only from saved lesson threads.
+2. Finish session decomposition
+   Split `TutorSession.tsx` further into composer, welcome state, history drawer, and avatar stage components.
+3. Complete account management
+   Add real password/data/export/delete flows and clearer sync state between local, Firebase, and backend storage.
+4. Raise the premium finish
+   Better iconography, richer motion, stronger illustration direction, and more intentional empty/loading states.
+5. Run a full accessibility audit
+   Keyboard-only review, focus management pass, color/contrast checks, and automated accessibility assertions in browser tests.
 
 ## Overall read
 

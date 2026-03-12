@@ -27,6 +27,7 @@ import ModelsPage from "./page";
 test("models lets the learner switch tutor brain with curated choice cards", () => {
   render(<ModelsPage />);
 
+  expect(screen.getByText("Session stack preview")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Live stack" }));
 
   expect(writeSessionPreferences).toHaveBeenCalledWith(

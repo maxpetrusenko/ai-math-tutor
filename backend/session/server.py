@@ -20,8 +20,10 @@ from backend.session.firebase_auth import (
     verify_firebase_bearer_token,
     verify_firebase_websocket_token,
 )
+from backend.session.learning_analytics import summarize_learning_analytics
 from backend.session.persistence import (
     archive_lesson_thread,
+    clear_archived_lesson_threads,
     clear_active_lesson_thread,
     load_archived_lesson_thread,
     read_lesson_store,
@@ -93,6 +95,16 @@ def get_lessons(authorization: str | None = Header(default=None)) -> dict[str, o
     return read_lesson_store(namespace=_auth_namespace(claims))
 
 
+@app.get("/api/lessons/analytics")
+def get_lessons_analytics(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    claims = verify_firebase_bearer_token(authorization)
+    lesson_store = read_lesson_store(namespace=_auth_namespace(claims))
+    return summarize_learning_analytics(
+        active_thread=lesson_store["activeThread"],
+        archived_lessons=lesson_store["archive"],
+    )
+
+
 @app.get("/api/runtime-options")
 def get_runtime_options() -> dict[str, object]:
     return runtime_options_payload()
@@ -153,6 +165,12 @@ def delete_active_lesson(authorization: str | None = Header(default=None)) -> di
 def post_archived_lesson(entry: dict[str, object], authorization: str | None = Header(default=None)) -> dict[str, object]:
     claims = verify_firebase_bearer_token(authorization)
     return archive_lesson_thread(entry, namespace=_auth_namespace(claims))  # type: ignore[arg-type]
+
+
+@app.delete("/api/lessons/archive")
+def delete_archived_lessons(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    claims = verify_firebase_bearer_token(authorization)
+    return clear_archived_lesson_threads(namespace=_auth_namespace(claims))
 
 
 @app.get("/api/lessons/archive/{lesson_id}")

@@ -1,4 +1,5 @@
 import { buildDashboardViewModel } from "./dashboard_view_model";
+import type { LearningAnalytics } from "./learning_analytics";
 import { DEFAULT_SESSION_PREFERENCES } from "./session_preferences";
 
 test("builds the learner-specific dashboard payload", () => {
@@ -98,12 +99,13 @@ test("uses active lesson progress and archived resume items when learning data e
   expect(model.quickStart.title).toBe("Resume Intro to Fractions");
   expect(model.metrics).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ label: "Saved Lessons", value: "1" }),
-      expect.objectContaining({ label: "Tutor Turns", value: "2" }),
-      expect.objectContaining({ label: "Current Step", value: "2/3" }),
+      expect.objectContaining({ label: "Completed Lessons", value: "1" }),
+      expect.objectContaining({ label: "Practice Days", value: "2" }),
+      expect.objectContaining({ label: "Current Streak", value: "2 days" }),
       expect.objectContaining({ label: "Focus", value: "Intro to Fractions" }),
     ])
   );
+  expect(model.recentWins).toEqual(["Linear Equations"]);
   expect(model.continueLessons[0]).toMatchObject({
     href: "/session",
     task: "Convert each fraction to twelfths",
@@ -113,4 +115,40 @@ test("uses active lesson progress and archived resume items when learning data e
     href: "/session?resume=archive-1",
     title: "Linear Equations",
   });
+});
+
+test("prefers backend analytics when present", () => {
+  const analytics: LearningAnalytics = {
+    achievements: [
+      { detail: "Remote analytics", id: "mastery", label: "Remote mastery" },
+    ],
+    completedLessons: 4,
+    currentStreakDays: 5,
+    estimatedMinutes: 27,
+    masteryScore: 88,
+    practiceDays: 6,
+    recentLessonTitles: ["Remote Win"],
+    strongestSubject: "Science",
+    tutorTurns: 9,
+  };
+
+  const model = buildDashboardViewModel({
+    analytics,
+    displayName: "Alex Johnson",
+    preferences: {
+      ...DEFAULT_SESSION_PREFERENCES,
+      subject: "math",
+    },
+  });
+
+  expect(model.achievements).toEqual(["Remote mastery"]);
+  expect(model.metrics).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ label: "Completed Lessons", value: "4" }),
+      expect.objectContaining({ label: "Practice Days", value: "6" }),
+      expect.objectContaining({ label: "Current Streak", value: "5 days" }),
+    ])
+  );
+  expect(model.strongestSubject).toBe("Science");
+  expect(model.recentWins).toEqual(["Remote Win"]);
 });

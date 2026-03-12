@@ -1,4 +1,5 @@
 import type { PersistedLessonArchiveEntry, PersistedLessonThreadStore, PersistedLessonThread } from "./lesson_thread_store";
+import type { LearningAnalytics } from "./learning_analytics";
 import { getCurrentFirebaseIdToken } from "./firebase_auth";
 import { getFirebaseAuthClient } from "./firebase_client";
 
@@ -79,6 +80,16 @@ export async function archiveRemoteLessonThread(entry: PersistedLessonArchiveEnt
   });
 }
 
+export async function clearRemoteArchivedLessonThreads() {
+  return requestJson<PersistedLessonThreadStore>("/archive", {
+    method: "DELETE",
+  });
+}
+
 export async function fetchArchivedLessonThread(lessonId: string) {
   return requestJson<PersistedLessonThread>(`/archive/${lessonId}`);
+}
+
+export async function fetchLearningAnalytics() {
+  return requestJson<LearningAnalytics>("/analytics");
 }

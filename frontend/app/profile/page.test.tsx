@@ -38,6 +38,35 @@ vi.mock("../../lib/lesson_thread_store", () => ({
       updatedAt: "2026-03-11T00:00:00Z",
     },
   ],
+  readArchivedLessonThread: () => ({
+    avatarProviderId: "sage-svg-2d",
+    conversation: [],
+    gradeBand: "6-8",
+    lessonState: {
+      currentStepIndex: 0,
+      currentTask: "Solve one-step linear equations",
+      lessonId: 6,
+      lessonTitle: "Linear Equations",
+      nextQuestion: "What do you do first to solve x + 5 = 12?",
+      program: [
+        "Identify the variable",
+        "Undo operations step by step",
+        "Check the solution",
+      ],
+      startedFromCatalog: true,
+    },
+    llmModel: "gemini-3-flash-preview",
+    llmProvider: "gemini",
+    preference: "More worked examples",
+    sessionId: "archive-1",
+    studentPrompt: "",
+    subject: "math",
+    transcript: "",
+    ttsModel: "sonic-2",
+    ttsProvider: "cartesia",
+    tutorText: "",
+    version: 1,
+  }),
   readPersistedLessonThread: () => ({
     avatarProviderId: "sage-svg-2d",
     conversation: [],
@@ -75,6 +104,10 @@ test("profile surfaces saved lesson library and current learner snapshot", async
   render(<ProfilePage />);
 
   await waitFor(() => expect(screen.getByText("Saved lesson library")).toBeInTheDocument());
-  expect(screen.getByText("Linear Equations")).toBeInTheDocument();
+  expect(screen.getByText("Learning profile")).toBeInTheDocument();
+  expect(screen.getByText("Achievements earned")).toBeInTheDocument();
+  expect(screen.getByText("Strongest subject")).toBeInTheDocument();
+  expect(screen.getAllByText("Sage").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Linear Equations").length).toBeGreaterThan(0);
   expect(screen.getByText("Resume Intro to Fractions")).toBeInTheDocument();
 });

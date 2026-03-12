@@ -1,5 +1,6 @@
 import type { PersistedLessonArchiveEntry, PersistedLessonThread } from "./lesson_thread_store";
 import { resolveLessonCatalogItem, resolveLessonResumeQuestion } from "./lesson_catalog";
+import { deriveLearningAnalytics, type LearningAnalytics } from "./learning_analytics";
 import type { SessionPreferences } from "./session_preferences";
 
 export type DashboardMetric = {
@@ -20,15 +21,20 @@ export type DashboardLesson = {
 };
 
 export type DashboardViewModel = {
+  achievements: string[];
   continueLessons: DashboardLesson[];
+  estimatedMinutesLabel: string;
   learnerName: string;
+  masteryScoreLabel: string;
   metrics: DashboardMetric[];
+  recentWins: string[];
   quickStart: {
     ctaHref: string;
     ctaLabel: string;
     description: string;
     title: string;
   };
+  strongestSubject: string;
   subtitle: string;
 };
 
@@ -64,15 +70,6 @@ const FALLBACK_LESSONS: DashboardLesson[] = [
 
 function formatSubjectLabel(subject: string) {
   return subject.charAt(0).toUpperCase() + subject.slice(1);
-}
-
-function countTutorTurns(
-  activeThread: PersistedLessonThread | null,
-  archivedLessons: PersistedLessonArchiveEntry[]
-) {
-  const activeTurns = activeThread?.conversation.length ?? 0;
-  const archivedTurns = archivedLessons.reduce((total, lesson) => total + lesson.turnCount, 0);
-  return activeTurns + archivedTurns;
 }
 
 function resolveThreadTitle(thread: PersistedLessonThread) {
@@ -131,6 +128,7 @@ function buildArchivedLesson(entry: PersistedLessonArchiveEntry): DashboardLesso
 
 export function buildDashboardViewModel(input: {
   activeThread?: PersistedLessonThread | null;
+  analytics?: LearningAnalytics | null;
   archivedLessons?: PersistedLessonArchiveEntry[];
   displayName?: string | null;
   email?: string | null;
@@ -148,22 +146,25 @@ export function buildDashboardViewModel(input: {
     ...archivedLessons.slice(0, activeThread ? 2 : 3).map(buildArchivedLesson),
   ];
   const continueLearning = continueLessons.length > 0 ? continueLessons : FALLBACK_LESSONS;
-  const currentStepValue = activeThread?.lessonState
-    ? `${activeThread.lessonState.currentStepIndex + 1}/${activeThread.lessonState.program.length}`
-    : "Ready";
+  const analytics = input.analytics ?? deriveLearningAnalytics({
+    activeThread,
+    archivedLessons,
+  });
   const focusValue = activeThread?.lessonState?.lessonTitle ?? subjectLabel;
-  const savedLessonValue = `${archivedLessons.length}`;
-  const tutorTurnsValue = `${countTutorTurns(activeThread, archivedLessons)}`;
 
   return {
+    achievements: analytics.achievements.map((achievement) => achievement.label),
     continueLessons: continueLearning,
+    estimatedMinutesLabel: analytics.estimatedMinutes > 0 ? `${analytics.estimatedMinutes} min` : "Just starting",
     learnerName,
+    masteryScoreLabel: analytics.masteryScore > 0 ? `${analytics.masteryScore}%` : "Building",
     metrics: [
-      { accent: "primary", id: "lessons", label: "Saved Lessons", value: savedLessonValue },
-      { accent: "secondary", id: "turns", label: "Tutor Turns", value: tutorTurnsValue },
-      { accent: "primary", id: "step", label: "Current Step", value: currentStepValue },
+      { accent: "primary", id: "lessons", label: "Completed Lessons", value: `${analytics.completedLessons}` },
+      { accent: "secondary", id: "practice-days", label: "Practice Days", value: `${analytics.practiceDays}` },
+      { accent: "primary", id: "streak", label: "Current Streak", value: analytics.currentStreakDays > 0 ? `${analytics.currentStreakDays} days` : "Start today" },
       { accent: "success", id: "focus", label: "Focus", value: focusValue },
     ],
+    recentWins: analytics.recentLessonTitles,
     quickStart: activeThread
       ? {
           ctaHref: "/session",
@@ -177,6 +178,7 @@ export function buildDashboardViewModel(input: {
           description: `Jump back into ${subjectLabel.toLowerCase()} with your current tutor setup.`,
           title: "Start a tutor session",
         },
+    strongestSubject: analytics.strongestSubject,
     subtitle: activeThread?.lessonState
       ? `Pick up ${activeThread.lessonState.lessonTitle.toLowerCase()} where you stopped.`
       : `Ready to tackle some ${subjectLabel.toLowerCase()} today?`,

@@ -10,6 +10,8 @@ from uuid import uuid4
 
 import aiohttp
 
+from backend.runtime.local_env import load_local_env
+
 LIVEKIT_AVATAR_AGENT_NAME = "nerdy-avatar-agent"
 DEFAULT_SIMLI_FACE_ID = "b97a7777-a82e-4925-ad14-861d62c32bec"
 
@@ -35,11 +37,19 @@ def _coalesce_env(env: Mapping[str, str], *keys: str) -> str:
     return ""
 
 
+def _runtime_env(env: Mapping[str, str] | None = None) -> Mapping[str, str]:
+    if env is not None:
+        return env
+
+    load_local_env()
+    return os.environ
+
+
 def resolve_managed_avatar_metadata(
     provider_id: str,
     env: Mapping[str, str] | None = None,
 ) -> ManagedAvatarTarget:
-    resolved_env = env or os.environ
+    resolved_env = _runtime_env(env)
     voice = resolved_env.get("NERDY_LIVEKIT_OPENAI_VOICE", "alloy").strip() or "alloy"
     instructions = (
         resolved_env.get("NERDY_LIVEKIT_AGENT_INSTRUCTIONS", "").strip()
@@ -92,7 +102,7 @@ def collect_avatar_bootstrap_errors(
     provider_id: str,
     env: Mapping[str, str] | None = None,
 ) -> list[str]:
-    resolved_env = env or os.environ
+    resolved_env = _runtime_env(env)
     errors: list[str] = []
 
     for key in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "OPENAI_API_KEY"):
@@ -168,7 +178,7 @@ async def create_avatar_room_session(
 ) -> dict[str, object]:
     from livekit import api
 
-    resolved_env = env or os.environ
+    resolved_env = _runtime_env(env)
     errors = collect_avatar_bootstrap_errors(provider_id, resolved_env)
     if errors:
         raise ValueError("; ".join(errors))

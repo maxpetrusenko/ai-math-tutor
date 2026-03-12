@@ -62,8 +62,33 @@ const TTS_PROVIDER_CHOICES = [
   },
 ] as const;
 
+function formatProviderLabel(provider: string) {
+  if (provider === "openai-realtime") {
+    return "OpenAI Realtime";
+  }
+
+  if (provider === "openai") {
+    return "OpenAI";
+  }
+
+  if (provider === "minimax") {
+    return "MiniMax";
+  }
+
+  if (provider === "cartesia") {
+    return "Cartesia";
+  }
+
+  return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
 export default function ModelsPage() {
   const [selection, setSelection] = useState(() => readSessionPreferences());
+  const selectedBrain = LLM_PROVIDER_CHOICES.find((provider) => provider.id === selection.llmProvider);
+  const selectedVoice = TTS_PROVIDER_CHOICES.find((provider) => provider.id === selection.ttsProvider);
+  const deliveryMode = selection.llmProvider === "openai-realtime" || selection.ttsProvider === "openai-realtime"
+    ? "Realtime conversation stack"
+    : "Standard guided tutoring stack";
 
   const syncSelection = (nextSelection: Partial<typeof selection>) => {
     const normalized = normalizeRuntimeSelection({
@@ -88,9 +113,38 @@ export default function ModelsPage() {
           title="AI Models"
         />
 
+        <SurfaceCard className="surface-card--soft">
+          <div className="dashboard-section__header">
+            <div className="section-title">Session stack preview</div>
+            <div className="tag-badge">{deliveryMode}</div>
+          </div>
+          <div className="field-grid">
+            <div className="row-card models-page__note-card">
+              <div className="row-card__icon">LLM</div>
+              <div className="row-card__content">
+                <div className="row-card__title">{selectedBrain?.title ?? "Tutor brain"}</div>
+                <div className="row-card__copy">{selectedBrain?.description ?? "Tutor reasoning default."}</div>
+                <div className="row-card__meta">
+                  {formatProviderLabel(selection.llmProvider)} · {selection.llmModel}
+                </div>
+              </div>
+            </div>
+            <div className="row-card models-page__note-card">
+              <div className="row-card__icon">TTS</div>
+              <div className="row-card__content">
+                <div className="row-card__title">{selectedVoice?.title ?? "Tutor voice"}</div>
+                <div className="row-card__copy">{selectedVoice?.description ?? "Tutor voice default."}</div>
+                <div className="row-card__meta">
+                  {formatProviderLabel(selection.ttsProvider)} · {selection.ttsModel}
+                </div>
+              </div>
+            </div>
+          </div>
+        </SurfaceCard>
+
         <SurfaceCard className="models-page__section">
           <div className="section-title">Language model</div>
-          <p className="section-copy" style={{ marginTop: "8px", marginBottom: "20px" }}>
+          <p className="section-copy section-copy--spaced">
             Reasoning, explanations, and pacing for the tutor.
           </p>
           <div className="provider-choice-grid">
@@ -143,7 +197,7 @@ export default function ModelsPage() {
 
         <SurfaceCard className="models-page__section">
           <div className="section-title">Tutor voice</div>
-          <p className="section-copy" style={{ marginTop: "8px", marginBottom: "20px" }}>
+          <p className="section-copy section-copy--spaced">
             Speech synthesis and playback defaults for your current tutor.
           </p>
           <div className="provider-choice-grid provider-choice-grid--compact">
@@ -197,7 +251,7 @@ export default function ModelsPage() {
         <div className="field-grid">
           <SurfaceCard className="surface-card--soft">
             <div className="section-title">Current defaults</div>
-            <div className="info-list" style={{ marginTop: "14px" }}>
+            <div className="info-list info-list--top-md">
               <div className="info-list__row">
                 <div className="info-list__label">LLM</div>
                 <div className="info-list__value">{selection.llmProvider} · {selection.llmModel}</div>
@@ -211,13 +265,15 @@ export default function ModelsPage() {
 
           <SurfaceCard>
             <div className="section-title">Provider roadmap</div>
-            <div className="section-stack" style={{ marginTop: "14px" }}>
+            <div className="section-stack section-stack--top-md">
               {UPCOMING_PROVIDER_INTEGRATIONS.map((provider) => (
-                <div className="row-card" key={provider.id}>
+                <div className="row-card provider-roadmap-card" key={provider.id}>
                   <div className="row-card__content">
                     <div className="row-card__title">{provider.label}</div>
                     <div className="row-card__copy">{provider.description}</div>
+                    <div className="row-card__meta">Planned integration · {provider.kind}</div>
                   </div>
+                  <div className="tag-badge">Roadmap</div>
                 </div>
               ))}
             </div>

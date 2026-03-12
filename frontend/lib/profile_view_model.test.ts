@@ -1,4 +1,5 @@
 import { buildProfileViewModel } from "./profile_view_model";
+import type { LearningAnalytics } from "./learning_analytics";
 import { DEFAULT_SESSION_PREFERENCES } from "./session_preferences";
 
 test("builds an honest learner profile model from preferences and lesson progress", () => {
@@ -32,6 +33,18 @@ test("builds an honest learner profile model from preferences and lesson progres
       tutorText: "",
       version: 1,
     },
+    archivedLessons: [
+      {
+        title: "Linear Equations",
+        turnCount: 2,
+        updatedAt: "2026-03-11T00:00:00Z",
+      },
+      {
+        title: "Geometry Basics",
+        turnCount: 1,
+        updatedAt: "2026-03-10T00:00:00Z",
+      },
+    ],
     archivedLessonCount: 2,
     displayName: "Alex Johnson",
     email: "alex@example.com",
@@ -56,8 +69,47 @@ test("builds an honest learner profile model from preferences and lesson progres
   expect(model.highlights).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ label: "Saved lessons", value: "2" }),
-      expect.objectContaining({ label: "Current step", value: "2/3" }),
+      expect.objectContaining({ label: "Practice days", value: "3" }),
+      expect.objectContaining({ label: "Current streak", value: "3 days" }),
     ])
   );
   expect(model.supportNote).toContain("saved lessons");
+});
+
+test("profile prefers backend analytics when present", () => {
+  const analytics: LearningAnalytics = {
+    achievements: [
+      { detail: "Remote analytics", id: "streak", label: "Remote streak" },
+    ],
+    completedLessons: 3,
+    currentStreakDays: 4,
+    estimatedMinutes: 21,
+    masteryScore: 81,
+    practiceDays: 5,
+    recentLessonTitles: ["Remote Win"],
+    strongestSubject: "Science",
+    tutorTurns: 7,
+  };
+
+  const model = buildProfileViewModel({
+    analytics,
+    archivedLessonCount: 2,
+    displayName: "Alex Johnson",
+    email: "alex@example.com",
+    preferences: {
+      ...DEFAULT_SESSION_PREFERENCES,
+      subject: "math",
+    },
+  });
+
+  expect(model.achievements).toEqual(["Remote streak"]);
+  expect(model.highlights).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ label: "Practice days", value: "5" }),
+      expect.objectContaining({ label: "Current streak", value: "4 days" }),
+    ])
+  );
+  expect(model.strongestSubject).toBe("Science");
+  expect(model.estimatedMinutesLabel).toBe("21 min");
+  expect(model.masteryScoreLabel).toBe("81%");
 });

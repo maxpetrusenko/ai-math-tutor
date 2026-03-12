@@ -1,4 +1,9 @@
 import type { PersistedLessonThread } from "./lesson_thread_store";
+import {
+  deriveLearningAnalytics,
+  type LearningAnalytics,
+  type LearningAnalyticsLesson,
+} from "./learning_analytics";
 import type { SessionPreferences } from "./session_preferences";
 
 export type ProfileSummaryRow = {
@@ -14,13 +19,17 @@ export type ProfileHighlight = {
 };
 
 export type ProfileViewModel = {
+  achievements: string[];
   details: ProfileSummaryRow[];
   email: string;
+  estimatedMinutesLabel: string;
   highlights: ProfileHighlight[];
   initials: string;
   learnerName: string;
+  masteryScoreLabel: string;
   statusCopy: string;
   statusTitle: string;
+  strongestSubject: string;
   supportNote: string;
 };
 
@@ -60,6 +69,8 @@ function formatLanguageLabel(language: string) {
 
 export function buildProfileViewModel(input: {
   activeThread?: PersistedLessonThread | null;
+  analytics?: LearningAnalytics | null;
+  archivedLessons?: LearningAnalyticsLesson[];
   archivedLessonCount?: number;
   displayName?: string | null;
   email?: string | null;
@@ -69,10 +80,11 @@ export function buildProfileViewModel(input: {
   const email = input.email?.trim() || "Guest mode";
   const activeThread = input.activeThread ?? null;
   const archivedLessonCount = input.archivedLessonCount ?? 0;
+  const analytics = input.analytics ?? deriveLearningAnalytics({
+    activeThread,
+    archivedLessons: input.archivedLessons ?? [],
+  });
   const activeLessonTitle = activeThread?.lessonState?.lessonTitle ?? "Ready for the next lesson";
-  const currentStep = activeThread?.lessonState
-    ? `${activeThread.lessonState.currentStepIndex + 1}/${activeThread.lessonState.program.length}`
-    : "Ready";
   const studyStyle = input.preferences.preference.trim() || "Balanced guidance";
   const subjectLabel = formatSubjectLabel(input.preferences.subject);
   const syncLabel = input.email?.trim()
@@ -80,6 +92,7 @@ export function buildProfileViewModel(input: {
     : "Guest mode. Preferences stay local until you sign in.";
 
   return {
+    achievements: analytics.achievements.map((achievement) => achievement.label),
     details: [
       { label: "Name", value: learnerName },
       { label: "Email", value: email },
@@ -88,17 +101,22 @@ export function buildProfileViewModel(input: {
       { label: "Interface language", value: formatLanguageLabel(input.preferences.interfaceLanguage) },
       { label: "Study style", value: studyStyle },
       { label: "Active lesson", value: activeLessonTitle },
+      { label: "Practice days", value: `${analytics.practiceDays}` },
+      { label: "Current streak", value: analytics.currentStreakDays > 0 ? `${analytics.currentStreakDays} days` : "Start today" },
     ],
     email,
+    estimatedMinutesLabel: analytics.estimatedMinutes > 0 ? `${analytics.estimatedMinutes} min` : "Just starting",
     highlights: [
       { accent: "primary", id: "saved-lessons", label: "Saved lessons", value: `${archivedLessonCount}` },
-      { accent: "secondary", id: "current-step", label: "Current step", value: currentStep },
-      { accent: "success", id: "focus", label: "Focus", value: activeThread?.lessonState?.lessonTitle ?? subjectLabel },
+      { accent: "secondary", id: "practice-days", label: "Practice days", value: `${analytics.practiceDays}` },
+      { accent: "success", id: "current-streak", label: "Current streak", value: analytics.currentStreakDays > 0 ? `${analytics.currentStreakDays} days` : "Start today" },
     ],
     initials: getInitials(input.displayName, input.email),
     learnerName,
+    masteryScoreLabel: analytics.masteryScore > 0 ? `${analytics.masteryScore}%` : "Building",
     statusCopy: activeThread?.lessonState?.nextQuestion ?? `Your tutor is set for ${subjectLabel.toLowerCase()} help.`,
     statusTitle: activeThread?.lessonState ? `Resume ${activeThread.lessonState.lessonTitle}` : "Learner snapshot",
+    strongestSubject: analytics.strongestSubject,
     supportNote: syncLabel,
   };
 }

@@ -10,7 +10,7 @@ import {
 export const SESSION_PREFERENCES_STORAGE_KEY = "nerdy_session_preferences";
 
 const SUPPORTED_SUBJECTS = ["math", "science", "english"] as const;
-const SUPPORTED_GRADE_BANDS = ["6-8", "9-10", "11-12"] as const;
+const SUPPORTED_GRADE_BANDS = ["K-2", "3-5", "6-8", "9-10", "9-12", "11-12"] as const;
 
 export type SessionPreferences = RuntimeSelection & {
   audioVolume: number;
@@ -133,4 +133,10 @@ export function writeSessionPreferences(
   storage?.setItem(SESSION_PREFERENCES_STORAGE_KEY, JSON.stringify(merged));
 
   return merged;
+}
+
+export function resetSessionPreferences(): SessionPreferences {
+  const storage = resolveStorage();
+  storage?.setItem(SESSION_PREFERENCES_STORAGE_KEY, JSON.stringify(DEFAULT_SESSION_PREFERENCES));
+  return DEFAULT_SESSION_PREFERENCES;
 }

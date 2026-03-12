@@ -1,32 +1,35 @@
-import nextConfig from "./next.config";
+const env = process.env as Record<string, string | undefined>;
 
-test("uses default build dist dir when NEXT_DIST_DIR is unset", () => {
-  const original = process.env.NEXT_DIST_DIR;
-  delete process.env.NEXT_DIST_DIR;
-
-  const config = nextConfig;
-
-  expect(config.distDir).toBe(".next");
-  expect(config.output).toBe("standalone");
-
-  if (original !== undefined) {
-    process.env.NEXT_DIST_DIR = original;
-  }
+afterEach(() => {
+  delete env.NEXT_DIST_DIR;
+  delete env.NODE_ENV;
+  vi.resetModules();
 });
 
-test("uses custom dist dir when NEXT_DIST_DIR is set", async () => {
-  const original = process.env.NEXT_DIST_DIR;
+test("uses the default dist dir and keeps standalone disabled in dev", async () => {
+  env.NODE_ENV = "development";
+  delete env.NEXT_DIST_DIR;
 
-  process.env.NEXT_DIST_DIR = ".next-dev";
-  vi.resetModules();
+  const { default: config } = await import("./next.config");
+
+  expect(config.distDir).toBe(".next");
+  expect(config.output).toBeUndefined();
+});
+
+test("uses the custom dist dir and keeps standalone disabled in dev", async () => {
+  env.NODE_ENV = "development";
+  env.NEXT_DIST_DIR = ".next-dev";
+
   const { default: config } = await import("./next.config");
 
   expect(config.distDir).toBe(".next-dev");
-  expect(config.output).toBe("standalone");
+  expect(config.output).toBeUndefined();
+});
 
-  if (original === undefined) {
-    delete process.env.NEXT_DIST_DIR;
-  } else {
-    process.env.NEXT_DIST_DIR = original;
-  }
+test("enables standalone packaging for production builds", async () => {
+  env.NODE_ENV = "production";
+
+  const { default: config } = await import("./next.config");
+
+  expect(config.output).toBe("standalone");
 });

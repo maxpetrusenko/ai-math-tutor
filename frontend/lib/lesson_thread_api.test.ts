@@ -64,3 +64,47 @@ test("lesson thread api forwards bearer token once firebase auth is ready", asyn
     },
   });
 });
+
+test("learning analytics api reuses the lesson auth flow", async () => {
+  const fetchMock = vi.fn(async () => ({
+    ok: true,
+    async json() {
+      return {
+        achievements: [],
+        completedLessons: 2,
+        currentStreakDays: 3,
+        estimatedMinutes: 18,
+        masteryScore: 72,
+        practiceDays: 4,
+        recentLessonTitles: ["Linear Equations"],
+        strongestSubject: "Math",
+        tutorTurns: 6,
+      };
+    },
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("window", {} as Window & typeof globalThis);
+  getFirebaseAuthClient.mockReturnValue({ currentUser: { uid: "user-1" } });
+  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
+
+  const { fetchLearningAnalytics } = await import("./lesson_thread_api");
+
+  await expect(fetchLearningAnalytics()).resolves.toEqual({
+    achievements: [],
+    completedLessons: 2,
+    currentStreakDays: 3,
+    estimatedMinutes: 18,
+    masteryScore: 72,
+    practiceDays: 4,
+    recentLessonTitles: ["Linear Equations"],
+    strongestSubject: "Math",
+    tutorTurns: 6,
+  });
+  expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8000/api/lessons/analytics", {
+    credentials: "include",
+    headers: {
+      Authorization: "Bearer firebase-id-token",
+      "Content-Type": "application/json",
+    },
+  });
+});
