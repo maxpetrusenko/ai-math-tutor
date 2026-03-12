@@ -59,6 +59,19 @@ function remoteVideoTimeoutMessage(avatar: ManagedAvatar) {
   return "The avatar did not publish video in time.; Retry in a moment.";
 }
 
+function placeholderLine(connectionState: ConnectionState, description?: string) {
+  if (connectionState === "connecting") {
+    return "Bringing the stage online.";
+  }
+  if (connectionState === "connected") {
+    return "Video live.";
+  }
+  if (connectionState === "error") {
+    return "Connection interrupted.";
+  }
+  return description ?? "Live avatar stage.";
+}
+
 export function ManagedAvatarSession({
   avatar,
   autoStart = false,
@@ -69,19 +82,39 @@ export function ManagedAvatarSession({
   const [error, setError] = useState("");
   const [roomName, setRoomName] = useState("");
   const [hasVideoTrack, setHasVideoTrack] = useState(false);
+  const [micEnabled, setMicEnabled] = useState(false);
   const [micUnavailable, setMicUnavailable] = useState(false);
+  const [micBusy, setMicBusy] = useState(false);
   const roomRef = useRef<Room | null>(null);
   const errorDisconnectRef = useRef(false);
   const remoteVideoTimeoutRef = useRef<number | null>(null);
   const videoFrameRef = useRef<HTMLDivElement>(null);
   const audioHostRef = useRef<HTMLDivElement>(null);
   const autoStartRef = useRef(false);
+  const pushToTalkRef = useRef(false);
 
   function clearRemoteVideoTimeout() {
     if (remoteVideoTimeoutRef.current !== null) {
       window.clearTimeout(remoteVideoTimeoutRef.current);
       remoteVideoTimeoutRef.current = null;
     }
+  }
+
+  function resetStageState(nextConnectionState: ConnectionState = "idle") {
+    if (videoFrameRef.current) {
+      videoFrameRef.current.innerHTML = "";
+    }
+    if (audioHostRef.current) {
+      audioHostRef.current.innerHTML = "";
+    }
+    roomRef.current = null;
+    pushToTalkRef.current = false;
+    setConnectionState(nextConnectionState);
+    setRoomName("");
+    setHasVideoTrack(false);
+    setMicEnabled(false);
+    setMicUnavailable(false);
+    setMicBusy(false);
   }
 
   useEffect(() => {
@@ -103,18 +136,43 @@ export function ManagedAvatarSession({
     errorDisconnectRef.current = false;
     if (roomRef.current) {
       roomRef.current.disconnect();
-      roomRef.current = null;
     }
-    if (videoFrameRef.current) {
-      videoFrameRef.current.innerHTML = "";
+    resetStageState("idle");
+  }
+
+  async function setRoomMicrophoneEnabled(enabled: boolean, source: "manual" | "push" = "manual") {
+    const room = roomRef.current;
+    if (!room) {
+      return;
     }
-    if (audioHostRef.current) {
-      audioHostRef.current.innerHTML = "";
+
+    setMicBusy(true);
+    try {
+      await room.localParticipant.setMicrophoneEnabled(
+        enabled,
+        enabled
+          ? {
+              autoGainControl: true,
+              echoCancellation: true,
+              noiseSuppression: true,
+              voiceIsolation: true,
+            }
+          : undefined,
+      );
+      setMicEnabled(enabled);
+      if (enabled) {
+        setMicUnavailable(false);
+      }
+      if (enabled && source === "push" && !pushToTalkRef.current) {
+        await room.localParticipant.setMicrophoneEnabled(false);
+        setMicEnabled(false);
+      }
+    } catch {
+      setMicUnavailable(true);
+      setMicEnabled(false);
+    } finally {
+      setMicBusy(false);
     }
-    setConnectionState("idle");
-    setRoomName("");
-    setHasVideoTrack(false);
-    setMicUnavailable(false);
   }
 
   function attachTrack(track: Track) {
@@ -168,8 +226,7 @@ export function ManagedAvatarSession({
           errorDisconnectRef.current = false;
           return;
         }
-        setConnectionState("idle");
-        setHasVideoTrack(false);
+        resetStageState("idle");
       });
 
       await room.connect(bootstrap.url, bootstrap.token);
@@ -184,11 +241,9 @@ export function ManagedAvatarSession({
       }
 
       if (microphoneMode === "auto") {
-        try {
-          await room.localParticipant.setMicrophoneEnabled(true);
-        } catch {
-          setMicUnavailable(true);
-        }
+        await setRoomMicrophoneEnabled(true);
+      } else {
+        setMicEnabled(false);
       }
       if (videoFrameRef.current?.childElementCount) {
         setConnectionState("connected");
@@ -239,9 +294,31 @@ export function ManagedAvatarSession({
     ? `Room ${roomName}`
     : micUnavailable
       ? "Mic off"
+      : micEnabled
+        ? "Mic open"
       : connectionState === "connected"
         ? "Video live"
         : "Join when ready";
+  const canUseMicControls = connectionState === "connected" && !isPreview;
+
+  function handlePushToTalkStart() {
+    if (!canUseMicControls || micEnabled || micBusy) {
+      return;
+    }
+    pushToTalkRef.current = true;
+    void setRoomMicrophoneEnabled(true, "push");
+  }
+
+  function handlePushToTalkEnd() {
+    if (!pushToTalkRef.current) {
+      pushToTalkRef.current = false;
+      return;
+    }
+    pushToTalkRef.current = false;
+    if (micEnabled && !micBusy) {
+      void setRoomMicrophoneEnabled(false);
+    }
+  }
 
   return (
     <div
@@ -261,37 +338,62 @@ export function ManagedAvatarSession({
             <div className="managed-avatar-session__placeholder">
               <div className="managed-avatar-session__placeholder-copy">
                 <h3>{avatar.label}</h3>
-                <p>{avatar.description ?? "Live avatar stage."}</p>
+                <p>{placeholderLine(connectionState, avatar.description)}</p>
               </div>
             </div>
           ) : null}
         </div>
-      </div>
-      {!isPreview ? (
-        <div className="managed-avatar-session__rail">
-          <div className="managed-avatar-session__actions">
-            <button
-              className="secondary-button"
-              disabled={connectionState === "connecting"}
-              onClick={() => void startSession()}
-              type="button"
-            >
-              {primaryActionLabel}
-            </button>
-            <button
-              className="secondary-button"
-              disabled={connectionState === "connecting" || connectionState === "idle"}
-              onClick={() => void disconnectRoom()}
-              type="button"
-            >
-              Leave
-            </button>
+        {!isPreview ? (
+          <div className="managed-avatar-session__rail">
+            <div className="managed-avatar-session__actions">
+              <button
+                className="secondary-button managed-avatar-session__button managed-avatar-session__button--primary"
+                disabled={connectionState === "connecting"}
+                onClick={() => void startSession()}
+                type="button"
+              >
+                {primaryActionLabel}
+              </button>
+              <button
+                className="secondary-button managed-avatar-session__button managed-avatar-session__button--ghost"
+                disabled={!canUseMicControls || micEnabled || micBusy}
+                onMouseDown={handlePushToTalkStart}
+                onMouseUp={handlePushToTalkEnd}
+                onMouseLeave={handlePushToTalkEnd}
+                onPointerDown={handlePushToTalkStart}
+                onPointerUp={handlePushToTalkEnd}
+                onPointerCancel={handlePushToTalkEnd}
+                onTouchStart={handlePushToTalkStart}
+                onTouchEnd={handlePushToTalkEnd}
+                type="button"
+              >
+                Hold to talk
+              </button>
+              <button
+                className="secondary-button managed-avatar-session__button managed-avatar-session__button--ghost"
+                disabled={!canUseMicControls || micBusy}
+                onClick={() => void setRoomMicrophoneEnabled(!micEnabled)}
+                type="button"
+              >
+                {micEnabled ? "Pause mic" : "Open mic"}
+              </button>
+              <button
+                className="secondary-button managed-avatar-session__button managed-avatar-session__button--ghost"
+                disabled={connectionState === "connecting" || connectionState === "idle"}
+                onClick={() => void disconnectRoom()}
+                type="button"
+              >
+                Leave
+              </button>
+            </div>
+            <div className="managed-avatar-session__facts">{railCaption}</div>
           </div>
-          <div className="managed-avatar-session__facts">{railCaption}</div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
       {micUnavailable && !isPreview ? (
-        <div className="managed-avatar-session__hint">Mic stayed off. Reconnect after allowing it.</div>
+        <div className="managed-avatar-session__hint">Mic unavailable. Use Hold to talk after allowing it.</div>
+      ) : !isPreview ? (
+        <div className="managed-avatar-session__hint">Recommended: keep the mic paused and use Hold to talk in noisy rooms.</div>
       ) : null}
       {errorItems.length > 0 ? (
         <div className="managed-avatar-session__error-card" role="alert">
