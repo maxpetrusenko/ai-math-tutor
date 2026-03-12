@@ -11,11 +11,13 @@ from backend.runtime.hosted_rollout import (
     build_cloud_build_command,
     build_rollout_ref_args,
     build_run_deploy_command,
+    extract_cloud_build_id,
     extract_json_payload,
     parse_env_file,
     rollout_frontend,
     service_url_to_ws_url,
     set_apphosting_secret,
+    wait_for_cloud_build,
     write_cloud_build_config_file,
 )
 
@@ -89,7 +91,56 @@ def test_build_cloud_build_command_uses_repo_root_context(tmp_path: Path) -> Non
         "demo-project",
         "--config",
         str(config_file),
+        "--async",
+        "--format=json",
         "--suppress-logs",
+    ]
+
+
+def test_extract_cloud_build_id_reads_operation_metadata() -> None:
+    assert (
+        extract_cloud_build_id({"metadata": {"build": {"id": "build-123"}}})
+        == "build-123"
+    )
+
+
+def test_wait_for_cloud_build_polls_until_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    responses = iter(
+        [
+            {"status": "WORKING"},
+            {"status": "SUCCESS"},
+        ]
+    )
+    captured: list[list[str]] = []
+
+    def fake_run_json_command(args: list[str], *, cwd: Path | None = None) -> object:
+        captured.append(args)
+        return next(responses)
+
+    monkeypatch.setattr("backend.runtime.hosted_rollout.run_json_command", fake_run_json_command)
+    monkeypatch.setattr("backend.runtime.hosted_rollout.time.sleep", lambda _: None)
+
+    wait_for_cloud_build(project="demo-project", build_id="build-123")
+
+    assert captured == [
+        [
+            "gcloud",
+            "builds",
+            "describe",
+            "build-123",
+            "--project",
+            "demo-project",
+            "--format=json",
+        ],
+        [
+            "gcloud",
+            "builds",
+            "describe",
+            "build-123",
+            "--project",
+            "demo-project",
+            "--format=json",
+        ],
     ]
 
 

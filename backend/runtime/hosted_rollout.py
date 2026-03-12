@@ -5,6 +5,7 @@ import os
 import shlex
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -144,8 +145,53 @@ def build_cloud_build_command(*, project: str, source_dir: Path, config_file: Pa
         project,
         "--config",
         str(config_file),
+        "--async",
+        "--format=json",
         "--suppress-logs",
     ]
+
+
+def extract_cloud_build_id(payload: Any) -> str:
+    metadata = payload.get("metadata") if isinstance(payload, dict) else None
+    if isinstance(metadata, dict):
+        build = metadata.get("build")
+        if isinstance(build, dict):
+            build_id = str(build.get("id") or "").strip()
+            if build_id:
+                return build_id
+    build_id = str((payload or {}).get("id") or "").strip()
+    if build_id:
+        return build_id
+    name = str((payload or {}).get("name") or "").strip()
+    if name:
+        return name.rsplit("/", 1)[-1]
+    raise ValueError(f"Could not extract Cloud Build id from payload: {payload!r}")
+
+
+def wait_for_cloud_build(*, project: str, build_id: str, poll_seconds: float = 1.0) -> None:
+    while True:
+        payload = run_json_command(
+            [
+                "gcloud",
+                "builds",
+                "describe",
+                build_id,
+                "--project",
+                project,
+                "--format=json",
+            ]
+        )
+        status = str(payload.get("status") or "").upper()
+        if status == "SUCCESS":
+            return
+        if status in {"FAILURE", "INTERNAL_ERROR", "TIMEOUT", "CANCELLED", "EXPIRED"}:
+            log_url = str(payload.get("logUrl") or "").strip()
+            detail = payload.get("failureInfo") or {}
+            message = detail.get("detail") or status
+            if log_url:
+                raise RuntimeError(f"Cloud Build failed: {message}\n{log_url}")
+            raise RuntimeError(f"Cloud Build failed: {message}")
+        time.sleep(poll_seconds)
 
 
 def build_run_deploy_command(
@@ -389,12 +435,16 @@ def deploy_session_backend(
     )
     build_config = write_cloud_build_config_file(image=image, dockerfile=Path("backend") / "Dockerfile")
     try:
-        run_command(
+        build_operation = run_json_command(
             build_cloud_build_command(
                 project=target.firebase_project,
                 source_dir=repo_root,
                 config_file=Path(build_config.name),
             )
+        )
+        wait_for_cloud_build(
+            project=target.firebase_project,
+            build_id=extract_cloud_build_id(build_operation),
         )
     finally:
         try:
