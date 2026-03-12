@@ -12,6 +12,7 @@ As of 2026-03-12:
 - Task 28: done
 - Task 29: done
 - Task 30: done
+- Task 31: draft only, needs review
 
 ## 1. Purpose
 
@@ -475,6 +476,41 @@ Done criteria:
 - page works well on mobile and desktop
 - keyboard and label/accessibility basics are solid
 - UI is strong enough for reviewer/demo recording
+
+## 32. Task 31: Interactive Lesson Artifacts
+
+Owner:
+
+- frontend / product / realtime engineer
+
+Goal:
+
+- add a dedicated artifact surface to `/session` so the tutor can teach with manipulable visuals such as fraction pizzas
+
+Dependencies:
+
+- Task 25
+- Task 30
+
+Deliverables:
+
+- `LessonArtifactPanel` in `/session`
+- first artifact: `fraction-pizza`
+- guided lesson open mode where tutor can speak and seed the artifact immediately
+- open-ended Socratic mode where artifact use is optional and tutor-led
+- local artifact persistence in lesson thread state
+- Yjs-ready artifact document path for later sync
+
+Done criteria:
+
+- a fractions lesson can open with tutor voice plus seeded artifact
+- a learner can manipulate slices and continue the same tutor loop
+- artifact state resumes with the lesson
+- scope and product modes are reviewed before multiplayer work starts
+
+Review note:
+
+- this is not fully flushed and needs product + architecture review before implementation starts
 
 ## 11. Task 10: Audio Playback and Interruption
 

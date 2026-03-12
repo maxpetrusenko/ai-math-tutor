@@ -16,6 +16,7 @@ As of 2026-03-10:
 - Lane F / Task 28: done
 - Lane G / Task 29: done
 - Lane H / Task 30: done
+- Task 31: draft only, needs review
 
 ## Agent Handoff Rules
 
@@ -74,6 +75,7 @@ Source docs:
 28. [`28-pedagogy-demo-and-acceptance-pack.md`](./28-pedagogy-demo-and-acceptance-pack.md)
 29. [`29-provider-cost-and-asset-licensing-guardrails.md`](./29-provider-cost-and-asset-licensing-guardrails.md)
 30. [`30-ui-polish-and-usability-pass.md`](./30-ui-polish-and-usability-pass.md)
+31. [`31-interactive-lesson-artifacts.md`](./31-interactive-lesson-artifacts.md)
 
 ## Phase Mapping
 
@@ -88,6 +90,7 @@ Source docs:
 - Phase 8: Tasks 13, 22
 - Phase 9: Tasks 14
 - Phase 10: Tasks 23, 24, 25, 26, 27, 28, 29, 30
+- Phase 11: Task 31 review, then implementation after approval
 
 ## Parallelization
 
@@ -191,6 +194,12 @@ Task 29 should land before any premium-avatar bakeoff or final demo packaging.
 - Task 30: UI Polish and Usability Pass
 
 Task 30 should land after the selector and lesson UX are real, but before live benchmark capture and final demo recording.
+
+### Wave 14
+
+- Task 31: Interactive Lesson Artifacts
+
+Task 31 starts as a review-only draft. Implementation should begin only after Task 25 and Task 30 behavior is stable and the product mode split is approved.
 
 ## Critical Path
 
