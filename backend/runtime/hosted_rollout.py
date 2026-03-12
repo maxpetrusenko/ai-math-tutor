@@ -568,9 +568,19 @@ def rollout_frontend(
         f"apphosting:{backend_id}",
         "--project",
         project,
-        "--force",
     ]
-    run_command(args, cwd=frontend_root)
+    completed = run_command(args, cwd=frontend_root, check=False)
+    if completed.returncode == 0:
+        return
+
+    stdout = completed.stdout.strip()
+    stderr = completed.stderr.strip()
+    detail = "\n".join(part for part in (stdout, stderr) if part).strip()
+    if "Starting rollout(s) for backend(s)" in detail:
+        return
+
+    failure_detail = detail or f"exit code {completed.returncode}"
+    raise RuntimeError(f"Command failed: {' '.join(args)}\n{failure_detail}")
 
 
 def smoke_frontend(

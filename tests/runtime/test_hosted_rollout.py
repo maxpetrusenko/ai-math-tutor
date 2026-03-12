@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -297,11 +298,12 @@ def test_rollout_frontend_deploys_local_apphosting_source(monkeypatch: pytest.Mo
         cwd: Path | None = None,
         input_text: str | None = None,
         check: bool = True,
-    ) -> None:
+    ) -> subprocess.CompletedProcess[str]:
         captured["args"] = args
         captured["cwd"] = cwd
         captured["input_text"] = input_text
         captured["check"] = check
+        return subprocess.CompletedProcess(args, 0, "", "")
 
     monkeypatch.setattr("backend.runtime.hosted_rollout.run_command", fake_run_command)
 
@@ -320,10 +322,60 @@ def test_rollout_frontend_deploys_local_apphosting_source(monkeypatch: pytest.Mo
         "apphosting:demo-backend",
         "--project",
         "demo-project",
-        "--force",
     ]
     assert captured["cwd"] == tmp_path / "frontend"
     assert captured["input_text"] is None
+    assert captured["check"] is False
+
+
+def test_rollout_frontend_accepts_rollout_started_nonzero_exit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fake_run_command(
+        args: list[str],
+        *,
+        cwd: Path | None = None,
+        input_text: str | None = None,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args,
+            1,
+            "",
+            "- Starting rollout(s) for backend(s) ai-math-tutor; this may take a few minutes. It's safe to exit now.\n",
+        )
+
+    monkeypatch.setattr("backend.runtime.hosted_rollout.run_command", fake_run_command)
+
+    rollout_frontend(
+        repo_root=tmp_path,
+        project="demo-project",
+        backend_id="demo-backend",
+        git_branch=None,
+        git_commit="abc123",
+    )
+
+
+def test_rollout_frontend_raises_on_real_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def fake_run_command(
+        args: list[str],
+        *,
+        cwd: Path | None = None,
+        input_text: str | None = None,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 1, "", "permission denied")
+
+    monkeypatch.setattr("backend.runtime.hosted_rollout.run_command", fake_run_command)
+
+    with pytest.raises(RuntimeError, match="permission denied"):
+        rollout_frontend(
+            repo_root=tmp_path,
+            project="demo-project",
+            backend_id="demo-backend",
+            git_branch=None,
+            git_commit="abc123",
+        )
 
 
 def test_frontend_firebase_config_targets_local_app_root() -> None:
