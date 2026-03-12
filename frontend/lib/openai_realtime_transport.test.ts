@@ -1,5 +1,21 @@
 import { afterEach, vi } from "vitest";
 
+const { getCurrentFirebaseIdToken } = vi.hoisted(() => ({
+  getCurrentFirebaseIdToken: vi.fn<() => Promise<string | null>>(),
+}));
+
+const { getFirebaseAuthClient } = vi.hoisted(() => ({
+  getFirebaseAuthClient: vi.fn<() => { currentUser?: unknown } | null>(),
+}));
+
+vi.mock("./firebase_auth", () => ({
+  getCurrentFirebaseIdToken,
+}));
+
+vi.mock("./firebase_client", () => ({
+  getFirebaseAuthClient,
+}));
+
 import { createOpenAIRealtimeTransport } from "./openai_realtime_transport";
 
 class FakeWebSocket {
@@ -75,11 +91,16 @@ class FakeBlob {
 
 afterEach(() => {
   FakeWebSocket.instances = [];
+  getCurrentFirebaseIdToken.mockReset();
+  getCurrentFirebaseIdToken.mockResolvedValue(null);
+  getFirebaseAuthClient.mockReset();
+  getFirebaseAuthClient.mockReturnValue(null);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 test("openai realtime transport mints a client secret and resolves a text turn with wav audio", async () => {
+  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
   const fetchImpl = vi.fn(async () => ({
     ok: true,
     async json() {
@@ -107,6 +128,15 @@ test("openai realtime transport mints a client secret and resolves a text turn w
   const socket = FakeWebSocket.instances[0];
   expect(socket).toBeDefined();
   expect(fetchImpl).toHaveBeenCalledTimes(1);
+  expect(fetchImpl).toHaveBeenCalledWith(
+    "http://127.0.0.1:8000/api/realtime/client-secret",
+    expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: "Bearer firebase-id-token",
+        "Content-Type": "application/json",
+      }),
+    })
+  );
   expect(socket.protocols).toEqual(["realtime", "openai-insecure-api-key.ephemeral-123"]);
 
   const sentPayloads = socket.sent.map((payload) => JSON.parse(payload) as Record<string, unknown>);
@@ -147,6 +177,7 @@ test("openai realtime transport mints a client secret and resolves a text turn w
 });
 
 test("openai realtime transport accepts the live backend top-level value shape", async () => {
+  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
   const fetchImpl = vi.fn(async () => ({
     ok: true,
     async json() {
@@ -187,6 +218,7 @@ test("openai realtime transport accepts the live backend top-level value shape",
 });
 
 test("openai realtime transport waits for provider audio completion before resolving", async () => {
+  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
   const fetchImpl = vi.fn(async () => ({
     ok: true,
     async json() {
@@ -237,6 +269,7 @@ test("openai realtime transport waits for provider audio completion before resol
 });
 
 test("openai realtime transport surfaces backend token route detail", async () => {
+  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
   const fetchImpl = vi.fn(async () => ({
     ok: false,
     status: 503,
@@ -265,6 +298,7 @@ test("openai realtime transport surfaces backend token route detail", async () =
 });
 
 test("openai realtime transport surfaces backend token timeout detail", async () => {
+  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
   const fetchImpl = vi.fn(async () => ({
     ok: false,
     status: 504,
@@ -293,6 +327,7 @@ test("openai realtime transport surfaces backend token timeout detail", async ()
 });
 
 test("openai realtime transport distinguishes token mint timeout before a backend response", async () => {
+  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
   const fetchImpl = vi.fn(async () => {
     const error = new Error("The operation timed out");
     error.name = "AbortError";
@@ -318,7 +353,32 @@ test("openai realtime transport distinguishes token mint timeout before a backen
   ).rejects.toThrow("Realtime token mint timed out before the backend responded");
 });
 
+test("openai realtime transport requires firebase sign-in before minting a realtime token", async () => {
+  getFirebaseAuthClient.mockReturnValue({ currentUser: {} });
+  const fetchImpl = vi.fn() as unknown as typeof fetch;
+
+  const transport = createOpenAIRealtimeTransport({
+    apiUrl: "http://127.0.0.1:8000/api/realtime/client-secret",
+    fetchImpl,
+    WebSocketImpl: FakeWebSocket as unknown as typeof WebSocket,
+  });
+
+  await expect(
+    transport.runTurn({
+      studentText: "Hello",
+      subject: "math",
+      gradeBand: "6-8",
+      llmProvider: "openai-realtime",
+      llmModel: "gpt-realtime-mini",
+      ttsProvider: "openai-realtime",
+      ttsModel: "gpt-realtime-mini",
+    })
+  ).rejects.toThrow("Firebase sign-in required");
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
+
 test("openai realtime transport uses a transcription session for mic-to-composer", async () => {
+  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
   vi.stubGlobal("AudioContext", FakeAudioContext);
   vi.stubGlobal("Blob", FakeBlob);
 
@@ -390,6 +450,7 @@ test("openai realtime transport uses a transcription session for mic-to-composer
 });
 
 test("openai realtime transport surfaces transcription websocket server errors", async () => {
+  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
   vi.stubGlobal("AudioContext", FakeAudioContext);
   vi.stubGlobal("Blob", FakeBlob);
 

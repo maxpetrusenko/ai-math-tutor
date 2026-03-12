@@ -1,5 +1,7 @@
 import { createSessionMetrics, snapshotSessionMetrics, toLatencyMetrics } from "./session_metrics";
 import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/TutorSession";
+import { getCurrentFirebaseIdToken } from "./firebase_auth";
+import { getFirebaseAuthClient } from "./firebase_client";
 import type { PersistedLessonThread } from "./lesson_thread_store";
 
 const REALTIME_SOCKET_URL = "wss://api.openai.com/v1/realtime";
@@ -436,6 +438,10 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
       throw new Error("Realtime token endpoint is not configured");
     }
     const requestedModel = options.model ?? request.llmModel ?? "gpt-realtime-mini";
+    const idToken = await getCurrentFirebaseIdToken();
+    if (!idToken && getFirebaseAuthClient()) {
+      throw new Error("Firebase sign-in required");
+    }
     let response: Response;
     try {
       response = await fetchImpl(apiUrl, {
@@ -446,6 +452,7 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
             ? AbortSignal.timeout(REALTIME_TOKEN_MINT_TIMEOUT_MS)
             : undefined,
         headers: {
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
