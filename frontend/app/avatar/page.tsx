@@ -1,13 +1,11 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import Link from "next/link";
+import React, { useEffect, useMemo, useState } from "react";
 
 import { AvatarProvider } from "../../components/AvatarProvider";
 import { DashboardLayout } from "../../components/layout";
 import { OptionPillRow } from "../../components/ui/OptionPillRow";
 import { PageHeader } from "../../components/ui/PageHeader";
-import { SurfaceCard } from "../../components/ui/SurfaceCard";
 import {
   listAvatarProvidersForMode,
   resolveAvatarProvider,
@@ -18,6 +16,7 @@ import {
 import { readAvatarProviderPreference, writeAvatarProviderPreference } from "../../lib/avatar_preference";
 
 const PREVIEW_GREETING = "Hello, ready to learn?";
+const PREVIEW_LOOP_MS = 1600;
 const PREVIEW_TIMESTAMPS = [
   { endMs: 140, startMs: 0, word: "Hello" },
   { endMs: 260, startMs: 150, word: "ready" },
@@ -37,13 +36,22 @@ export default function AvatarPage() {
     const preferredAvatarId = readAvatarProviderPreference();
     return resolveAvatarProvider(preferredAvatarId ?? undefined).id;
   });
+  const [hoveredAvatarId, setHoveredAvatarId] = useState<string | null>(null);
+  const [previewNowMs, setPreviewNowMs] = useState(0);
   const [selectedMode, setSelectedMode] = useState<AvatarRenderMode>(() => resolveAvatarMode(selectedAvatarId));
   const avatarOptions = useMemo(() => listAvatarProvidersForMode(selectedMode), [selectedMode]);
   const safeSelectedAvatarId = avatarOptions.some((avatar) => avatar.id === selectedAvatarId)
     ? selectedAvatarId
     : resolveDefaultAvatarProviderId(selectedMode);
-  const selectedAvatar = resolveAvatarProvider(safeSelectedAvatarId);
-  const selectedAvatarSummary = selectedAvatar.description ?? "";
+
+  useEffect(() => {
+    const startedAt = performance.now();
+    const interval = window.setInterval(() => {
+      setPreviewNowMs(Math.floor((performance.now() - startedAt) % PREVIEW_LOOP_MS));
+    }, 90);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   const handleSelectAvatar = (avatarId: string) => {
     setSelectedAvatarId(avatarId);
@@ -55,8 +63,11 @@ export default function AvatarPage() {
     setSelectedMode(nextMode);
     const nextId = resolveDefaultAvatarProviderId(nextMode);
     setSelectedAvatarId(nextId);
+    setHoveredAvatarId(null);
     writeAvatarProviderPreference(nextId);
   };
+
+  const isPreviewTalking = (avatarId: string) => safeSelectedAvatarId === avatarId || hoveredAvatarId === avatarId;
 
   return (
     <DashboardLayout>
@@ -81,18 +92,24 @@ export default function AvatarPage() {
           {avatarOptions.map((avatar) => (
             <button
               key={avatar.id}
+              aria-label={avatar.label}
               className={`avatar-option ${
                 safeSelectedAvatarId === avatar.id ? "avatar-option--selected" : ""
               }`}
+              onBlur={() => setHoveredAvatarId((current) => (current === avatar.id ? null : current))}
               onClick={() => handleSelectAvatar(avatar.id)}
+              onFocus={() => setHoveredAvatarId(avatar.id)}
+              onMouseEnter={() => setHoveredAvatarId(avatar.id)}
+              onMouseLeave={() => setHoveredAvatarId((current) => (current === avatar.id ? null : current))}
               type="button"
             >
               <div className="avatar-option__preview avatar-option__preview--padded">
                 <AvatarProvider
                   avatarId={avatar.id}
-                  energy={0.6}
-                  nowMs={220}
-                  state="speaking"
+                  energy={isPreviewTalking(avatar.id) ? 0.72 : 0.18}
+                  nowMs={isPreviewTalking(avatar.id) ? previewNowMs : 0}
+                  state={isPreviewTalking(avatar.id) ? "speaking" : "idle"}
+                  subtitle={isPreviewTalking(avatar.id) ? PREVIEW_GREETING : ""}
                   timestamps={PREVIEW_TIMESTAMPS}
                   variant="gallery"
                 />
@@ -103,53 +120,6 @@ export default function AvatarPage() {
               </p>
             </button>
           ))}
-        </div>
-
-        <div className="avatar-page__detail-grid">
-          <SurfaceCard className="surface-card--soft avatar-spotlight">
-            <div className="avatar-spotlight__header">
-              <div>
-                <div className="section-title">{selectedAvatar.label}</div>
-                <p className="section-copy section-copy--top-sm">
-                  {selectedAvatar.persona ?? selectedAvatar.description}
-                </p>
-              </div>
-              <Link className="primary-button" href="/session">
-                Start session
-              </Link>
-            </div>
-            {selectedAvatar.kind === "managed" ? (
-              <div className="avatar-spotlight__local-preview">
-                <AvatarProvider
-                  avatarId={selectedAvatar.id}
-                  energy={0.6}
-                  nowMs={220}
-                  state="speaking"
-                  timestamps={PREVIEW_TIMESTAMPS}
-                  variant="gallery"
-                />
-              </div>
-            ) : (
-              <div className="avatar-spotlight__local-preview">
-                <AvatarProvider
-                  avatarId={selectedAvatar.id}
-                  energy={0.6}
-                  nowMs={220}
-                  state="speaking"
-                  subtitle={PREVIEW_GREETING}
-                  timestamps={PREVIEW_TIMESTAMPS}
-                  variant="hero"
-                />
-              </div>
-            )}
-            <div className="avatar-spotlight__footer">
-              <div className="avatar-spotlight__summary">
-                {selectedAvatar.kind === "managed"
-                  ? "Opens as a live camera stage in the tutor session."
-                  : selectedAvatarSummary}
-              </div>
-            </div>
-          </SurfaceCard>
         </div>
       </div>
     </DashboardLayout>

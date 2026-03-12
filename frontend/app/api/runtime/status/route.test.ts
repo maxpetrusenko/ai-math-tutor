@@ -14,6 +14,7 @@ afterEach(() => {
 test("runtime status route reports revision and firebase config readiness", async () => {
   process.env.K_REVISION = "ai-math-tutor-build-2026-03-11-011";
   process.env.K_SERVICE = "ai-math-tutor-frontend";
+  process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH = "1";
   process.env.NEXT_PUBLIC_SESSION_WS_URL = "wss://example.com/ws/session";
   process.env.FIREBASE_WEBAPP_CONFIG = JSON.stringify({
     apiKey: "runtime-key",
@@ -29,6 +30,7 @@ test("runtime status route reports revision and firebase config readiness", asyn
 
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toEqual({
+    firebaseAuthRequired: true,
     firebaseConfigReady: true,
     firebaseConfigSource: "FIREBASE_WEBAPP_CONFIG",
     revision: "ai-math-tutor-build-2026-03-11-011",
@@ -38,6 +40,7 @@ test("runtime status route reports revision and firebase config readiness", asyn
 });
 
 test("runtime status route reports missing firebase config cleanly", async () => {
+  delete process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH;
   delete process.env.FIREBASE_WEBAPP_CONFIG;
   delete process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
   delete process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
@@ -51,6 +54,7 @@ test("runtime status route reports missing firebase config cleanly", async () =>
 
   expect(response.status).toBe(200);
   await expect(response.json()).resolves.toEqual({
+    firebaseAuthRequired: false,
     firebaseConfigReady: false,
     firebaseConfigSource: null,
     revision: null,

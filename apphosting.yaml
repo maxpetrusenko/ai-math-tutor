@@ -14,3 +14,8 @@ env:
     availability:
       - BUILD
       - RUNTIME
+  - variable: NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH
+    secret: REQUIRE_FIREBASE_AUTH
+    availability:
+      - BUILD
+      - RUNTIME

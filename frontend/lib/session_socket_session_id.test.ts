@@ -8,6 +8,7 @@ class FakeWebSocket {
 
   readonly sent: string[] = [];
   readonly url: string;
+  bufferedAmount = 0;
   readyState = FakeWebSocket.OPEN;
   onopen: (() => void) | null = null;
   onmessage: ((event: MessageEvent<string>) => void) | null = null;
@@ -19,6 +20,11 @@ class FakeWebSocket {
     FakeWebSocket.instances.push(this);
     queueMicrotask(() => {
       this.onopen?.();
+      queueMicrotask(() => {
+        this.onmessage?.({
+          data: JSON.stringify({ type: "session.started", session_id: "session-1", state: "idle" }),
+        } as MessageEvent<string>);
+      });
     });
   }
 

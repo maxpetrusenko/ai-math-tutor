@@ -10,6 +10,11 @@ def disable_live_runtime(monkeypatch) -> None:
     monkeypatch.setenv("NERDY_DISABLE_LIVE_TTS", "1")
 
 
+def _session_ws(client: TestClient, path: str = "/ws/session", **kwargs):
+    headers = {"Origin": "http://127.0.0.1:3000", **(kwargs.pop("headers", {}) or {})}
+    return client.websocket_connect(path, headers=headers, **kwargs)
+
+
 def _read_turn_events(websocket) -> list[dict[str, object]]:
     events: list[dict[str, object]] = []
     while True:
@@ -54,7 +59,7 @@ def test_session_server_treats_clear_math_topic_shift_as_fresh_turn(monkeypatch)
     monkeypatch.setattr(server, "build_tutor_messages", tracking_build_tutor_messages)
     client = TestClient(app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {

@@ -12,6 +12,7 @@ import {
 } from "../../lib/lesson_thread_store";
 import type { PlaybackController } from "../../lib/playback_controller";
 import { normalizeRuntimeSelection, type RuntimeSelection } from "../../lib/runtime_options";
+import { getSessionActivityLogSnapshot } from "../../lib/session_activity_log";
 import { resolveAvatarPersona } from "../../lib/avatar_persona";
 import { createSessionMetrics, hydrateSessionMetrics, seedSessionMetricsFromLatency, toLatencyMetrics } from "../../lib/session_metrics";
 import type { LessonState } from "../../lib/lesson_catalog";
@@ -59,6 +60,7 @@ function buildTransportDebug(input: {
       transcriptLength: result.transcript.length,
       tutorTextLength: result.tutorText.length,
     },
+    sessionEvents: getSessionActivityLogSnapshot(24),
     sessionId: normalizeLessonSessionId(lessonSessionId),
     startedAt,
     transport: resolveTransportKind(runtimeSelection),

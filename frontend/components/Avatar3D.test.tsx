@@ -22,6 +22,12 @@ vi.mock("../lib/avatar_3d_driver", () => ({
 
 import { Avatar3D } from "./Avatar3D";
 
+beforeEach(() => {
+  mocks.applyAvatar3DFrame.mockReset();
+  mocks.createAvatar3DScene.mockReset();
+  mocks.sampleAvatar3DFrame.mockReset();
+});
+
 test("avatar 3d creates a scene, applies frames, and disposes on unmount", () => {
   const dispose = vi.fn();
   mocks.createAvatar3DScene.mockReturnValue({
@@ -59,4 +65,27 @@ test("avatar 3d creates a scene, applies frames, and disposes on unmount", () =>
 
   unmount();
   expect(dispose).toHaveBeenCalled();
+});
+
+test("avatar 3d reports scene creation failures to the caller", () => {
+  const onError = vi.fn();
+  mocks.createAvatar3DScene.mockImplementation(() => {
+    throw new Error("Error creating WebGL context.");
+  });
+
+  render(
+    <Avatar3D
+      asset={loadAvatarAsset({ type: "3d", assetRef: "human" }) as Avatar3DAsset}
+      config={{ provider: "threejs", type: "3d" }}
+      nowMs={0}
+      onError={onError}
+      state="idle"
+      timestamps={[]}
+    />
+  );
+
+  expect(onError).toHaveBeenCalledWith(expect.objectContaining({
+    message: "Error creating WebGL context.",
+  }));
+  expect(mocks.applyAvatar3DFrame).not.toHaveBeenCalled();
 });

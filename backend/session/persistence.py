@@ -26,7 +26,7 @@ class LessonState(TypedDict, total=False):
 
 class PersistedLessonThread(TypedDict):
     avatarProviderId: str
-    conversation: list[dict[str, str]]
+    conversation: list[dict[str, object]]
     gradeBand: str
     lessonState: LessonState | None
     llmModel: str
@@ -307,13 +307,9 @@ def _coerce_lesson_thread(value: object) -> PersistedLessonThread | None:
     return {
         "avatarProviderId": str(value.get("avatarProviderId") or "sage-svg-2d"),
         "conversation": [
-            {
-                "id": str(item.get("id", "")),
-                "transcript": str(item.get("transcript", "")),
-                "tutorText": str(item.get("tutorText", "")),
-            }
+            turn
             for item in conversation
-            if isinstance(item, dict)
+            if (turn := _coerce_conversation_turn(item)) is not None
         ],
         "gradeBand": str(value.get("gradeBand") or "6-8"),
         "lessonState": _coerce_lesson_state(value.get("lessonState")),
@@ -385,7 +381,7 @@ def _clone_session_snapshot(snapshot: SessionSnapshot) -> SessionSnapshot:
 def _clone_lesson_thread(thread: PersistedLessonThread) -> PersistedLessonThread:
     return {
         "avatarProviderId": thread["avatarProviderId"],
-        "conversation": [dict(item) for item in thread["conversation"]],
+        "conversation": [_clone_conversation_turn(item) for item in thread["conversation"]],
         "gradeBand": thread["gradeBand"],
         "lessonState": _clone_lesson_state(thread.get("lessonState")),
         "llmModel": thread["llmModel"],
@@ -400,6 +396,45 @@ def _clone_lesson_thread(thread: PersistedLessonThread) -> PersistedLessonThread
         "tutorText": thread["tutorText"],
         "version": thread["version"],
     }
+
+
+def _coerce_conversation_turn(value: object) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return None
+
+    turn = _clone_json_object(value)
+    turn["id"] = str(value.get("id", ""))
+    turn["transcript"] = str(value.get("transcript", ""))
+    turn["tutorText"] = str(value.get("tutorText", ""))
+    return turn
+
+
+def _clone_conversation_turn(value: dict[str, object]) -> dict[str, object]:
+    turn = _clone_json_object(value)
+    turn["id"] = str(value.get("id", ""))
+    turn["transcript"] = str(value.get("transcript", ""))
+    turn["tutorText"] = str(value.get("tutorText", ""))
+    return turn
+
+
+def _clone_json_object(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+
+    return {
+        str(key): _clone_json_value(item)
+        for key, item in cast(dict[object, object], value).items()
+    }
+
+
+def _clone_json_value(value: object) -> object:
+    if isinstance(value, dict):
+        return _clone_json_object(value)
+    if isinstance(value, list):
+        return [_clone_json_value(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
 
 
 def _clone_lesson_state(lesson_state: LessonState | None) -> LessonState | None:

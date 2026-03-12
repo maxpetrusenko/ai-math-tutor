@@ -58,7 +58,7 @@ export function AvatarRenderer({
           </div>
         </div>
         {variant === "panel" ? <p className="avatar__caption">{frame.caption}</p> : null}
-        {subtitle && variant !== "gallery" ? <div className="avatar__subtitle" data-testid="avatar-subtitle">{subtitle}</div> : null}
+        {subtitle ? <div className="avatar__subtitle" data-testid="avatar-subtitle">{subtitle}</div> : null}
       </div>
     </div>
   );

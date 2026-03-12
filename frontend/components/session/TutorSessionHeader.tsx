@@ -4,43 +4,29 @@ import React from "react";
 
 type TutorSessionHeaderProps = {
   connectionState: string;
-  gradeBand: string;
-  historyOpen: boolean;
+  sessionBrainLabel?: string | null;
   lessonTitle?: string | null;
   onResetLesson: () => void;
-  onToggleHistory: () => void;
-  selectedAvatarLabel: string;
-  selectedAvatarPersona: string;
   sessionSubtitle: string;
-  subjectLabel: string;
 };
 
 export function TutorSessionHeader({
   connectionState,
-  gradeBand,
-  historyOpen,
   lessonTitle,
   onResetLesson,
-  onToggleHistory,
-  selectedAvatarLabel,
-  selectedAvatarPersona,
+  sessionBrainLabel,
   sessionSubtitle,
-  subjectLabel,
 }: TutorSessionHeaderProps) {
   return (
     <header className="session-hub__header">
-      <div className="session-hub__identity">
-        <div className="session-hub__identity-mark">
-          AI
+        <div className="session-hub__identity">
+          <div className="session-hub__identity-mark">
+          NS
         </div>
-        <div>
-          <h1 className="session-hub__title">AI Tutor</h1>
+        <div className="session-hub__identity-copy">
+          <h1 className="session-hub__title">Session</h1>
           <p className="session-hub__subtitle">{sessionSubtitle}</p>
           <div className="session-hub__meta">
-            <span className="session-hub__meta-chip">{selectedAvatarLabel}</span>
-            <span className="session-hub__meta-chip">{selectedAvatarPersona}</span>
-            <span className="session-hub__meta-chip">{subjectLabel}</span>
-            <span className="session-hub__meta-chip">Grade {gradeBand}</span>
             {lessonTitle ? <span className="session-hub__meta-chip">{lessonTitle}</span> : null}
           </div>
         </div>
@@ -53,6 +39,14 @@ export function TutorSessionHeader({
           "status-dot--offline"
         }`} />
         <span className="connection-status__text">{connectionState}</span>
+        {sessionBrainLabel ? (
+          <span
+            className="session-hub__status-chip"
+            title={sessionBrainLabel}
+          >
+            {sessionBrainLabel}
+          </span>
+        ) : null}
         <button
           aria-label="New Lesson"
           className="secondary-button"
@@ -60,16 +54,6 @@ export function TutorSessionHeader({
           type="button"
         >
           New
-        </button>
-        <button
-          aria-controls="history-drawer"
-          aria-expanded={historyOpen}
-          aria-label="Toggle history"
-          className="secondary-button session-hub__history-button"
-          onClick={onToggleHistory}
-          type="button"
-        >
-          History
         </button>
       </div>
     </header>

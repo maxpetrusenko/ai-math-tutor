@@ -86,6 +86,25 @@ test("settings shows a current setup summary for the learner", () => {
   expect(screen.getAllByText("English").length).toBeGreaterThan(0);
 });
 
+test("settings owns the session brain controls", () => {
+  render(<SettingsPage />);
+
+  expect(screen.getAllByText("Session brain").length).toBeGreaterThan(0);
+  expect(screen.getByLabelText("Session LLM provider")).toHaveValue("gemini");
+  expect(screen.getByLabelText("Session LLM model")).toHaveValue("gemini-3-flash-preview");
+
+  fireEvent.change(screen.getByLabelText("Session LLM provider"), {
+    target: { value: "openai-realtime" },
+  });
+
+  expect(writeSessionPreferences).toHaveBeenCalledWith(expect.objectContaining({
+    llmModel: "gpt-realtime-mini",
+    llmProvider: "openai-realtime",
+    ttsModel: "gpt-realtime-mini",
+    ttsProvider: "openai-realtime",
+  }));
+});
+
 test("settings exposes learner data export and reset actions", async () => {
   const originalCreateObjectUrl = URL.createObjectURL;
   const originalRevokeObjectUrl = URL.revokeObjectURL;

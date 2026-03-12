@@ -71,7 +71,7 @@ export function AvatarSvgRenderer({
       <div style={chipStyle}>{avatar.childLabel}</div>
       <SvgAvatar mouthOpen={frame.mouthOpen} size={size} state={frame.state} title={avatar.label} />
       {variant === "panel" ? <p style={captionStyle}>{frame.caption}</p> : null}
-      {subtitle && variant !== "gallery" ? (
+      {subtitle ? (
         <p data-testid="avatar-subtitle" style={subtitleStyle}>
           {subtitle}
         </p>

@@ -45,7 +45,7 @@ const navSections: NavSection[] = [
       },
       {
         id: "session",
-        label: "Tutor Session",
+        label: "Open Session",
         href: "/session",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>

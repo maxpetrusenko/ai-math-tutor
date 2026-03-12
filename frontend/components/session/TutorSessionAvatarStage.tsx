@@ -1,7 +1,7 @@
 import React from "react";
 
 import { AvatarProvider } from "../AvatarProvider";
-import { ManagedAvatarSession } from "../ManagedAvatarSession";
+import { ManagedAvatarSession, type ManagedAvatarSessionHandle, type ManagedAvatarSessionSnapshot } from "../ManagedAvatarSession";
 import type { AvatarConfig, AvatarVisualState, WordTimestamp } from "../../lib/avatar_contract";
 import type { LessonState } from "../../lib/lesson_catalog";
 
@@ -14,7 +14,8 @@ type TutorSessionAvatarStageProps = {
   isManagedAvatar: boolean;
   lessonQuestion: string | null;
   lessonState: LessonState | null;
-  selectedAvatarLabel: string;
+  managedSessionRef?: React.RefObject<ManagedAvatarSessionHandle | null>;
+  onManagedSessionStateChange?: (snapshot: ManagedAvatarSessionSnapshot) => void;
   selectedAvatar: {
     id: string;
     kind: "local" | "managed";
@@ -34,19 +35,32 @@ export function TutorSessionAvatarStage({
   isManagedAvatar,
   lessonQuestion,
   lessonState,
+  managedSessionRef,
+  onManagedSessionStateChange,
   selectedAvatar,
-  selectedAvatarLabel,
   timestamps,
   tutorText,
 }: TutorSessionAvatarStageProps) {
   const showWelcome =
-    !tutorText && (!isManagedAvatar || Boolean(lessonState) || Boolean(lessonQuestion));
+    !tutorText && (Boolean(lessonState) || Boolean(lessonQuestion));
 
   return (
-    <section className="session-panel session-panel--avatar">
-      <div className="session-panel__body session-panel__body--avatar">
+    <section
+      className={`session-panel session-panel--avatar ${isManagedAvatar ? "session-panel--avatar-managed" : ""}`.trim()}
+    >
+      <div
+        className={`session-panel__body session-panel__body--avatar ${
+          isManagedAvatar ? "session-panel__body--avatar-managed" : ""
+        }`.trim()}
+      >
         {isManagedAvatar ? (
-          <ManagedAvatarSession avatar={selectedAvatar} />
+          <ManagedAvatarSession
+            autoStart
+            avatar={selectedAvatar}
+            microphoneMode="off"
+            onStateChange={onManagedSessionStateChange}
+            ref={managedSessionRef}
+          />
         ) : (
           <AvatarProvider
             avatarId={avatarId}
@@ -67,11 +81,7 @@ export function TutorSessionAvatarStage({
               {lessonState ? lessonState.lessonTitle : "Ready for a new lesson?"}
             </div>
             <p className="session-welcome__copy">
-              {lessonState
-                ? `Current task: ${lessonState.currentTask}`
-                : isManagedAvatar
-                  ? `Start live session, allow microphone, then talk with ${selectedAvatarLabel}.`
-                  : `Ask ${selectedAvatarLabel} for an explanation, example, or guided solve.`}
+              {lessonState ? `Current task: ${lessonState.currentTask}` : ""}
             </p>
             {lessonQuestion ? <p className="session-welcome__question">{lessonQuestion}</p> : null}
           </div>

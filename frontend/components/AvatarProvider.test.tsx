@@ -72,6 +72,34 @@ test("3d chunk load failures fall back to the 2d shell instead of crashing the p
   consoleErrorSpy.mockRestore();
 });
 
+test("3d runtime failures fall back to the 2d shell instead of leaving the hero stage broken", async () => {
+  vi.doMock("next/dynamic", () => ({
+    default: () => function MockDynamicComponent(props: { onError?: (error: Error) => void }) {
+      React.useEffect(() => {
+        props.onError?.(new Error("Error creating WebGL context."));
+      }, [props]);
+      return <div data-testid="avatar-3d-runtime">3D runtime</div>;
+    },
+  }));
+
+  const { AvatarProvider } = await import("./AvatarProvider");
+
+  render(
+    <AvatarProvider
+      config={{ provider: "threejs", type: "3d", assetRef: "robot" }}
+      energy={0.2}
+      nowMs={0}
+      subtitle="Tutor fallback"
+      state="idle"
+      timestamps={[]}
+      variant="hero"
+    />
+  );
+
+  expect(await screen.findByTestId("avatar-surface-2d")).toBeInTheDocument();
+  expect(screen.getByText("Tutor fallback")).toBeInTheDocument();
+});
+
 test("svg avatars render inside the 2d shell", async () => {
   const { AvatarProvider } = await import("./AvatarProvider");
 
@@ -120,11 +148,13 @@ test("managed avatars use a local non-room surface in gallery mode", async () =>
       energy={0.2}
       nowMs={0}
       state="idle"
+      subtitle="Hello, ready to learn?"
       timestamps={[]}
       variant="gallery"
     />
   );
 
   expect(screen.getByTestId("avatar-surface-managed")).toBeInTheDocument();
-  expect(document.querySelector(".avatar__managed-gallery-video, .avatar__managed-gallery-card")).toBeTruthy();
+  expect(document.querySelector(".avatar__managed-gallery-video")).toBeTruthy();
+  expect(screen.getByText("Hello, ready to learn?")).toBeInTheDocument();
 });

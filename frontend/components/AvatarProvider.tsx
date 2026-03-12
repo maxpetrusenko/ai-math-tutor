@@ -78,11 +78,13 @@ export function AvatarProvider({
   nowMs,
   variant = "panel",
 }: AvatarProviderProps) {
+  const [failed3DAvatarKey, setFailed3DAvatarKey] = React.useState<string | null>(null);
   const signal: AvatarSignal = { energy, nowMs, state, timestamps };
   const resolvedAvatarId = avatarId ?? (config ? resolveAvatarProviderId(config) : undefined);
   const avatarOption = resolveAvatarProvider(resolvedAvatarId);
   const avatarConfig: AvatarConfig = config ?? avatarOption.config;
   const frame = buildAvatarFrame(signal);
+  const managedPreviewGreeting = subtitle || avatarOption.previewGreeting || "";
 
   if (avatarConfig.type === "video" || avatarOption.kind === "managed") {
     if (variant === "gallery") {
@@ -92,9 +94,36 @@ export function AvatarProvider({
           data-testid="avatar-surface-managed"
         >
           <div className="avatar avatar--managed-gallery">
-            <div className="avatar__managed-gallery-card">
-              <div className="avatar__managed-gallery-orb" />
-            </div>
+            {avatarOption.previewVideoUrl ? (
+              <div className="avatar__managed-gallery-card avatar__managed-gallery-card--video">
+                <video
+                  aria-hidden="true"
+                  autoPlay
+                  className="avatar__managed-gallery-video"
+                  loop
+                  muted
+                  playsInline
+                  poster={avatarOption.previewPosterUrl}
+                  preload="metadata"
+                >
+                  <source src={avatarOption.previewVideoUrl} type="video/mp4" />
+                </video>
+                {managedPreviewGreeting ? (
+                  <div className="avatar__managed-gallery-subtitle" data-testid="avatar-subtitle">
+                    {managedPreviewGreeting}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="avatar__managed-gallery-card">
+                <div className="avatar__managed-gallery-orb" />
+                {managedPreviewGreeting ? (
+                  <div className="avatar__managed-gallery-subtitle" data-testid="avatar-subtitle">
+                    {managedPreviewGreeting}
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
       );
@@ -104,9 +133,23 @@ export function AvatarProvider({
       <div className={`avatar-surface avatar-surface--managed avatar-surface--${variant}`} data-testid="avatar-surface-managed">
         <div className="avatar avatar--managed">
           <div className="avatar__managed-card">
-            {subtitle ? (
+            {avatarOption.previewVideoUrl ? (
+              <video
+                aria-hidden="true"
+                autoPlay
+                className="avatar__managed-preview-video"
+                loop
+                muted
+                playsInline
+                poster={avatarOption.previewPosterUrl}
+                preload="metadata"
+              >
+                <source src={avatarOption.previewVideoUrl} type="video/mp4" />
+              </video>
+            ) : null}
+            {managedPreviewGreeting ? (
               <div className="avatar__subtitle" data-testid="avatar-subtitle">
-                {subtitle}
+                {managedPreviewGreeting}
               </div>
             ) : null}
           </div>
@@ -146,8 +189,9 @@ export function AvatarProvider({
       variant={variant}
     />
   );
+  const avatar3DKey = `${avatarConfig.assetRef ?? "default"}:${avatarConfig.model_url ?? "local"}`;
 
-  if (avatarConfig.type === "3d") {
+  if (avatarConfig.type === "3d" && failed3DAvatarKey !== avatar3DKey) {
     const avatar3DAsset = (
       avatarAsset.mode === "3d" ? avatarAsset : loadAvatarAsset({ type: "3d", assetRef: "human" })
     ) as Avatar3DAsset;
@@ -167,13 +211,14 @@ export function AvatarProvider({
         )}
         <div className="avatar avatar--three">
           <Avatar3DLoadBoundary
-            key={`${avatarConfig.assetRef ?? "default"}:${avatarConfig.model_url ?? "local"}`}
+            key={avatar3DKey}
             fallback={avatar2DFallback}
           >
             <>
               <Avatar3D
                 asset={avatar3DAsset}
                 config={avatarConfig}
+                onError={() => setFailed3DAvatarKey(avatar3DKey)}
                 state={mappedState}
                 timestamps={timestamps}
                 nowMs={nowMs}

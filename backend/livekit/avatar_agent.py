@@ -6,13 +6,38 @@ import os
 
 from livekit.agents import Agent, AgentSession, AutoSubscribe, JobContext, WorkerOptions, WorkerType, cli
 from livekit.plugins import liveavatar, openai, simli
+from backend.runtime.local_env import load_local_env
+from openai.types import realtime as openai_realtime
 
 logger = logging.getLogger("nerdy.livekit.avatar_agent")
 logger.setLevel(logging.INFO)
 
+load_local_env()
+
 DEFAULT_INSTRUCTIONS = "Talk to me like a clear, encouraging tutor."
 DEFAULT_VOICE = "alloy"
 DEFAULT_OPENING_LINE = ""
+DEFAULT_MIN_INTERRUPTION_DURATION = 1.2
+DEFAULT_MIN_INTERRUPTION_WORDS = 2
+DEFAULT_FALSE_INTERRUPTION_TIMEOUT = 1.5
+DEFAULT_AGENT_FALSE_INTERRUPTION_TIMEOUT = 1.5
+DEFAULT_AEC_WARMUP_DURATION = 4.0
+
+
+def _metadata_float(metadata: dict[str, object], key: str, default: float) -> float:
+    raw_value = metadata.get(key, os.getenv(key.upper(), default))
+    try:
+        return float(raw_value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _metadata_int(metadata: dict[str, object], key: str, default: int) -> int:
+    raw_value = metadata.get(key, os.getenv(key.upper(), default))
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _room_metadata(ctx: JobContext) -> dict[str, object]:
@@ -65,9 +90,33 @@ async def entrypoint(ctx: JobContext) -> None:
     instructions = str(metadata.get("instructions") or DEFAULT_INSTRUCTIONS).strip() or DEFAULT_INSTRUCTIONS
     voice = str(metadata.get("voice") or DEFAULT_VOICE).strip() or DEFAULT_VOICE
     opening_line = str(metadata.get("opening_line") or os.getenv("NERDY_LIVEKIT_OPENING_LINE") or DEFAULT_OPENING_LINE).strip()
+    min_interruption_duration = _metadata_float(metadata, "min_interruption_duration", DEFAULT_MIN_INTERRUPTION_DURATION)
+    min_interruption_words = _metadata_int(metadata, "min_interruption_words", DEFAULT_MIN_INTERRUPTION_WORDS)
+    false_interruption_timeout = _metadata_float(metadata, "false_interruption_timeout", DEFAULT_FALSE_INTERRUPTION_TIMEOUT)
+    agent_false_interruption_timeout = _metadata_float(
+        metadata,
+        "agent_false_interruption_timeout",
+        DEFAULT_AGENT_FALSE_INTERRUPTION_TIMEOUT,
+    )
+    aec_warmup_duration = _metadata_float(metadata, "aec_warmup_duration", DEFAULT_AEC_WARMUP_DURATION)
 
     session = AgentSession(
-        llm=openai.realtime.RealtimeModel(voice=voice),
+        llm=openai.realtime.RealtimeModel(
+            voice=voice,
+            input_audio_noise_reduction="near_field",
+            turn_detection=openai_realtime.realtime_audio_input_turn_detection.SemanticVad(
+                type="semantic_vad",
+                create_response=True,
+                eagerness="low",
+                interrupt_response=True,
+            ),
+        ),
+        allow_interruptions=True,
+        min_interruption_duration=min_interruption_duration,
+        min_interruption_words=min_interruption_words,
+        false_interruption_timeout=false_interruption_timeout,
+        agent_false_interruption_timeout=agent_false_interruption_timeout,
+        aec_warmup_duration=aec_warmup_duration,
     )
     avatar_session = _resolve_avatar_session(metadata)
     await avatar_session.start(session, room=ctx.room)

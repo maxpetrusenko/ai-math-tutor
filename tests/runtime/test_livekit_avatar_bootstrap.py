@@ -1,8 +1,10 @@
 import asyncio
+import importlib
 import sys
 import types
 
 from backend.livekit.avatar_bootstrap import (
+    _describe_liveavatar_bootstrap_failure,
     _describe_simli_bootstrap_failure,
     create_avatar_room_session,
     collect_avatar_bootstrap_errors,
@@ -79,6 +81,14 @@ def test_invalid_simli_face_id_error_is_human_readable() -> None:
     )
 
     assert "Compose-compatible `SIMLI_FACE_ID`" in message
+
+
+def test_invalid_liveavatar_key_error_is_human_readable() -> None:
+    message = _describe_liveavatar_bootstrap_failure("Invalid API key")
+
+    assert "LIVEAVATAR_API_KEY" in message
+    assert "HEYGEN_API_KEY" in message
+    assert "not enough" in message
 
 
 def test_create_avatar_room_session_loads_local_env_when_explicit_env_missing(monkeypatch) -> None:
@@ -167,3 +177,18 @@ def test_create_avatar_room_session_loads_local_env_when_explicit_env_missing(mo
     assert result["provider"] == "simli"
     assert result["token"] == "fake-jwt"
     assert result["url"] == "wss://example.livekit.cloud"
+
+
+def test_avatar_agent_loads_local_env_at_import(monkeypatch) -> None:
+    loaded = {"count": 0}
+
+    def fake_load_local_env() -> None:
+        loaded["count"] += 1
+
+    monkeypatch.setattr("backend.runtime.local_env.load_local_env", fake_load_local_env)
+
+    import backend.livekit.avatar_agent as avatar_agent_module
+
+    importlib.reload(avatar_agent_module)
+
+    assert loaded["count"] >= 1

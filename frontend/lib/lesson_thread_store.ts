@@ -21,6 +21,7 @@ import {
   DEFAULT_TTS_PROVIDER,
 } from "./runtime_options";
 import type { LessonState } from "./lesson_catalog";
+import type { SessionActivityLogEntry } from "./session_activity_log";
 
 export type PersistedConversationTurn = {
   debug?: PersistedTurnDebug;
@@ -67,6 +68,7 @@ export type PersistedTurnDebug = {
     transcriptLength: number;
     tutorTextLength: number;
   };
+  sessionEvents?: SessionActivityLogEntry[];
   sessionId: string;
   startedAt: string;
   transport: "openai-realtime" | "session-socket";
@@ -470,14 +472,16 @@ export function clearPersistedLessonThread() {
 export async function hydrateLessonThreadStore() {
   const firebaseStore = await fetchFirebaseLessonStore().catch(() => null);
   if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
-    writeStore(firebaseStore);
-    return firebaseStore;
+    const normalizedStore = normalizeStore(firebaseStore);
+    writeStore(normalizedStore);
+    return normalizedStore;
   }
 
   const remoteStore = await fetchLessonStore();
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
-    writeStore(remoteStore);
-    return remoteStore;
+    const normalizedStore = normalizeStore(remoteStore);
+    writeStore(normalizedStore);
+    return normalizedStore;
   }
 
   return readStore();
@@ -488,13 +492,13 @@ export async function persistActiveLessonThread(thread: PersistedLessonThread) {
   const localStore = readStore();
   const firebaseStore = await saveFirebaseActiveLessonThread(thread, localStore).catch(() => null);
   if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
-    writeStore(firebaseStore);
+    writeStore(normalizeStore(firebaseStore));
     return;
   }
 
   const remoteStore = await saveActiveLessonThread(thread);
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
-    writeStore(remoteStore);
+    writeStore(normalizeStore(remoteStore));
   }
 }
 
@@ -506,14 +510,16 @@ export async function persistArchivedLessonThread(thread: PersistedLessonThread)
 
   const firebaseStore = await archiveFirebaseLessonThread(nextEntry, store).catch(() => null);
   if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
-    writeStore(firebaseStore);
-    return firebaseStore.archive.map(({ thread: _thread, ...summary }) => summary);
+    const normalizedStore = normalizeStore(firebaseStore);
+    writeStore(normalizedStore);
+    return normalizedStore.archive.map(({ thread: _thread, ...summary }) => summary);
   }
 
   const remoteStore = await archiveRemoteLessonThread(nextEntry);
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
-    writeStore(remoteStore);
-    return remoteStore.archive.map(({ thread: _thread, ...summary }) => summary);
+    const normalizedStore = normalizeStore(remoteStore);
+    writeStore(normalizedStore);
+    return normalizedStore.archive.map(({ thread: _thread, ...summary }) => summary);
   }
 
   return store.archive.map(({ thread: _thread, ...summary }) => summary);
@@ -524,13 +530,13 @@ export async function clearPersistedLessonThreadRemote() {
   const localStore = readStore();
   const firebaseStore = await clearFirebaseActiveLessonThread(localStore).catch(() => null);
   if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
-    writeStore(firebaseStore);
+    writeStore(normalizeStore(firebaseStore));
     return;
   }
 
   const remoteStore = await clearRemoteActiveLessonThread();
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
-    writeStore(remoteStore);
+    writeStore(normalizeStore(remoteStore));
   }
 }
 
@@ -541,14 +547,16 @@ export async function clearArchivedLessonThreadsRemote() {
 
   const firebaseStore = await clearFirebaseArchivedLessonThreads(store).catch(() => null);
   if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
-    writeStore(firebaseStore);
-    return firebaseStore.archive.map(({ thread: _thread, ...summary }) => summary);
+    const normalizedStore = normalizeStore(firebaseStore);
+    writeStore(normalizedStore);
+    return normalizedStore.archive.map(({ thread: _thread, ...summary }) => summary);
   }
 
   const remoteStore = await clearRemoteArchivedLessonThreads();
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
-    writeStore(remoteStore);
-    return remoteStore.archive.map(({ thread: _thread, ...summary }) => summary);
+    const normalizedStore = normalizeStore(remoteStore);
+    writeStore(normalizedStore);
+    return normalizedStore.archive.map(({ thread: _thread, ...summary }) => summary);
   }
 
   return [];
@@ -557,17 +565,18 @@ export async function clearArchivedLessonThreadsRemote() {
 export async function refreshArchivedLessonThread(id: string) {
   const firebaseThread = await fetchFirebaseArchivedLessonThread(id).catch(() => null);
   if (firebaseThread) {
+    const normalizedThread = normalizeThread(firebaseThread);
     const store = readStore();
     const entryIndex = store.archive.findIndex((entry) => entry.id === id);
     if (entryIndex >= 0) {
       store.archive[entryIndex] = {
         ...store.archive[entryIndex],
-        thread: firebaseThread,
+        thread: normalizedThread,
       };
       writeStore(store);
     }
 
-    return firebaseThread;
+    return normalizedThread;
   }
 
   const thread = await fetchArchivedLessonThread(id);
@@ -575,15 +584,16 @@ export async function refreshArchivedLessonThread(id: string) {
     return readArchivedLessonThread(id);
   }
 
+  const normalizedThread = normalizeThread(thread);
   const store = readStore();
   const entryIndex = store.archive.findIndex((entry) => entry.id === id);
   if (entryIndex >= 0) {
     store.archive[entryIndex] = {
       ...store.archive[entryIndex],
-      thread,
+      thread: normalizedThread,
     };
     writeStore(store);
   }
 
-  return thread;
+  return normalizedThread;
 }

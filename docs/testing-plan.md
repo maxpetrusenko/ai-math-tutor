@@ -40,9 +40,9 @@ Every task should land with at least one of:
 
 ## Missing Test Work Right Now
 
-- browser-level smoke coverage does not exist yet
-- live mic capture exists, but browser automation still does not cover permission flow or recorded-chunk turns
-- frontend latency cards derive from session events, but coverage still misses `first_viseme`, `audio_done`, and reviewer-facing sync output
+- browser-level smoke coverage exists for app load, demo turns, interruption, lesson reset, and avatar switching
+- live mic capture exists, and component coverage exercises recorded-chunk turns; browser permission UX still needs a higher-fidelity automation pass
+- frontend latency cards derive from real session events; broader reviewer-facing sync assertions can still expand beyond the current event coverage
 - no clean-shell startup verification command exists yet
 - requirements-trace freshness now guards known mic and latency drift, but broader requirement-to-evidence freshness is still manual
 

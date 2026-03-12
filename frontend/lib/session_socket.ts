@@ -1,4 +1,5 @@
 import { createSessionMetrics, snapshotSessionMetrics, toLatencyMetrics } from "./session_metrics";
+import { appendSessionActivityLog } from "./session_activity_log";
 import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/session/session_types";
 import { getCurrentFirebaseIdToken } from "./firebase_auth";
 import { getFirebaseAuthClient } from "./firebase_client";
@@ -9,10 +10,20 @@ const TURN_TIMEOUT_MS = 15_000;
 const QUIET_SEND_TYPES = new Set<string>();
 const QUIET_RECEIVE_TYPES = new Set([
   "audio.received",
+  "session.restored",
   "session.started",
   "state.changed",
 ]);
+const QUIET_ACTIVITY_TYPES = new Set([
+  "audio.chunk",
+  "audio.received",
+  "tts.audio",
+]);
 const LOG_DEDUPE_WINDOW_MS = 2_000;
+const MAX_BUFFERED_AMOUNT_BYTES = 256_000;
+const SOCKET_DRAIN_POLL_MS = 16;
+const CONNECT_TIMEOUT_MS = 5_000;
+const LEGACY_SOCKET_AUTH_ERROR = "unknown message type: session.authenticate";
 
 function generateSessionId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -55,6 +66,15 @@ function shouldSkipSessionLog(level: "info" | "warn" | "error", event: string, d
 }
 
 function logSessionInfo(event: string, details: Record<string, unknown>) {
+  if (!QUIET_ACTIVITY_TYPES.has(typeof details.type === "string" ? details.type : "")) {
+    appendSessionActivityLog({
+      event,
+      level: "info",
+      metadata: details,
+      scope: "session-socket",
+      summary: `${event} ${typeof details.type === "string" ? details.type : "event"}`,
+    });
+  }
   if (shouldSkipSessionLog("info", event, details)) {
     return;
   }
@@ -62,6 +82,13 @@ function logSessionInfo(event: string, details: Record<string, unknown>) {
 }
 
 function logSessionWarn(event: string, details: Record<string, unknown>) {
+  appendSessionActivityLog({
+    event,
+    level: "warn",
+    metadata: details,
+    scope: "session-socket",
+    summary: `${event} ${typeof details.type === "string" ? details.type : "event"}`,
+  });
   if (shouldSkipSessionLog("warn", event, details)) {
     return;
   }
@@ -69,6 +96,13 @@ function logSessionWarn(event: string, details: Record<string, unknown>) {
 }
 
 function logSessionError(event: string, details: Record<string, unknown>) {
+  appendSessionActivityLog({
+    event,
+    level: "error",
+    metadata: details,
+    scope: "session-socket",
+    summary: `${event} ${typeof details.type === "string" ? details.type : "event"}`,
+  });
   if (shouldSkipSessionLog("error", event, details)) {
     return;
   }
@@ -87,7 +121,6 @@ function summarizePayload(payload: Record<string, unknown>) {
     summary.mimeType = payload.mime_type;
     summary.tsMs = payload.ts_ms;
     summary.bytesBase64Length = bytesBase64.length;
-    summary.bytesBase64Prefix = bytesBase64.slice(0, 24);
   }
 
   if (payload.type === "speech.end") {
@@ -160,6 +193,13 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function isFirebaseSocketAuthRequired() {
+  const value = typeof process !== "undefined"
+    ? process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH
+    : undefined;
+  return typeof value === "string" && ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
 function combineAudioChunksForTranscription(audioChunks: NonNullable<TutorTurnRequest["audioChunks"]>) {
   if (audioChunks.length <= 1) {
     return audioChunks;
@@ -221,6 +261,11 @@ function summarizeCloseEvent(event?: CloseEvent) {
   };
 }
 
+function resolveBufferedAmount(socket: WebSocket) {
+  const bufferedAmount = (socket as WebSocket & { bufferedAmount?: number }).bufferedAmount;
+  return typeof bufferedAmount === "number" ? bufferedAmount : 0;
+}
+
 export function createSessionSocketTransport(): SessionTransport {
   const baseWsUrl =
     typeof process !== "undefined" && process.env.NEXT_PUBLIC_SESSION_WS_URL
@@ -267,6 +312,14 @@ export function createSessionSocketTransport(): SessionTransport {
         reject: (error: Error) => void;
       }
     | null = null;
+  let pendingConnect:
+    | {
+        resolve: (socket: WebSocket) => void;
+        reject: (error: Error) => void;
+        timeoutId: ReturnType<typeof setTimeout> | null;
+      }
+    | null = null;
+  let sendQueue = Promise.resolve();
 
   const ensureCurrentSessionId = () => {
     currentSessionId = normalizeSessionId(currentSessionId);
@@ -276,16 +329,23 @@ export function createSessionSocketTransport(): SessionTransport {
   const buildWsUrl = async () => {
     const url = new URL(baseWsUrl);
     url.searchParams.set("session_id", ensureCurrentSessionId());
-    const idToken = await getCurrentFirebaseIdToken();
-    if (!idToken && getFirebaseAuthClient()) {
+    const authRequired = isFirebaseSocketAuthRequired();
+    const idToken = authRequired ? await getCurrentFirebaseIdToken() : null;
+    if (authRequired && !idToken && getFirebaseAuthClient()) {
       throw new Error("Firebase sign-in required");
     }
-    if (idToken) {
-      url.searchParams.set("auth_token", idToken);
-    } else {
-      url.searchParams.delete("auth_token");
+    return { authToken: idToken, url: url.toString() };
+  };
+
+  const rejectPendingConnect = (error: Error) => {
+    if (!pendingConnect) {
+      return;
     }
-    return url.toString();
+    if (pendingConnect.timeoutId) {
+      clearTimeout(pendingConnect.timeoutId);
+    }
+    pendingConnect.reject(error);
+    pendingConnect = null;
   };
 
   const failActiveTurn = (message: string) => {
@@ -316,6 +376,18 @@ export function createSessionSocketTransport(): SessionTransport {
     }
     if (payload.type === "session.error") {
       const message = String(payload.detail ?? payload.message ?? "Session error");
+      if (message === LEGACY_SOCKET_AUTH_ERROR) {
+        logSessionWarn("receive.ignored", {
+          detail: message,
+          sessionId: ensureCurrentSessionId(),
+          reason: "legacy-backend-auth-message",
+        });
+        return;
+      }
+      if (pendingConnect) {
+        rejectPendingConnect(new Error(message));
+        return;
+      }
       if (pendingReset) {
         pendingReset.reject(new Error(message));
         pendingReset = null;
@@ -335,6 +407,14 @@ export function createSessionSocketTransport(): SessionTransport {
         return;
       }
       failActiveTurn(message);
+      return;
+    }
+    if (payload.type === "session.started" && pendingConnect) {
+      if (pendingConnect.timeoutId) {
+        clearTimeout(pendingConnect.timeoutId);
+      }
+      pendingConnect.resolve(socket as WebSocket);
+      pendingConnect = null;
       return;
     }
     if (pendingTranscription) {
@@ -412,6 +492,27 @@ export function createSessionSocketTransport(): SessionTransport {
     }
   };
 
+  const waitForSocketDrain = async (connectedSocket: WebSocket) => {
+    while (connectedSocket.readyState === WebSocket.OPEN && resolveBufferedAmount(connectedSocket) > MAX_BUFFERED_AMOUNT_BYTES) {
+      await new Promise((resolve) => setTimeout(resolve, SOCKET_DRAIN_POLL_MS));
+    }
+
+    if (connectedSocket.readyState !== WebSocket.OPEN) {
+      throw new Error("WebSocket connection closed");
+    }
+  };
+
+  const queueSocketPayload = (connectedSocket: WebSocket, payload: Record<string, unknown>) => {
+    sendQueue = sendQueue
+      .catch(() => undefined)
+      .then(async () => {
+        await waitForSocketDrain(connectedSocket);
+        logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
+        connectedSocket.send(JSON.stringify(payload));
+      });
+    return sendQueue;
+  };
+
   const ensureSocket = async () => {
     if (socket?.readyState === WebSocket.OPEN && socketSessionId === currentSessionId) {
       return socket;
@@ -419,7 +520,7 @@ export function createSessionSocketTransport(): SessionTransport {
 
     return new Promise<WebSocket>((resolve, reject) => {
       void buildWsUrl()
-        .then((url) => {
+        .then(({ authToken, url }) => {
           const sessionId = ensureCurrentSessionId();
           const nextSocket = new WebSocket(url);
           let didOpen = false;
@@ -430,7 +531,21 @@ export function createSessionSocketTransport(): SessionTransport {
             socket = nextSocket;
             socketSessionId = ensureCurrentSessionId();
             logSessionInfo("open", { sessionId: socketSessionId, url: nextSocket.url });
-            resolve(nextSocket);
+            pendingConnect = {
+              resolve,
+              reject,
+              timeoutId: setTimeout(() => {
+                rejectPendingConnect(new Error("WebSocket session start timed out"));
+              }, CONNECT_TIMEOUT_MS),
+            };
+            if (authToken) {
+              void queueSocketPayload(nextSocket, {
+                type: "session.authenticate",
+                auth_token: authToken,
+              }).catch((error) => {
+                rejectPendingConnect(error instanceof Error ? error : new Error("WebSocket authentication failed"));
+              });
+            }
           };
 
           nextSocket.onmessage = handleMessage;
@@ -443,10 +558,13 @@ export function createSessionSocketTransport(): SessionTransport {
             if (!didOpen) {
               preOpenFailureLogged = true;
               logSessionWarn("connect.failed", errorDetails);
+              reject(new Error("WebSocket connection failed"));
+              return;
             } else {
               logSessionError("error", errorDetails);
             }
             if (socket === nextSocket) {
+              rejectPendingConnect(new Error("WebSocket connection failed"));
               if (pendingTranscription) {
                 if (pendingTranscription.timeoutId) {
                   clearTimeout(pendingTranscription.timeoutId);
@@ -462,7 +580,6 @@ export function createSessionSocketTransport(): SessionTransport {
               return;
             }
 
-            reject(new Error("WebSocket connection failed"));
           };
           nextSocket.onclose = (event) => {
             if (preOpenFailureLogged && !didOpen) {
@@ -476,6 +593,7 @@ export function createSessionSocketTransport(): SessionTransport {
               ...summarizeCloseEvent(event),
             });
             if (socket === nextSocket) {
+              rejectPendingConnect(new Error("WebSocket connection closed"));
               if (pendingTranscription) {
                 if (pendingTranscription.timeoutId) {
                   clearTimeout(pendingTranscription.timeoutId);
@@ -491,6 +609,7 @@ export function createSessionSocketTransport(): SessionTransport {
             }
             socket = null;
             socketSessionId = null;
+            sendQueue = Promise.resolve();
           };
         })
         .catch((error) => {
@@ -512,6 +631,8 @@ export function createSessionSocketTransport(): SessionTransport {
     }
     socket = null;
     socketSessionId = null;
+    rejectPendingConnect(new Error("WebSocket connection closed"));
+    sendQueue = Promise.resolve();
   };
 
   const restoreSession = async (thread: PersistedLessonThread) => {
@@ -528,12 +649,10 @@ export function createSessionSocketTransport(): SessionTransport {
         student_profile: thread.preference ? { preference: thread.preference } : {},
         subject: thread.subject,
       };
-      logSessionInfo("send", {
-        historyLength: thread.conversation.length,
-        sessionId: ensureCurrentSessionId(),
-        ...summarizePayload(payload),
+      void queueSocketPayload(connectedSocket, payload).catch((error) => {
+        pendingRestore?.reject(error instanceof Error ? error : new Error("Session restore failed"));
+        pendingRestore = null;
       });
-      connectedSocket.send(JSON.stringify(payload));
     });
   };
 
@@ -593,20 +712,19 @@ export function createSessionSocketTransport(): SessionTransport {
           failActiveTurn(`Tutor turn timed out during ${describeTurnPhase(phase)}`);
         }, TURN_TIMEOUT_MS);
 
-        for (const chunk of request.audioChunks ?? [{ sequence: 1, size: 320 }]) {
-          const payload = {
-            type: "audio.chunk",
-            sequence: chunk.sequence,
-            size: chunk.size,
-            bytes_b64: chunk.bytesBase64,
-            mime_type: chunk.mimeType,
-            ts_ms: Date.now(),
-          };
-          logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
-          connectedSocket.send(JSON.stringify(payload));
-        }
-        activeTurn.metrics.mark({ name: "speech_end", tsMs: performance.now() });
-        const payload = {
+        void (async () => {
+          for (const chunk of request.audioChunks ?? [{ sequence: 1, size: 320 }]) {
+            await queueSocketPayload(connectedSocket, {
+              type: "audio.chunk",
+              sequence: chunk.sequence,
+              size: chunk.size,
+              bytes_b64: chunk.bytesBase64,
+              mime_type: chunk.mimeType,
+              ts_ms: Date.now(),
+            });
+          }
+          activeTurn?.metrics.mark({ name: "speech_end", tsMs: performance.now() });
+          await queueSocketPayload(connectedSocket, {
             type: "speech.end",
             ts_ms: Date.now(),
             text: request.studentText,
@@ -617,9 +735,10 @@ export function createSessionSocketTransport(): SessionTransport {
             student_profile: request.studentProfile,
             tts_provider: request.ttsProvider,
             tts_model: request.ttsModel,
-          };
-        logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
-        connectedSocket.send(JSON.stringify(payload));
+          });
+        })().catch((error) => {
+          failActiveTurn(error instanceof Error ? error.message : "WebSocket send failed");
+        });
       });
     },
     async transcribeAudio(request: TutorTurnRequest) {
@@ -661,29 +780,35 @@ export function createSessionSocketTransport(): SessionTransport {
           transcribeOnly: true,
         });
 
-        for (const chunk of audioChunks) {
-          const payload = {
-            type: "audio.chunk",
-            sequence: chunk.sequence,
-            size: chunk.size,
-            bytes_b64: chunk.bytesBase64,
-            mime_type: chunk.mimeType,
+        void (async () => {
+          for (const chunk of audioChunks) {
+            await queueSocketPayload(connectedSocket, {
+              type: "audio.chunk",
+              sequence: chunk.sequence,
+              size: chunk.size,
+              bytes_b64: chunk.bytesBase64,
+              mime_type: chunk.mimeType,
+              ts_ms: Date.now(),
+            });
+          }
+          await queueSocketPayload(connectedSocket, {
+            type: "speech.end",
             ts_ms: Date.now(),
-          };
-          logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
-          connectedSocket.send(JSON.stringify(payload));
-        }
-        const payload = {
-          type: "speech.end",
-          ts_ms: Date.now(),
-          text: request.studentText,
-          subject: request.subject,
-          grade_band: request.gradeBand,
-          student_profile: request.studentProfile,
-          transcribe_only: true,
-        };
-        logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
-        connectedSocket.send(JSON.stringify(payload));
+            text: request.studentText,
+            subject: request.subject,
+            grade_band: request.gradeBand,
+            student_profile: request.studentProfile,
+            transcribe_only: true,
+          });
+        })().catch((error) => {
+          if (pendingTranscription) {
+            if (pendingTranscription.timeoutId) {
+              clearTimeout(pendingTranscription.timeoutId);
+            }
+            pendingTranscription.reject(error instanceof Error ? error : new Error("WebSocket send failed"));
+            pendingTranscription = null;
+          }
+        });
       });
     },
     async interrupt() {
@@ -695,9 +820,7 @@ export function createSessionSocketTransport(): SessionTransport {
         pendingTranscription = null;
       }
       if (socket?.readyState === WebSocket.OPEN) {
-        const payload = { type: "interrupt" };
-        logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
-        socket.send(JSON.stringify(payload));
+        await queueSocketPayload(socket, { type: "interrupt" });
       }
     },
     async reset() {
@@ -714,21 +837,20 @@ export function createSessionSocketTransport(): SessionTransport {
       }
       return new Promise<void>((resolve, reject) => {
         pendingReset = { resolve, reject };
-        const payload = { type: "session.reset" };
-        logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
-        connectedSocket.send(JSON.stringify(payload));
+        void queueSocketPayload(connectedSocket, { type: "session.reset" }).catch((error) => {
+          pendingReset?.reject(error instanceof Error ? error : new Error("Session reset failed"));
+          pendingReset = null;
+        });
       });
     },
     async reportMetric(event) {
       const connectedSocket = await ensureSocket();
-      const payload = {
+      await queueSocketPayload(connectedSocket, {
         type: "latency.metric",
         turn_id: event.turnId,
         name: event.name,
         ts_ms: event.tsMs,
-      };
-      logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
-      connectedSocket.send(JSON.stringify(payload));
+      });
     },
     getSessionId() {
       return ensureCurrentSessionId();

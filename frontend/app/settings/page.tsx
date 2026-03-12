@@ -6,8 +6,12 @@ import Link from "next/link";
 import { DashboardLayout } from "../../components/layout";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { SurfaceCard } from "../../components/ui/SurfaceCard";
+import { readAvatarProviderPreference } from "../../lib/avatar_preference";
+import { DEFAULT_AVATAR_PROVIDER_ID } from "../../lib/avatar_manifest";
+import { resolveCompatibleRuntimeSelectionForAvatar } from "../../lib/avatar_runtime_compatibility";
 import { clearLessonHistory, exportLearnerSnapshot } from "../../lib/account_snapshot";
 import { useFirebaseAuth } from "../../lib/firebase_auth";
+import { applyRuntimeProviderChange, RUNTIME_OPTIONS } from "../../lib/runtime_options";
 import {
   readSessionPreferences,
   resetSessionPreferences,
@@ -16,13 +20,28 @@ import {
 
 export default function SettingsPage() {
   const { signOutUser, user } = useFirebaseAuth();
-  const [preferences, setPreferences] = useState(() => readSessionPreferences());
+  const [avatarProviderId] = useState(() => readAvatarProviderPreference() ?? DEFAULT_AVATAR_PROVIDER_ID);
+  const [preferences, setPreferences] = useState(() => {
+    const stored = readSessionPreferences();
+    return {
+      ...stored,
+      ...resolveCompatibleRuntimeSelectionForAvatar(avatarProviderId, stored).selection,
+    };
+  });
   const [accountActionStatus, setAccountActionStatus] = useState("");
+  const compatibility = resolveCompatibleRuntimeSelectionForAvatar(avatarProviderId, preferences);
 
   const updatePreferences = (nextPreferences: Partial<typeof preferences>) => {
+    const compatibleSelection = resolveCompatibleRuntimeSelectionForAvatar(avatarProviderId, {
+      llmModel: nextPreferences.llmModel ?? preferences.llmModel,
+      llmProvider: nextPreferences.llmProvider ?? preferences.llmProvider,
+      ttsModel: nextPreferences.ttsModel ?? preferences.ttsModel,
+      ttsProvider: nextPreferences.ttsProvider ?? preferences.ttsProvider,
+    }).selection;
     const saved = writeSessionPreferences({
       ...preferences,
       ...nextPreferences,
+      ...compatibleSelection,
     });
     setPreferences(saved);
   };
@@ -54,7 +73,7 @@ export default function SettingsPage() {
     <DashboardLayout>
       <div className="page-shell">
         <PageHeader
-          subtitle="Customize reminders, sound, and language without touching runtime controls."
+          subtitle="Customize your tutor defaults, session brain, reminders, and language."
           title="Settings"
         />
 
@@ -104,6 +123,60 @@ export default function SettingsPage() {
               </select>
             </div>
           </div>
+        </SurfaceCard>
+
+        <SurfaceCard>
+          <div className="section-title section-title--bottom-lg">Session brain</div>
+          <div className="field-grid">
+            <label className="field">
+              <span>Session brain</span>
+              <select
+                aria-label="Session LLM provider"
+                onChange={(event) => updatePreferences(
+                  applyRuntimeProviderChange(
+                    {
+                      llmModel: preferences.llmModel,
+                      llmProvider: preferences.llmProvider,
+                      ttsModel: preferences.ttsModel,
+                      ttsProvider: preferences.ttsProvider,
+                    },
+                    "llm",
+                    event.target.value,
+                  )
+                )}
+                value={preferences.llmProvider}
+              >
+                {Object.entries(RUNTIME_OPTIONS.llm)
+                  .filter(([provider]) => compatibility.policy.compatibleLlmProviders.includes(provider))
+                  .map(([provider, models]) => (
+                  <option key={provider} value={provider}>
+                    {models[0]?.label ?? provider}
+                  </option>
+                  ))}
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Brain model</span>
+              <select
+                aria-label="Session LLM model"
+                onChange={(event) => updatePreferences({ llmModel: event.target.value })}
+                value={preferences.llmModel}
+              >
+                {RUNTIME_OPTIONS.llm[preferences.llmProvider as keyof typeof RUNTIME_OPTIONS.llm].map((model) => (
+                  <option key={model.value} value={model.value}>
+                    {model.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p className="section-copy section-copy--top-sm">
+            Hold mic to talk · Cmd+Enter to send · Esc to interrupt
+          </p>
+          {compatibility.policy.reason ? (
+            <p className="section-copy section-copy--top-sm">{compatibility.policy.reason}</p>
+          ) : null}
         </SurfaceCard>
 
         <SurfaceCard>
@@ -219,7 +292,7 @@ export default function SettingsPage() {
 
         <SurfaceCard className="surface-card--soft">
           <div className="section-copy">
-            Runtime model defaults and avatar-specific controls live in Models and Avatars. Settings stays focused on the learner.
+            Avatar-specific controls still live in Avatars. Settings owns the default tutor brain for each session.
           </div>
         </SurfaceCard>
       </div>

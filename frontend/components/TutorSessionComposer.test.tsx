@@ -90,7 +90,7 @@ test("student prompt starts empty for a fresh lesson", async () => {
     />
   );
 
-  await waitFor(() => expect(screen.getByText("Tutor Session")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText("Open Session")).toBeInTheDocument());
   await waitForSessionComposerReady();
   expect(screen.getByLabelText("Student prompt")).toHaveValue("");
 });

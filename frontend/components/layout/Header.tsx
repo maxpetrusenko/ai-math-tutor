@@ -5,6 +5,12 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type HeaderProps = {
+  actions?: React.ReactNode;
+  context?: {
+    badge?: string | null;
+    subtitle?: string;
+    title: string;
+  } | null;
   onToggleSidebar?: () => void;
   onSignOut?: () => Promise<void> | void;
   user?: {
@@ -14,7 +20,7 @@ type HeaderProps = {
   };
 };
 
-export function Header({ onToggleSidebar, onSignOut, user }: HeaderProps) {
+export function Header({ actions, context, onToggleSidebar, onSignOut, user }: HeaderProps) {
   const [showMenu, setShowMenu] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -107,8 +113,18 @@ export function Header({ onToggleSidebar, onSignOut, user }: HeaderProps) {
 
         <Link href="/dashboard" className="app-header__logo">
           <div className="app-header__logo-icon">N</div>
-          <span className="app-header__logo-text">Nerdy</span>
+          <span className="app-header__logo-text">Nerdy AI Tutor</span>
         </Link>
+
+        {context ? (
+          <div className="app-header__context" aria-label="Current page context">
+            <div className="app-header__context-title-row">
+              <span className="app-header__context-title">{context.title}</span>
+              {context.badge ? <span className="app-header__context-badge">{context.badge}</span> : null}
+            </div>
+            {context.subtitle ? <p className="app-header__context-subtitle">{context.subtitle}</p> : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="app-header__right">
@@ -131,6 +147,8 @@ export function Header({ onToggleSidebar, onSignOut, user }: HeaderProps) {
             value={searchValue}
           />
         </form>
+
+        {actions}
 
         <button
           className="icon-button"

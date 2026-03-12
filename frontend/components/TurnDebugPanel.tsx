@@ -85,6 +85,10 @@ export function TurnDebugPanel({ debug, turnId }: TurnDebugPanelProps) {
                   <dt>Audio segments</dt>
                   <dd>{debug.response.audioSegmentCount}</dd>
                 </div>
+                <div>
+                  <dt>Session logs</dt>
+                  <dd>{debug.sessionEvents?.length ?? 0}</dd>
+                </div>
                 <div className="turn-debug__grid-full">
                   <dt>Latency</dt>
                   <dd>

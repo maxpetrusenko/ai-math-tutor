@@ -1,7 +1,7 @@
 import React from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
-import { ManagedAvatarSession } from "./ManagedAvatarSession";
+import { ManagedAvatarSession, type ManagedAvatarSessionHandle, type ManagedAvatarSessionSnapshot } from "./ManagedAvatarSession";
 
 const {
   createLiveKitAvatarSession,
@@ -92,68 +92,122 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function renderManagedHarness() {
+  function Harness() {
+    const ref = React.useRef<ManagedAvatarSessionHandle | null>(null);
+    const [snapshot, setSnapshot] = React.useState<ManagedAvatarSessionSnapshot | null>(null);
+
+    return (
+      <>
+        <ManagedAvatarSession
+          avatar={{
+            id: "simli-b97a7777-live",
+            label: "Simli Tutor",
+            description: "Live avatar preview",
+          }}
+          microphoneMode="off"
+          onStateChange={setSnapshot}
+          ref={ref}
+        />
+        <button onClick={() => void ref.current?.start()} type="button">Start avatar</button>
+        <button onClick={() => void ref.current?.toggleMicrophone()} type="button">Toggle mic</button>
+        <button onClick={() => void ref.current?.disconnect()} type="button">Leave</button>
+        <button
+          onMouseDown={() => ref.current?.beginHoldToTalk()}
+          onMouseUp={() => ref.current?.endHoldToTalk()}
+          type="button"
+        >
+          Hold to talk
+        </button>
+        <div>{snapshot?.roomName ? `Room ${snapshot.roomName}` : "Join when ready"}</div>
+      </>
+    );
+  }
+
+  return render(<Harness />);
+}
+
 test("keeps the live avatar mounted when microphone startup is unavailable", async () => {
-  render(
-    <ManagedAvatarSession
-      avatar={{
-        id: "simli-b97a7777-live",
-        label: "Simli Tutor",
-        description: "Live avatar preview",
-      }}
-    />
-  );
+  function Harness() {
+    const ref = React.useRef<ManagedAvatarSessionHandle | null>(null);
+
+    return (
+      <>
+        <ManagedAvatarSession
+          avatar={{
+            id: "simli-b97a7777-live",
+            label: "Simli Tutor",
+            description: "Live avatar preview",
+          }}
+          ref={ref}
+        />
+        <button onClick={() => void ref.current?.start()} type="button">Start avatar</button>
+      </>
+    );
+  }
+
+  render(<Harness />);
 
   fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
-
   await waitFor(() => expect(screen.getAllByText("Live").length).toBeGreaterThan(0));
   await waitFor(() => expect(document.querySelector(".managed-avatar-session__video-frame video")).toBeTruthy());
   expect(document.querySelector(".managed-avatar-session__video-frame > video")).toBeTruthy();
-
-  expect(screen.getByText("Mic unavailable. Use Hold to talk after allowing it.")).toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
 test("lets the user manually open and pause the mic without dropping the room", async () => {
   setMicrophoneEnabled.mockResolvedValue(undefined);
 
-  render(
-    <ManagedAvatarSession
-      avatar={{
-        id: "simli-b97a7777-live",
-        label: "Simli Tutor",
-        description: "Live avatar preview",
-      }}
-      microphoneMode="off"
-    />
-  );
+  renderManagedHarness();
 
   fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
 
   await waitFor(() => expect(screen.getAllByText("Live").length).toBeGreaterThan(0));
   await waitFor(() => expect(document.querySelector(".managed-avatar-session__video-frame video")).toBeTruthy());
 
-  fireEvent.click(screen.getByRole("button", { name: "Open mic" }));
+  fireEvent.click(screen.getByRole("button", { name: "Toggle mic" }));
   await waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledWith(true, expect.any(Object)));
-  expect(screen.getByRole("button", { name: "Pause mic" })).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("button", { name: "Pause mic" }));
+  fireEvent.click(screen.getByRole("button", { name: "Toggle mic" }));
   await waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledWith(false, undefined));
-  expect(screen.getByRole("button", { name: "Open mic" })).toBeInTheDocument();
+});
+
+test("primes the mic for managed session joins, then returns to muted after video attaches", async () => {
+  setMicrophoneEnabled.mockResolvedValue(undefined);
+
+  function Harness() {
+    const ref = React.useRef<ManagedAvatarSessionHandle | null>(null);
+
+    return (
+      <>
+        <ManagedAvatarSession
+          avatar={{
+            id: "simli-b97a7777-live",
+            label: "Simli Tutor",
+            description: "Live avatar preview",
+          }}
+          microphoneMode="prime"
+          ref={ref}
+        />
+        <button onClick={() => void ref.current?.start()} type="button">Start avatar</button>
+      </>
+    );
+  }
+
+  render(<Harness />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
+
+  await waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledWith(true, expect.any(Object)));
+  await waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledWith(false, undefined));
+  await waitFor(() => expect(screen.getAllByText("Live").length).toBeGreaterThan(0));
 });
 
 test("surfaces a provider hint when the room connects but no remote video arrives", async () => {
   vi.useFakeTimers();
   emitTrackOnConnect.mockReturnValue(false);
 
-  render(
-    <ManagedAvatarSession
-      avatar={{
-        id: "simli-b97a7777-live",
-        label: "Simli Tutor",
-        description: "Live avatar preview",
-      }}
-    />
-  );
+  renderManagedHarness();
 
   fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
 
@@ -163,20 +217,11 @@ test("surfaces a provider hint when the room connects but no remote video arrive
 
   expect(screen.getByRole("alert")).toHaveTextContent("Simli did not publish video in time.");
   expect(screen.getByRole("alert")).toHaveTextContent("The provider may be rate-limited. Retry in about a minute.");
-  expect(screen.getByText("Issue")).toBeInTheDocument();
+  expect(screen.getByText("Retry")).toBeInTheDocument();
 });
 
 test("unexpected disconnect resets the room state and allows reconnect", async () => {
-  render(
-    <ManagedAvatarSession
-      avatar={{
-        id: "simli-b97a7777-live",
-        label: "Simli Tutor",
-        description: "Live avatar preview",
-      }}
-      microphoneMode="off"
-    />
-  );
+  renderManagedHarness();
 
   fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
 
@@ -195,4 +240,25 @@ test("unexpected disconnect resets the room state and allows reconnect", async (
   await waitFor(() => expect(createLiveKitAvatarSession).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(screen.getByText("Room nerdy-simli-preview-2")).toBeInTheDocument());
   await waitFor(() => expect(screen.getAllByText("Live").length).toBeGreaterThan(0));
+});
+
+test("disconnects the managed room after 60 seconds of inactivity", async () => {
+  vi.useFakeTimers();
+  setMicrophoneEnabled.mockResolvedValue(undefined);
+
+  renderManagedHarness();
+
+  fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
+
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(screen.getAllByText("Live").length).toBeGreaterThan(0);
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(60000);
+  });
+
+  expect(screen.getByText("Ready")).toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent("Disconnected after 60 seconds of inactivity.");
 });

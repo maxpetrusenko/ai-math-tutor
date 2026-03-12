@@ -117,6 +117,7 @@ bash scripts/dev.sh
 
 Open `http://127.0.0.1:3000`.
 `scripts/dev.sh` auto-loads `.env`, `.env.local`, and `frontend/.env.local` into the spawned processes.
+If the backend runs with `NERDY_REQUIRE_FIREBASE_AUTH=1`, local startup now mirrors that into `NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH=1` for the frontend socket client.
 If Firebase Google sign-in is enabled, add `127.0.0.1` to Firebase Console -> Authentication -> Settings -> Authorized domains. Newer Firebase projects do not auto-allow localhost-style dev hosts.
 
 ### Manual Split
@@ -237,6 +238,7 @@ Frontend:
 
 ```bash
 NEXT_PUBLIC_SESSION_WS_URL=ws://127.0.0.1:8000/ws/session
+NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH=0
 ```
 
 If you only want the typed demo path, the frontend still runs without live mic credentials.

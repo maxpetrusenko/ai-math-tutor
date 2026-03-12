@@ -1,5 +1,7 @@
 import { afterEach, vi } from "vitest";
 
+const ORIGINAL_PUBLIC_AUTH_REQUIREMENT = process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH;
+
 const { getCurrentFirebaseIdToken, getFirebaseAuthClient } = vi.hoisted(() => ({
   getCurrentFirebaseIdToken: vi.fn<() => Promise<string | null>>(),
   getFirebaseAuthClient: vi.fn<() => object | null>(),
@@ -22,6 +24,7 @@ class FakeWebSocket {
 
   readonly sent: string[] = [];
   readonly url: string;
+  bufferedAmount = 0;
   readyState = FakeWebSocket.OPEN;
   onopen: (() => void) | null = null;
   onmessage: ((event: MessageEvent<string>) => void) | null = null;
@@ -33,6 +36,9 @@ class FakeWebSocket {
     FakeWebSocket.instances.push(this);
     queueMicrotask(() => {
       this.onopen?.();
+      queueMicrotask(() => {
+        this.emit({ type: "session.started", session_id: "session-1", state: "idle" });
+      });
     });
   }
 
@@ -60,6 +66,11 @@ afterEach(() => {
   getCurrentFirebaseIdToken.mockResolvedValue(null);
   getFirebaseAuthClient.mockReset();
   getFirebaseAuthClient.mockReturnValue(null);
+  if (ORIGINAL_PUBLIC_AUTH_REQUIREMENT === undefined) {
+    delete process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH;
+  } else {
+    process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH = ORIGINAL_PUBLIC_AUTH_REQUIREMENT;
+  }
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -233,6 +244,7 @@ test("session transport returns failed when websocket connect errors", async () 
 
 test("session transport refuses websocket connect before firebase auth is ready", async () => {
   vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+  process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH = "1";
   getFirebaseAuthClient.mockReturnValue({ currentUser: null });
   getCurrentFirebaseIdToken.mockResolvedValue(null);
 
@@ -242,13 +254,78 @@ test("session transport refuses websocket connect before firebase auth is ready"
 
 test("session transport appends firebase auth token to websocket url when available", async () => {
   vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+  process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH = "1";
   getFirebaseAuthClient.mockReturnValue({ currentUser: { uid: "user-1" } });
   getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
 
   await expect(createSessionSocketTransport().connect()).resolves.toBe("connected");
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  expect(FakeWebSocket.instances[0]?.url).toContain("auth_token=firebase-id-token");
+  expect(FakeWebSocket.instances[0]?.url).not.toContain("auth_token=");
+  expect(FakeWebSocket.instances[0]?.sent.map((payload) => JSON.parse(payload))).toContainEqual({
+    type: "session.authenticate",
+    auth_token: "firebase-id-token",
+  });
+});
+
+test("session transport skips firebase auth frames when backend auth is disabled", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+  process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH = "0";
+  getFirebaseAuthClient.mockReturnValue({ currentUser: { uid: "user-1" } });
+  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
+
+  await expect(createSessionSocketTransport().connect()).resolves.toBe("connected");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(FakeWebSocket.instances[0]?.sent.map((payload) => JSON.parse(payload))).not.toContainEqual({
+    type: "session.authenticate",
+    auth_token: "firebase-id-token",
+  });
+});
+
+test("session transport ignores legacy auth-message errors after connect", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+  process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH = "0";
+  const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const transport = createSessionSocketTransport();
+
+  const restorePromise = transport.switchSession?.("lesson-legacy", {
+    avatarProviderId: "sage-svg-2d",
+    conversation: [
+      {
+        id: "1",
+        transcript: "saved question",
+        tutorText: "saved answer",
+      },
+    ],
+    gradeBand: "6-8",
+    llmModel: "gemini-3-flash-preview",
+    llmProvider: "gemini",
+    preference: "",
+    sessionId: "lesson-legacy",
+    studentPrompt: "saved question",
+    subject: "math",
+    ttsModel: "sonic-2",
+    ttsProvider: "cartesia",
+    transcript: "saved question",
+    tutorText: "saved answer",
+    version: 1,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const socket = FakeWebSocket.instances[0];
+  socket?.emit({ type: "session.error", detail: "unknown message type: session.authenticate" });
+  socket?.emit({ type: "session.restored", session_id: "lesson-legacy", history_length: 2, state: "idle" });
+
+  await expect(restorePromise).resolves.toBeUndefined();
+  expect(warnSpy).toHaveBeenCalledWith(
+    "[session_socket]",
+    "receive.ignored",
+    expect.objectContaining({
+      detail: "unknown message type: session.authenticate",
+      reason: "legacy-backend-auth-message",
+    }),
+  );
 });
 
 test("session transport logs a single warning when websocket connect fails before open", async () => {

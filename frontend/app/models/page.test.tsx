@@ -32,7 +32,10 @@ test("models lets the learner switch tutor brain with curated choice cards", () 
 
   expect(writeSessionPreferences).toHaveBeenCalledWith(
     expect.objectContaining({
+      llmModel: "gpt-realtime-mini",
       llmProvider: "openai-realtime",
+      ttsModel: "gpt-realtime-mini",
+      ttsProvider: "openai-realtime",
     })
   );
 });

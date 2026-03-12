@@ -10,6 +10,16 @@ export type LiveKitAvatarBootstrapResponse = {
   url: string;
 };
 
+class LiveKitAvatarBootstrapHttpError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "LiveKitAvatarBootstrapHttpError";
+    this.status = status;
+  }
+}
+
 function toAvatarSessionUrl(baseUrl: string) {
   try {
     const url = new URL(baseUrl);
@@ -20,6 +30,32 @@ function toAvatarSessionUrl(baseUrl: string) {
   } catch {
     return "";
   }
+}
+
+function isLikelyLocalBackendHost(hostname: string) {
+  if (!hostname) {
+    return false;
+  }
+
+  if (
+    hostname === "localhost"
+    || hostname === "127.0.0.1"
+    || hostname === "::1"
+    || hostname.startsWith("10.")
+    || hostname.startsWith("192.168.")
+  ) {
+    return true;
+  }
+
+  const private172Match = hostname.match(/^172\.(\d{1,3})\./);
+  if (private172Match) {
+    const secondOctet = Number.parseInt(private172Match[1] ?? "", 10);
+    if (secondOctet >= 16 && secondOctet <= 31) {
+      return true;
+    }
+  }
+
+  return hostname.endsWith(".local") || hostname.endsWith(".internal");
 }
 
 function resolveLiveKitAvatarApiUrls() {
@@ -41,8 +77,21 @@ function resolveLiveKitAvatarApiUrls() {
   }
 
   if (typeof window !== "undefined") {
+    const origin = window.location.origin;
     const hostname = window.location.hostname || "127.0.0.1";
-    urls.push(`http://${hostname}:8000/api/avatars/livekit/session`);
+    const localBackendUrl = `http://${hostname}:8000/api/avatars/livekit/session`;
+
+    if (isLikelyLocalBackendHost(hostname)) {
+      urls.push(localBackendUrl);
+      urls.push("http://127.0.0.1:8000/api/avatars/livekit/session");
+      urls.push("http://localhost:8000/api/avatars/livekit/session");
+      urls.push(`${origin}/api/avatars/livekit/session`);
+    } else {
+      urls.push(`${origin}/api/avatars/livekit/session`);
+      urls.push(localBackendUrl);
+      urls.push("http://127.0.0.1:8000/api/avatars/livekit/session");
+      urls.push("http://localhost:8000/api/avatars/livekit/session");
+    }
   } else {
     urls.push("http://127.0.0.1:8000/api/avatars/livekit/session");
     urls.push("http://localhost:8000/api/avatars/livekit/session");
@@ -87,11 +136,18 @@ export async function createLiveKitAvatarSession(
         } catch {
           // Keep the default message if the backend does not return JSON.
         }
-        throw new Error(detail);
+        throw new LiveKitAvatarBootstrapHttpError(response.status, detail);
       }
 
       return response.json() as Promise<LiveKitAvatarBootstrapResponse>;
     } catch (error) {
+      if (error instanceof LiveKitAvatarBootstrapHttpError) {
+        if (error.status === 404) {
+          lastNetworkError = error;
+          continue;
+        }
+        throw error;
+      }
       lastNetworkError = error instanceof Error ? error : new Error("Could not start LiveKit avatar session.");
     }
   }

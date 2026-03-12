@@ -11,11 +11,10 @@ test("avatar page highlights the selected tutor spotlight", async () => {
   render(<AvatarPage />);
 
   expect(screen.getByText("Choose Your Tutor")).toBeInTheDocument();
-  expect(screen.getAllByText("Patient guide").length).toBeGreaterThan(0);
+  expect(screen.getByText("Calm explanations")).toBeInTheDocument();
   expect(screen.getAllByText("Sage").length).toBeGreaterThan(0);
-  expect(screen.getByRole("link", { name: "Start session" })).toHaveAttribute("href", "/session");
-  expect(screen.getByText("Warm mentor who explains it clearly.")).toBeInTheDocument();
-  expect(screen.getByText("Hello, ready to learn?")).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Start session" })).not.toBeInTheDocument();
+  expect(screen.getAllByText("Hello, ready to learn?").length).toBeGreaterThan(0);
 });
 
 test("managed avatars keep the picker lightweight", async () => {
@@ -27,6 +26,16 @@ test("managed avatars keep the picker lightweight", async () => {
   fireEvent.click(screen.getByRole("button", { name: /simli tutor/i }));
 
   expect(screen.queryByTestId("managed-avatar-session")).not.toBeInTheDocument();
-  expect(screen.getByText("Opens as a live camera stage in the tutor session.")).toBeInTheDocument();
-  expect(screen.getAllByTestId("avatar-surface-managed").length).toBeGreaterThan(1);
+  expect(screen.queryByText("Local preview only here. The real live camera stage starts in the tutor session.")).not.toBeInTheDocument();
+  expect(screen.getAllByTestId("avatar-surface-managed").length).toBeGreaterThan(0);
+});
+
+test("hovering a picker card wakes the tutor preview", async () => {
+  const { default: AvatarPage } = await import("./page");
+  render(<AvatarPage />);
+
+  const novaCard = screen.getByRole("button", { name: /nova/i });
+  fireEvent.mouseEnter(novaCard);
+
+  await waitFor(() => expect(screen.getAllByText("Hello, ready to learn?").length).toBeGreaterThan(1));
 });

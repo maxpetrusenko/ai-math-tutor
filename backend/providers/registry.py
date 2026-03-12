@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from importlib import import_module
 
@@ -9,6 +10,8 @@ from backend.providers.base import (
     BaseSTTProvider,
     BaseTTSProvider,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderRegistry:
@@ -99,5 +102,7 @@ def auto_register_providers() -> None:
     for module_path in stt_modules + llm_modules + tts_modules + avatar_modules:
         try:
             import_module(module_path)
+        except ModuleNotFoundError:
+            logger.debug("provider module missing: %s", module_path)
         except Exception:
-            pass  # Optional modules may not exist
+            logger.exception("provider module import failed: %s", module_path)

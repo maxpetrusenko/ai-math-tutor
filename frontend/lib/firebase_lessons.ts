@@ -15,6 +15,74 @@ import type {
 } from "./lesson_thread_store";
 
 const LESSON_STORE_DOCUMENT_ID = "default";
+let firebaseLessonTransportBlocked = false;
+
+function isLikelyLocalHost(hostname: string) {
+  if (
+    hostname === "localhost"
+    || hostname === "127.0.0.1"
+    || hostname === "::1"
+    || hostname.endsWith(".local")
+    || hostname.endsWith(".internal")
+    || hostname.startsWith("10.")
+    || hostname.startsWith("192.168.")
+  ) {
+    return true;
+  }
+
+  const private172Match = hostname.match(/^172\.(\d{1,3})\./);
+  if (!private172Match) {
+    return false;
+  }
+
+  const secondOctet = Number.parseInt(private172Match[1] ?? "", 10);
+  return secondOctet >= 16 && secondOctet <= 31;
+}
+
+function shouldBypassFirebaseLessons() {
+  if (typeof window === "undefined" || typeof process === "undefined" || process.env.NODE_ENV !== "development") {
+    return false;
+  }
+
+  const hostname = window.location.hostname || "";
+  return isLikelyLocalHost(hostname);
+}
+
+function describeFirebaseLessonError(error: unknown) {
+  const code = typeof error === "object" && error && "code" in error ? String(error.code ?? "") : "";
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return `${code} ${message}`.trim().toLowerCase();
+}
+
+function isBlockedFirebaseLessonTransport(error: unknown) {
+  const description = describeFirebaseLessonError(error);
+  return (
+    description.includes("blocked_by_client")
+    || description.includes("webchannel")
+    || description.includes("transport errored")
+    || description.includes("failed to fetch")
+    || description.includes("network error")
+    || description.includes("networkerror")
+    || description.includes("client is offline")
+    || description.includes("unavailable")
+  );
+}
+
+async function runFirebaseLessonRequest<T>(request: () => Promise<T | null>) {
+  if (firebaseLessonTransportBlocked || shouldBypassFirebaseLessons()) {
+    return null;
+  }
+
+  try {
+    return await request();
+  } catch (error) {
+    if (isBlockedFirebaseLessonTransport(error)) {
+      firebaseLessonTransportBlocked = true;
+      return null;
+    }
+    throw error;
+  }
+}
 
 function lessonStoreRef() {
   const db = getFirebaseFirestore();
@@ -27,30 +95,34 @@ function lessonStoreRef() {
 }
 
 async function writeFirebaseStore(store: PersistedLessonThreadStore) {
-  const ref = lessonStoreRef();
-  if (!ref) {
-    return null;
-  }
+  return runFirebaseLessonRequest(async () => {
+    const ref = lessonStoreRef();
+    if (!ref) {
+      return null;
+    }
 
-  await setDoc(ref, {
-    ...store,
-    updatedAt: new Date().toISOString(),
+    await setDoc(ref, {
+      ...store,
+      updatedAt: new Date().toISOString(),
+    });
+    return store;
   });
-  return store;
 }
 
 export async function fetchFirebaseLessonStore() {
-  const ref = lessonStoreRef();
-  if (!ref) {
-    return null;
-  }
+  return runFirebaseLessonRequest(async () => {
+    const ref = lessonStoreRef();
+    if (!ref) {
+      return null;
+    }
 
-  const snapshot = await getDoc(ref);
-  if (!snapshot.exists()) {
-    return null;
-  }
+    const snapshot = await getDoc(ref);
+    if (!snapshot.exists()) {
+      return null;
+    }
 
-  return snapshot.data() as PersistedLessonThreadStore;
+    return snapshot.data() as PersistedLessonThreadStore;
+  });
 }
 
 export async function saveFirebaseActiveLessonThread(
@@ -93,4 +165,8 @@ export async function clearFirebaseArchivedLessonThreads(currentStore: Persisted
 export async function fetchFirebaseArchivedLessonThread(lessonId: string) {
   const store = await fetchFirebaseLessonStore();
   return store?.archive.find((entry) => entry.id === lessonId)?.thread ?? null;
+}
+
+export function resetFirebaseLessonTransportStateForTests() {
+  firebaseLessonTransportBlocked = false;
 }

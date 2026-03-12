@@ -6,6 +6,9 @@ import Link from "next/link";
 import { DashboardLayout } from "../../components/layout";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { SurfaceCard } from "../../components/ui/SurfaceCard";
+import { readAvatarProviderPreference } from "../../lib/avatar_preference";
+import { DEFAULT_AVATAR_PROVIDER_ID } from "../../lib/avatar_manifest";
+import { resolveCompatibleRuntimeSelectionForAvatar } from "../../lib/avatar_runtime_compatibility";
 import {
   applyRuntimeProviderChange,
   RUNTIME_OPTIONS,
@@ -83,7 +86,15 @@ function formatProviderLabel(provider: string) {
 }
 
 export default function ModelsPage() {
-  const [selection, setSelection] = useState(() => readSessionPreferences());
+  const [avatarProviderId] = useState(() => readAvatarProviderPreference() ?? DEFAULT_AVATAR_PROVIDER_ID);
+  const [selection, setSelection] = useState(() => {
+    const stored = readSessionPreferences();
+    return {
+      ...stored,
+      ...resolveCompatibleRuntimeSelectionForAvatar(avatarProviderId, stored).selection,
+    };
+  });
+  const compatibility = resolveCompatibleRuntimeSelectionForAvatar(avatarProviderId, selection);
   const selectedBrain = LLM_PROVIDER_CHOICES.find((provider) => provider.id === selection.llmProvider);
   const selectedVoice = TTS_PROVIDER_CHOICES.find((provider) => provider.id === selection.ttsProvider);
   const deliveryMode = selection.llmProvider === "openai-realtime" || selection.ttsProvider === "openai-realtime"
@@ -98,9 +109,10 @@ export default function ModelsPage() {
       ttsProvider: selection.ttsProvider,
       ...nextSelection,
     });
+    const compatibleSelection = resolveCompatibleRuntimeSelectionForAvatar(avatarProviderId, normalized).selection;
     const nextPreferences = writeSessionPreferences({
       ...selection,
-      ...normalized,
+      ...compatibleSelection,
     });
     setSelection(nextPreferences);
   };
@@ -148,7 +160,9 @@ export default function ModelsPage() {
             Reasoning, explanations, and pacing for the tutor.
           </p>
           <div className="provider-choice-grid">
-            {LLM_PROVIDER_CHOICES.map((provider) => (
+            {LLM_PROVIDER_CHOICES
+              .filter((provider) => compatibility.policy.compatibleLlmProviders.includes(provider.id))
+              .map((provider) => (
               <button
                 aria-label={provider.title}
                 aria-pressed={selection.llmProvider === provider.id}
@@ -163,7 +177,7 @@ export default function ModelsPage() {
                 <div className="provider-choice-card__title">{provider.title}</div>
                 <div className="provider-choice-card__copy">{provider.description}</div>
               </button>
-            ))}
+              ))}
           </div>
           <div className="field-grid">
             <label className="field">
@@ -193,6 +207,9 @@ export default function ModelsPage() {
               </div>
             </div>
           </div>
+          {compatibility.policy.reason ? (
+            <p className="section-copy section-copy--top-sm">{compatibility.policy.reason}</p>
+          ) : null}
         </SurfaceCard>
 
         <SurfaceCard className="models-page__section">
@@ -201,7 +218,9 @@ export default function ModelsPage() {
             Speech synthesis and playback defaults for your current tutor.
           </p>
           <div className="provider-choice-grid provider-choice-grid--compact">
-            {TTS_PROVIDER_CHOICES.map((provider) => (
+            {TTS_PROVIDER_CHOICES
+              .filter((provider) => compatibility.policy.compatibleTtsProviders.includes(provider.id))
+              .map((provider) => (
               <button
                 aria-label={provider.title}
                 aria-pressed={selection.ttsProvider === provider.id}
@@ -216,7 +235,7 @@ export default function ModelsPage() {
                 <div className="provider-choice-card__title">{provider.title}</div>
                 <div className="provider-choice-card__copy">{provider.description}</div>
               </button>
-            ))}
+              ))}
           </div>
           <div className="field-grid">
             <label className="field">

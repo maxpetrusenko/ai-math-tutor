@@ -68,6 +68,8 @@ export type RuntimeSelection = {
   ttsProvider: string;
 };
 
+export type RuntimeOptionKind = keyof typeof RUNTIME_OPTIONS;
+
 export function isOpenAIRealtimeProvider(provider: string) {
   return provider === OPENAI_REALTIME_PROVIDER;
 }
@@ -82,6 +84,16 @@ function resolveSupportedTtsProvider(provider: string): TtsProviderId {
 
 function hasOptionValue(options: ReadonlyArray<{ value: string }>, value: string) {
   return options.some((option) => option.value === value);
+}
+
+export function resolveRuntimeOptionLabel(
+  kind: RuntimeOptionKind,
+  provider: string,
+  value: string,
+) {
+  const optionsByProvider = RUNTIME_OPTIONS[kind] as Record<string, ReadonlyArray<{ label: string; value: string }>>;
+  const option = optionsByProvider[provider]?.find((entry) => entry.value === value);
+  return option?.label ?? value;
 }
 
 export function resolveDefaultLlmModel(provider: string) {
@@ -118,14 +130,24 @@ export function applyRuntimeProviderChange(
   nextProvider: string
 ): RuntimeSelection {
   if (kind === "llm") {
+    const shouldEnterRealtimeTts =
+      isOpenAIRealtimeProvider(nextProvider) && !isOpenAIRealtimeProvider(selection.ttsProvider);
     const shouldExitRealtimeTts =
       !isOpenAIRealtimeProvider(nextProvider) && isOpenAIRealtimeProvider(selection.ttsProvider);
     return normalizeRuntimeSelection({
       ...selection,
       llmModel: resolveDefaultLlmModel(nextProvider),
       llmProvider: nextProvider,
-      ttsModel: shouldExitRealtimeTts ? FALLBACK_TTS_MODEL : selection.ttsModel,
-      ttsProvider: shouldExitRealtimeTts ? FALLBACK_TTS_PROVIDER : selection.ttsProvider,
+      ttsModel: shouldEnterRealtimeTts
+        ? resolveDefaultTtsModel(OPENAI_REALTIME_PROVIDER)
+        : shouldExitRealtimeTts
+          ? FALLBACK_TTS_MODEL
+          : selection.ttsModel,
+      ttsProvider: shouldEnterRealtimeTts
+        ? OPENAI_REALTIME_PROVIDER
+        : shouldExitRealtimeTts
+          ? FALLBACK_TTS_PROVIDER
+          : selection.ttsProvider,
     });
   }
 

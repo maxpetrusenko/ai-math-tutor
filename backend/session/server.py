@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -17,6 +18,7 @@ from backend.llm.topic_shift import filter_history_for_latest_turn
 from backend.llm.provider_switch import ProviderSwitch
 from backend.providers import create_provider
 from backend.session.firebase_auth import (
+    firebase_auth_required,
     verify_firebase_bearer_token,
     verify_firebase_websocket_token,
 )
@@ -62,6 +64,8 @@ app.add_middleware(
     allow_methods=["*"],
 )
 
+WEBSOCKET_AUTH_TIMEOUT_SECONDS = 5
+
 
 def create_stt_provider() -> StreamingSTTProvider:
     return STTProviderFactory().create()
@@ -74,7 +78,7 @@ def _auth_namespace(claims: dict[str, object] | None) -> str:
 
 def _is_allowed_websocket_origin(origin: str | None) -> bool:
     if not origin:
-        return True
+        return False
 
     parsed = urlparse(origin)
     host = parsed.hostname or ""
@@ -87,6 +91,27 @@ def _is_allowed_websocket_origin(origin: str | None) -> bool:
         if entry.strip()
     }
     return origin in allowed
+
+
+async def _authenticate_websocket(websocket: WebSocket) -> dict[str, object] | None:
+    if not firebase_auth_required():
+        return None
+
+    try:
+        message = await asyncio.wait_for(websocket.receive_json(), timeout=WEBSOCKET_AUTH_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError as error:
+        raise HTTPException(status_code=401, detail="WebSocket authentication timed out") from error
+    except WebSocketDisconnect as error:
+        raise HTTPException(status_code=401, detail="WebSocket disconnected before authentication") from error
+
+    if not isinstance(message, dict) or str(message.get("type") or "") != "session.authenticate":
+        raise HTTPException(status_code=401, detail="WebSocket authentication message required")
+
+    auth_token = str(message.get("auth_token") or "").strip()
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Missing Firebase auth token")
+
+    return verify_firebase_websocket_token(auth_token)
 
 
 @app.get("/api/lessons")
@@ -187,12 +212,17 @@ async def session_websocket(websocket: WebSocket) -> None:
     try:
         if not _is_allowed_websocket_origin(websocket.headers.get("origin")):
             raise HTTPException(status_code=403, detail="WebSocket origin not allowed")
-        claims = verify_firebase_websocket_token(websocket.query_params.get("auth_token"))
     except HTTPException as error:
         await websocket.close(code=4403 if error.status_code == 403 else 4401)
         return
 
     await websocket.accept()
+    try:
+        claims = await _authenticate_websocket(websocket)
+    except HTTPException as error:
+        await websocket.close(code=4401)
+        return
+
     namespace = _auth_namespace(claims)
     session_id = websocket.query_params.get("session_id") or str(uuid4())
     logger.info("session websocket opened %s", _json_summary({"session_id": session_id}))
@@ -585,6 +615,8 @@ async def _handle_message(
         return controller.complete_tutor_turn(turn_id=str(message["turn_id"])), stt_session
     if message_type == "interrupt":
         return controller.interrupt(), stt_session
+    if message_type == "session.authenticate":
+        return [], stt_session
     if message_type == "session.restore":
         raw_history = message.get("history")
         raw_student_profile = message.get("student_profile")
@@ -737,6 +769,13 @@ def _summarize_browser_message(session_id: str, message: dict[str, object]) -> d
                 "history_length": len(raw_history) if isinstance(raw_history, list) else 0,
                 "student_profile_keys": list(raw_profile.keys()) if isinstance(raw_profile, dict) else [],
                 "subject": str(message.get("subject") or ""),
+            }
+        )
+    elif summary["type"] == "session.authenticate":
+        auth_token = str(message.get("auth_token") or "").strip()
+        summary.update(
+            {
+                "auth_token_length": len(auth_token),
             }
         )
 

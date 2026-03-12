@@ -73,6 +73,9 @@ def _apply_env_aliases(env: MutableMapping[str, str]) -> None:
         if target_key not in env and source_key in env:
             env[target_key] = env[source_key]
 
+    if "NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH" not in env and "NERDY_REQUIRE_FIREBASE_AUTH" in env:
+        env["NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH"] = env["NERDY_REQUIRE_FIREBASE_AUTH"]
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Load local .env files for repo entrypoints.")

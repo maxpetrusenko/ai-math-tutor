@@ -170,6 +170,51 @@ async def _validate_simli_avatar_target(target: ManagedAvatarTarget, env: Mappin
             raise ValueError(_describe_simli_bootstrap_failure(detail, face_id=target.avatar_id))
 
 
+def _describe_liveavatar_bootstrap_failure(detail: str) -> str:
+    normalized = detail.strip() or "unknown_error"
+    if "invalid api key" in normalized.lower():
+        return (
+            "LiveAvatar rejected the configured API key. "
+            "Set a valid `LIVEAVATAR_API_KEY`; a `HEYGEN_API_KEY` is not enough for this path."
+        )
+    return f"LiveAvatar session bootstrap failed: {normalized}"
+
+
+async def _validate_liveavatar_target(target: ManagedAvatarTarget, env: Mapping[str, str]) -> None:
+    api_key = _coalesce_env(env, "LIVEAVATAR_API_KEY", "HEYGEN_API_KEY")
+    if not api_key:
+        raise ValueError("LIVEAVATAR_API_KEY or HEYGEN_API_KEY is required for HeyGen LiveAvatar sessions.")
+
+    probe_livekit_config = {
+        "livekit_room": "nerdy-liveavatar-probe",
+        "livekit_url": env["LIVEKIT_URL"].strip(),
+        "livekit_client_token": "probe",
+    }
+    async with aiohttp.ClientSession() as session:
+        payload = {
+            "mode": "LITE",
+            "avatar_id": target.avatar_id,
+            "is_sandbox": bool(target.metadata.get("is_sandbox", False)),
+            "livekit_config": probe_livekit_config,
+        }
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "X-API-KEY": api_key,
+        }
+
+        async with session.post(
+            "https://api.liveavatar.com/v1/sessions/token",
+            json=payload,
+            headers=headers,
+        ) as response:
+            if response.status < 400:
+                return
+            detail = await response.text()
+            if response.status == 401 or "invalid api key" in detail.lower():
+                raise ValueError(_describe_liveavatar_bootstrap_failure(detail))
+
+
 async def create_avatar_room_session(
     provider_id: str,
     *,
@@ -186,6 +231,8 @@ async def create_avatar_room_session(
     target = resolve_managed_avatar_metadata(provider_id, resolved_env)
     if target.provider == "simli":
         await _validate_simli_avatar_target(target, resolved_env)
+    elif target.provider == "liveavatar":
+        await _validate_liveavatar_target(target, resolved_env)
     room_name = _build_room_name(target.provider)
     room_metadata = json.dumps(target.metadata)
     participant_identity = f"web-{uuid4().hex[:12]}"

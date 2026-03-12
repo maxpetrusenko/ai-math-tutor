@@ -16,6 +16,9 @@ export type AvatarManifestEntry = {
   config: AvatarConfig;
   description?: string;
   persona?: string;
+  previewGreeting?: string;
+  previewPosterUrl?: string;
+  previewVideoUrl?: string;
 };
 
 export const DEFAULT_AVATAR_ID = "sage-svg-2d";
@@ -193,6 +196,9 @@ export const AVATAR_MANIFEST: AvatarManifestEntry[] = [
     bestFor: "remote realtime lip sync",
     description: "Realtime face with fast lip sync.",
     persona: "Studio tutor",
+    previewGreeting: "Hello, ready to learn?",
+    previewPosterUrl: "/avatar-previews/simli-tutor-preview.jpg",
+    previewVideoUrl: "/avatar-previews/simli-tutor-preview.mp4",
   },
   {
     id: "heygen-liveavatar-default",

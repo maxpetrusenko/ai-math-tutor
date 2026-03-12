@@ -15,10 +15,15 @@ def disable_live_runtime(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("NERDY_SESSION_DATA_DIR", str(tmp_path))
 
 
+def _session_ws(client: TestClient, path: str = "/ws/session", **kwargs):
+    headers = {"Origin": "http://127.0.0.1:3000", **(kwargs.pop("headers", {}) or {})}
+    return client.websocket_connect(path, headers=headers, **kwargs)
+
+
 def test_session_websocket_streams_state_and_tutor_events() -> None:
     client = TestClient(app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         started = websocket.receive_json()
         websocket.send_json({"type": "audio.chunk", "sequence": 1, "size": 320})
         listening = websocket.receive_json()
@@ -62,7 +67,7 @@ def test_session_websocket_streams_state_and_tutor_events() -> None:
 def test_session_websocket_can_transcribe_without_starting_a_tutor_turn() -> None:
     client = TestClient(app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json({"type": "audio.chunk", "sequence": 1, "size": 320})
         listening = websocket.receive_json()
@@ -97,7 +102,7 @@ def test_session_websocket_transcribe_only_accepts_stable_partial_when_final_is_
     monkeypatch.setattr("backend.session.server.create_stt_provider", lambda: _StablePartialOnlySTTProvider())
     client = TestClient(app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -126,7 +131,7 @@ def test_session_websocket_writes_trace_for_transcribe_only_turn(monkeypatch, tm
     monkeypatch.setenv("NERDY_TURN_TRACE_DIR", str(tmp_path / "turn-traces"))
     client = TestClient(app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         started = websocket.receive_json()
         websocket.send_json({"type": "speech.end", "ts_ms": 1000, "text": "debug this mic release", "transcribe_only": True})
         websocket.receive_json()
@@ -145,7 +150,7 @@ def test_session_websocket_writes_trace_for_transcribe_only_turn(monkeypatch, tm
 def test_session_websocket_resets_session_state() -> None:
     client = TestClient(app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json({"type": "speech.end", "ts_ms": 1000, "text": "first question"})
         for _ in range(7):
@@ -163,7 +168,7 @@ def test_session_websocket_resets_session_state() -> None:
 def test_session_websocket_restores_existing_session_by_id() -> None:
     client = TestClient(app)
 
-    with client.websocket_connect("/ws/session?session_id=lesson-1") as websocket:
+    with _session_ws(client, "/ws/session?session_id=lesson-1") as websocket:
         started = websocket.receive_json()
         websocket.send_json(
             {
@@ -179,7 +184,7 @@ def test_session_websocket_restores_existing_session_by_id() -> None:
         )
         restored = websocket.receive_json()
 
-    with client.websocket_connect("/ws/session?session_id=lesson-1") as websocket:
+    with _session_ws(client, "/ws/session?session_id=lesson-1") as websocket:
         reopened = websocket.receive_json()
 
     assert started["session_id"] == "lesson-1"
@@ -194,6 +199,20 @@ def test_session_websocket_restores_existing_session_by_id() -> None:
         "session_id": "lesson-1",
         "state": "idle",
     }
+
+
+def test_session_websocket_ignores_late_authentication_messages_when_auth_is_not_required() -> None:
+    client = TestClient(app)
+
+    with _session_ws(client) as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "session.authenticate", "auth_token": "late-token"})
+        websocket.send_json({"type": "speech.end", "ts_ms": 1000, "text": "Explain decimals"})
+        thinking = websocket.receive_json()
+        transcript = websocket.receive_json()
+
+    assert thinking == {"type": "state.changed", "state": "thinking"}
+    assert transcript == {"type": "transcript.final", "text": "Explain decimals"}
 
 
 def test_lesson_history_api_persists_active_and_archived_threads() -> None:
@@ -337,7 +356,7 @@ def test_session_websocket_surfaces_provider_errors_before_close(monkeypatch) ->
     monkeypatch.setattr("backend.session.server.create_stt_provider", lambda: _ExplodingSTTProvider())
     client = TestClient(app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -380,7 +399,7 @@ def test_session_websocket_pushes_audio_once_with_chunk_timestamp(monkeypatch) -
     monkeypatch.setattr("backend.session.server.create_stt_provider", lambda: provider)
     client = TestClient(app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -460,12 +479,55 @@ def test_lessons_api_scopes_fallback_store_per_firebase_uid(monkeypatch) -> None
     assert user_b_list.json()["activeThread"] is None
 
 
+def test_session_websocket_rejects_missing_origin() -> None:
+    client = TestClient(app)
+
+    with pytest.raises(WebSocketDisconnect) as error:
+        with client.websocket_connect("/ws/session"):
+            pass
+
+    assert error.value.code == 4403
+
+
 def test_session_websocket_rejects_disallowed_origin(monkeypatch) -> None:
     monkeypatch.setenv("NERDY_ALLOWED_ORIGINS", "https://ai-math-tutor--ai-math-tutor-b39b3.us-east4.hosted.app")
     client = TestClient(app)
 
     with pytest.raises(WebSocketDisconnect) as error:
-        with client.websocket_connect("/ws/session", headers={"Origin": "https://evil.example.com"}):
+        with _session_ws(client, headers={"Origin": "https://evil.example.com"}):
             pass
 
     assert error.value.code == 4403
+
+
+def test_session_websocket_authenticates_with_first_message_when_firebase_auth_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("NERDY_REQUIRE_FIREBASE_AUTH", "1")
+    monkeypatch.setattr(
+        "backend.session.server.verify_firebase_websocket_token",
+        lambda token: {"uid": "user-1"} if token == "firebase-id-token" else (_ for _ in ()).throw(
+            HTTPException(status_code=401, detail="Invalid Firebase auth token")
+        ),
+    )
+    client = TestClient(app)
+
+    with _session_ws(client) as websocket:
+        websocket.send_json({"type": "session.authenticate", "auth_token": "firebase-id-token"})
+        started = websocket.receive_json()
+
+    assert started == {
+        "type": "session.started",
+        "session_id": started["session_id"],
+        "state": "idle",
+    }
+
+
+def test_session_websocket_rejects_non_auth_first_message_when_firebase_auth_enabled(monkeypatch) -> None:
+    monkeypatch.setenv("NERDY_REQUIRE_FIREBASE_AUTH", "1")
+    client = TestClient(app)
+
+    with pytest.raises(WebSocketDisconnect) as error:
+        with _session_ws(client) as websocket:
+            websocket.send_json({"type": "speech.end", "ts_ms": 1000, "text": "hello"})
+            websocket.receive_json()
+
+    assert error.value.code == 4401

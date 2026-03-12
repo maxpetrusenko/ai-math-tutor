@@ -8,6 +8,7 @@ import type { LatencyMetrics } from "../LatencyMonitor";
 import { resolveAvatarMode, resolveAvatarProvider } from "../avatar_registry";
 import { BrowserAudioCapture } from "../../lib/audio_capture";
 import type { AvatarVisualState, WordTimestamp } from "../../lib/avatar_contract";
+import { resolveCompatibleRuntimeSelectionForAvatar } from "../../lib/avatar_runtime_compatibility";
 import {
   generateLessonSessionId,
   hydrateLessonThreadStore,
@@ -148,14 +149,15 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
   }
 
   function applyThread(thread: PersistedLessonThread) {
-    const runtimeSelection = normalizeRuntimeSelection({
+    const preferredAvatarProviderId = resolvePreferredAvatarProviderId(thread.avatarProviderId);
+    const runtimeSelection = resolveCompatibleRuntimeSelectionForAvatar(preferredAvatarProviderId, normalizeRuntimeSelection({
       llmModel: thread.llmModel,
       llmProvider: thread.llmProvider,
       ttsModel: thread.ttsModel,
       ttsProvider: thread.ttsProvider,
-    });
+    })).selection;
 
-    setAvatarProviderId(resolvePreferredAvatarProviderId(thread.avatarProviderId));
+    setAvatarProviderId(preferredAvatarProviderId);
     setConversation(thread.conversation);
     activeTurnIdRef.current = resolveNextTurnId(thread.conversation);
     setGradeBand(thread.gradeBand);
@@ -260,11 +262,6 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
   }, []);
 
   useEffect(() => {
-    if (isManagedAvatar) {
-      setConnectionState("managed");
-      return;
-    }
-
     if (!storageReady) {
       return;
     }
@@ -287,7 +284,7 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
         pendingRestoreThreadRef.current = null;
         const result = await sessionTransport.connect();
         if (!cancelled) {
-          setConnectionState(result);
+          setConnectionState(isManagedAvatar && result === "connected" ? "managed" : result);
         }
       } catch {
         if (!cancelled) {
@@ -325,14 +322,20 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
       }
 
       const persistedPreferences = readSessionPreferences();
-      setSessionDefaults(persistedPreferences);
+      const preferredAvatarProviderId = resolvePreferredAvatarProviderId();
+      const compatibleDefaults = resolveCompatibleRuntimeSelectionForAvatar(preferredAvatarProviderId, persistedPreferences).selection;
+      setSessionDefaults({
+        ...persistedPreferences,
+        ...compatibleDefaults,
+      });
+      setAvatarProviderId(preferredAvatarProviderId);
       setSubject(persistedPreferences.subject);
       setGradeBand(persistedPreferences.gradeBand);
-      setLlmModel(persistedPreferences.llmModel);
-      setLlmProvider(persistedPreferences.llmProvider);
+      setLlmModel(compatibleDefaults.llmModel);
+      setLlmProvider(compatibleDefaults.llmProvider);
       setPreference(persistedPreferences.preference);
-      setTtsModel(persistedPreferences.ttsModel);
-      setTtsProvider(persistedPreferences.ttsProvider);
+      setTtsModel(compatibleDefaults.ttsModel);
+      setTtsProvider(compatibleDefaults.ttsProvider);
 
       const resumeThread = requestedResumeLessonId ? await refreshArchivedLessonThread(requestedResumeLessonId) : null;
       const persistedThread = resumeThread ?? hydratedStore.activeThread ?? readPersistedLessonThread();
@@ -371,6 +374,25 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
 
     void persistActiveLessonThread(buildCurrentThread());
   }, [avatarProviderId, conversation, gradeBand, lessonSessionId, lessonState, llmModel, llmProvider, preference, storageReady, studentPrompt, subject, transcript, ttsModel, ttsProvider, tutorText]);
+
+  useEffect(() => {
+    const compatibleSelection = resolveCompatibleRuntimeSelectionForAvatar(avatarProviderId, {
+      llmModel,
+      llmProvider,
+      ttsModel,
+      ttsProvider,
+    }).selection;
+    if (
+      compatibleSelection.llmProvider === llmProvider
+      && compatibleSelection.llmModel === llmModel
+      && compatibleSelection.ttsProvider === ttsProvider
+      && compatibleSelection.ttsModel === ttsModel
+    ) {
+      return;
+    }
+
+    syncRuntimeSelection(compatibleSelection);
+  }, [avatarProviderId, llmModel, llmProvider, ttsModel, ttsProvider]);
 
   useEffect(() => {
     let fadeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -421,7 +443,7 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault();
-        if (!isManagedAvatar && sessionState !== "thinking" && sessionState !== "listening") {
+        if (sessionState !== "thinking" && sessionState !== "listening") {
           void actions.runDemoTurn([], "text");
         }
         return;
@@ -446,13 +468,12 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
   const selectedAvatarLabel = selectedAvatar.label;
   const selectedAvatarPersona = selectedAvatar.persona ?? "Tutor";
   const lessonQuestion = resolveLessonResumeQuestion(lessonState);
-  const showPromptPanel = !isManagedAvatar || lessonState !== null;
-  const showComposer = !isManagedAvatar;
+  const showPromptPanel = true;
   const sessionSubtitle = lessonState
-    ? "Continue where you stopped. Your tutor leads with the next question."
+    ? "Continue the current lesson from the next step."
     : isManagedAvatar
-      ? `Start a live lesson with ${selectedAvatarLabel}.`
-      : `Ask ${selectedAvatarLabel} for a guided explanation, worked example, or practice prompt.`;
+      ? "Open ended live session. Talk, practice, and follow the thread naturally."
+      : "Open ended session for questions, drills, and follow ups.";
   const supportStyle = preference.trim() || "Balanced guidance";
 
   return {
@@ -471,6 +492,8 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     latency,
     lessonQuestion,
     lessonState,
+    llmModel,
+    llmProvider,
     micActive,
     micInputBlocked,
     micSupported,
@@ -488,12 +511,14 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     sessionSubtitle,
     setHistoryOpen,
     setStudentPrompt,
-    showComposer,
     showPromptPanel,
     studentPrompt,
     subject,
     supportStyle,
+    syncRuntimeSelection,
     timestamps,
+    ttsModel,
+    ttsProvider,
     tutorText,
   };
 }

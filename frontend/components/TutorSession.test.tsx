@@ -9,6 +9,7 @@ import {
   readPersistedLessonThread,
   writePersistedLessonThread,
 } from "../lib/lesson_thread_store";
+import { appendSessionActivityLog, resetSessionActivityLogForTests } from "../lib/session_activity_log";
 import { writeSessionPreferences } from "../lib/session_preferences";
 
 vi.mock("./Avatar3D", () => ({
@@ -24,10 +25,12 @@ function resetSessionState() {
 
 beforeEach(() => {
   resetSessionState();
+  resetSessionActivityLogForTests();
 });
 
 afterEach(() => {
   resetSessionState();
+  resetSessionActivityLogForTests();
   vi.restoreAllMocks();
 });
 
@@ -60,12 +63,11 @@ function createConnectedTransport(overrides: Partial<SessionTransport> = {}) {
 }
 
 async function renderSession(
-  transport: SessionTransport = createConnectedTransport(),
-  expectedConnectionState = "connected"
+  transport: SessionTransport = createConnectedTransport()
 ) {
   render(<TutorSession transport={transport} />);
-  await waitFor(() => expect(screen.getByText("Tutor Session")).toBeInTheDocument());
-  await waitFor(() => expect(screen.getByText(expectedConnectionState)).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText("Open Session")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Open session history" })).toBeInTheDocument());
 }
 
 test("renders a clean session shell and sends turns with stored defaults", async () => {
@@ -97,7 +99,9 @@ test("renders a clean session shell and sends turns with stored defaults", async
     },
   }));
 
-  expect(screen.getByRole("heading", { name: "AI Tutor" })).toBeInTheDocument();
+  expect(screen.getAllByText("Session").length).toBeGreaterThan(0);
+  expect(screen.getByText("Nerdy AI Tutor")).toBeInTheDocument();
+  expect(screen.getByText("Open ended session for questions, drills, and follow ups.")).toBeInTheDocument();
   expect(screen.queryByLabelText("Session setup links")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Subject")).not.toBeInTheDocument();
 
@@ -146,6 +150,61 @@ test("fresh sessions use the unified socket defaults", async () => {
 
   fireEvent.change(screen.getByLabelText("Student prompt"), {
     target: { value: "Help me with fractions." },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  await waitFor(() => expect(requests).toHaveLength(1));
+  expect(requests[0]).toMatchObject({
+    llmModel: "gemini-3-flash-preview",
+    llmProvider: "gemini",
+    ttsModel: "sonic-2",
+    ttsProvider: "cartesia",
+  });
+  expect(screen.queryByText("Gemini 3 Flash Preview")).not.toBeInTheDocument();
+});
+
+test("session top bar keeps only the session tool icons", async () => {
+  writeSessionPreferences({
+    llmModel: "gpt-realtime-mini",
+    llmProvider: "openai-realtime",
+    ttsModel: "gpt-realtime-mini",
+    ttsProvider: "openai-realtime",
+  });
+
+  await renderSession();
+
+  expect(screen.getByRole("button", { name: "Open session history" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Open session logs" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Start new session" })).toBeInTheDocument();
+  expect(screen.queryByText("GPT Realtime Mini")).not.toBeInTheDocument();
+  expect(screen.queryByText("connected")).not.toBeInTheDocument();
+});
+
+test("session keeps brain controls out of the composer", async () => {
+  const requests: Array<Record<string, unknown>> = [];
+
+  await renderSession(createConnectedTransport({
+    async runTurn(request) {
+      requests.push(request as Record<string, unknown>);
+      return {
+        transcript: String(request.studentText),
+        tutorText: "Tutor reply",
+        state: "speaking",
+        latency: {
+          speechEndToSttFinalMs: 120,
+          sttFinalToLlmFirstTokenMs: 140,
+          llmFirstTokenToTtsFirstAudioMs: 110,
+        },
+        timestamps: [{ word: "Tutor", startMs: 0, endMs: 100 }],
+      };
+    },
+  }));
+
+  expect(screen.queryByLabelText("Session LLM provider")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Session LLM model")).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "Use the saved model for this one." },
   });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
@@ -292,16 +351,56 @@ test("session uses the avatar selected from the avatar menu", async () => {
   await renderSession();
 
   await waitFor(() => expect(screen.getByTestId("avatar-surface-3d")).toBeInTheDocument());
-  expect(screen.getByText("Ready for a new lesson?")).toBeInTheDocument();
+  expect(screen.queryByText("Ready for a new lesson?")).not.toBeInTheDocument();
 });
 
-test("managed avatar selections switch the session into live room mode", async () => {
+test("managed avatar selections keep live room mode and restore the composer flow", async () => {
+  const requests: Array<Record<string, unknown>> = [];
   window.localStorage.setItem("nerdy_avatar_provider_preference", "simli-b97a7777-live");
+  writeSessionPreferences({
+    llmModel: "gemini-3-flash-preview",
+    llmProvider: "gemini",
+    ttsModel: "sonic-2",
+    ttsProvider: "cartesia",
+  });
 
-  await renderSession(createConnectedTransport(), "managed");
+  await renderSession(createConnectedTransport({
+    async runTurn(request) {
+      requests.push(request as Record<string, unknown>);
+      return {
+        transcript: String(request.studentText),
+        tutorText: "Tutor reply",
+        state: "speaking",
+        latency: {
+          speechEndToSttFinalMs: 120,
+          sttFinalToLlmFirstTokenMs: 140,
+          llmFirstTokenToTtsFirstAudioMs: 110,
+        },
+        timestamps: [{ word: "Tutor", startMs: 0, endMs: 100 }],
+      };
+    },
+  }));
 
   await waitFor(() => expect(screen.getByTestId("managed-avatar-session")).toBeInTheDocument());
-  expect(screen.queryByLabelText("Student prompt")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Student prompt")).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "talk back through text" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  await waitFor(() => expect(screen.getAllByText("Tutor reply").length).toBeGreaterThan(0));
+  expect(requests[0]).toMatchObject({
+    llmProvider: "openai-realtime",
+    llmModel: "gpt-realtime-mini",
+    ttsProvider: "openai-realtime",
+    ttsModel: "gpt-realtime-mini",
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "Open session history" }));
+  expect(screen.getByText("talk back through text")).toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Turn 1 debug info"));
+  expect(screen.getByText("Trace")).toBeInTheDocument();
 });
 
 test("persisted lessons do not override the globally selected avatar", async () => {
@@ -326,7 +425,8 @@ test("persisted lessons do not override the globally selected avatar", async () 
   await renderSession();
 
   await waitFor(() => expect(screen.getByTestId("avatar-surface-2d")).toBeInTheDocument());
-  expect(screen.getByRole("heading", { name: "AI Tutor" })).toBeInTheDocument();
+  expect(screen.getAllByText("Session").length).toBeGreaterThan(0);
+  expect(screen.queryByText("connected")).not.toBeInTheDocument();
 });
 
 test("same-mode backend avatar configs do not override the selected avatar", async () => {
@@ -359,7 +459,7 @@ test("same-mode backend avatar configs do not override the selected avatar", asy
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
   await waitFor(() => expect(screen.getAllByText("Keeping your chosen tutor.").length).toBeGreaterThan(0));
-  expect(screen.getByRole("heading", { name: "AI Tutor" })).toBeInTheDocument();
+  expect(screen.getAllByText("Session").length).toBeGreaterThan(0);
 });
 
 test("send text turn appends conversation history and new lesson clears it", async () => {
@@ -388,10 +488,10 @@ test("send text turn appends conversation history and new lesson clears it", asy
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() => expect(screen.getAllByText("First tutor reply?").length).toBeGreaterThan(0));
 
-  fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open session history" }));
   expect(screen.getAllByText("first student turn").length).toBeGreaterThan(0);
 
-  fireEvent.click(screen.getByRole("button", { name: "New Lesson" }));
+  fireEvent.click(screen.getByRole("button", { name: "Start new session" }));
 
   await waitFor(() => expect(screen.queryByText("First tutor reply?")).not.toBeInTheDocument());
   expect(screen.getByLabelText("Student prompt")).toHaveValue("");
@@ -460,7 +560,8 @@ test("restores persisted lessons using saved defaults and conversation state", a
   await renderSession();
 
   await waitFor(() => expect(screen.getByLabelText("Student prompt")).toHaveValue("saved prompt"));
-  expect(screen.getByRole("heading", { name: "AI Tutor" })).toBeInTheDocument();
+  expect(screen.getAllByText("Session").length).toBeGreaterThan(0);
+  expect(screen.queryByText("Gemini 3 Flash Preview")).not.toBeInTheDocument();
   expect(screen.getAllByText("saved tutor reply").length).toBeGreaterThan(0);
 });
 
@@ -511,6 +612,13 @@ test("restores persisted lesson progress and leads with the saved next question"
 });
 
 test("history shows per-turn debug payload", async () => {
+  appendSessionActivityLog({
+    event: "session.restored",
+    level: "info",
+    scope: "session-socket",
+    summary: "socket restored",
+  });
+
   await renderSession(createConnectedTransport({
     async runTurn(request) {
       return {
@@ -534,12 +642,32 @@ test("history shows per-turn debug payload", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() => expect(screen.getAllByText("debug reply").length).toBeGreaterThan(0));
 
-  fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open session history" }));
   fireEvent.click(screen.getByLabelText("Turn 1 debug info"));
 
   expect(screen.getByText("Trace")).toBeInTheDocument();
   expect(screen.getByText("Request")).toBeInTheDocument();
   expect(screen.getByText("Output")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("Raw"));
+  expect(screen.getByText(/"sessionEvents": \[/)).toBeInTheDocument();
+  expect(screen.getByText(/"summary": "socket restored"/)).toBeInTheDocument();
+});
+
+test("topbar logs drawer shows session events for AI inspection", async () => {
+  appendSessionActivityLog({
+    event: "session.restored",
+    level: "info",
+    metadata: { sessionId: "lesson-42" },
+    scope: "session-socket",
+    summary: "socket restored",
+  });
+
+  await renderSession();
+
+  fireEvent.click(screen.getByRole("button", { name: "Open session logs" }));
+  expect(await screen.findByRole("heading", { name: "Logs" })).toBeInTheDocument();
+  expect(screen.getByText("socket restored")).toBeInTheDocument();
+  expect(screen.getByText(/lesson-42/)).toBeInTheDocument();
 });
 
 test("history debug payload upgrades to complete coverage after frontend playback metrics land", async () => {
@@ -594,7 +722,7 @@ test("history debug payload upgrades to complete coverage after frontend playbac
   await waitFor(() => expect(screen.getAllByText("debug reply").length).toBeGreaterThan(0));
   await waitFor(() => expect(audioInstance.play).toHaveBeenCalledTimes(1));
 
-  fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open session history" }));
   fireEvent.click(screen.getByLabelText("Turn 1 debug info"));
   fireEvent.click(screen.getByText("Raw"));
 
@@ -635,7 +763,7 @@ test("failed mic transcription is still saved into history with debug state", as
     expect(screen.getByRole("alert")).toHaveTextContent("Realtime token request failed: error code: 504")
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open session history" }));
   await waitFor(() => expect(screen.getByTestId("conversation-history-panel")).toBeInTheDocument());
   expect(screen.getByText("Voice input failed")).toBeInTheDocument();
   expect(screen.getAllByText("Realtime token request failed: error code: 504").length).toBeGreaterThan(0);
@@ -644,10 +772,38 @@ test("failed mic transcription is still saved into history with debug state", as
   expect(screen.getByText(/"state": "failed"/)).toBeInTheDocument();
 });
 
+test("no-speech mic misses stay out of history and show a retry hint", async () => {
+  vi.spyOn(BrowserAudioCapture.prototype, "isSupported").mockReturnValue(true);
+  vi.spyOn(BrowserAudioCapture.prototype, "start").mockResolvedValue();
+  vi.spyOn(BrowserAudioCapture.prototype, "stop").mockResolvedValue([
+    { sequence: 1, size: 320, bytesBase64: "YWJj", mimeType: "audio/webm" },
+  ]);
+
+  await renderSession(createConnectedTransport({
+    async transcribeAudio() {
+      throw new Error("No speech detected");
+    },
+  }));
+
+  const micButton = screen.getByRole("button", { name: "Hold to talk" });
+  fireEvent.mouseDown(micButton, { button: 0 });
+  fireEvent.pointerDown(micButton, { button: 0, pointerId: 1 });
+  const activeMicButton = await screen.findByRole("button", { name: /Hold to talk|Release to send/ });
+  fireEvent.pointerUp(activeMicButton, { button: 0, pointerId: 1 });
+  fireEvent.mouseUp(activeMicButton, { button: 0 });
+
+  await waitFor(() =>
+    expect(screen.getByRole("alert")).toHaveTextContent("No speech detected. Hold the mic a bit longer and try again.")
+  );
+
+  expect(screen.queryByText("Voice input failed")).not.toBeInTheDocument();
+  expect(screen.queryByText("No speech detected")).not.toBeInTheDocument();
+});
+
 test("closing history returns focus to the composer instead of hiding focused drawer controls", async () => {
   await renderSession();
 
-  fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open session history" }));
   const closeButton = await screen.findByRole("button", { name: "Close history" });
   closeButton.focus();
   fireEvent.click(closeButton);
@@ -677,7 +833,7 @@ test("resumes archived lessons from history", async () => {
 
   await renderSession();
 
-  fireEvent.click(screen.getByRole("button", { name: "Toggle history" }));
+  fireEvent.click(screen.getByRole("button", { name: "Open session history" }));
   fireEvent.click(screen.getByTestId(/resume-lesson-/));
 
   await waitFor(() => expect(screen.getAllByText("archived answer").length).toBeGreaterThan(0));

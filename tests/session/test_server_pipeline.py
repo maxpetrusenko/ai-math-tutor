@@ -54,12 +54,17 @@ def disable_live_runtime(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("NERDY_TURN_TRACE_DIR", str(tmp_path / "turn-traces"))
 
 
+def _session_ws(client: TestClient, path: str = "/ws/session", **kwargs):
+    headers = {"Origin": "http://127.0.0.1:3000", **(kwargs.pop("headers", {}) or {})}
+    return client.websocket_connect(path, headers=headers, **kwargs)
+
+
 def test_session_server_streams_transcript_tutor_text_and_tts_audio(monkeypatch) -> None:
     fake_session = _FakeSTTSession(final_text="heard from audio")
     monkeypatch.setattr(server, "create_stt_provider", lambda: _FakeSTTProvider(fake_session))
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -117,7 +122,7 @@ def test_session_server_updates_turn_trace_with_frontend_playback_metrics(monkey
     monkeypatch.setattr(server, "create_stt_provider", lambda: _FakeSTTProvider(fake_session))
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -173,7 +178,7 @@ def test_session_server_updates_turn_trace_with_frontend_playback_metrics(monkey
 def test_session_server_rejects_invalid_runtime_model_and_recovers_idle() -> None:
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -234,7 +239,7 @@ def test_session_server_persists_history_and_profile_between_turns(monkeypatch) 
 
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -284,7 +289,7 @@ def test_session_server_rejects_empty_transcript_and_returns_idle(monkeypatch) -
     monkeypatch.setattr(server, "create_stt_provider", lambda: _FakeSTTProvider(fake_session))
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -317,7 +322,7 @@ def test_session_server_rejects_empty_transcript_and_returns_idle(monkeypatch) -
 def test_session_server_uses_history_aware_follow_up_reply_for_math_stub() -> None:
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -349,7 +354,7 @@ def test_session_server_uses_history_aware_follow_up_reply_for_math_stub() -> No
 def test_session_server_keeps_active_math_problem_for_help_follow_up() -> None:
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -413,7 +418,7 @@ def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
 
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -482,7 +487,7 @@ def test_session_server_restores_history_for_a_reconnected_session(monkeypatch) 
     monkeypatch.setattr(server, "build_tutor_messages", tracking_build_tutor_messages)
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session?session_id=lesson-restore-1") as websocket:
+    with _session_ws(client, "/ws/session?session_id=lesson-restore-1") as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -498,7 +503,7 @@ def test_session_server_restores_history_for_a_reconnected_session(monkeypatch) 
         )
         websocket.receive_json()
 
-    with client.websocket_connect("/ws/session?session_id=lesson-restore-1") as websocket:
+    with _session_ws(client, "/ws/session?session_id=lesson-restore-1") as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -518,7 +523,7 @@ def test_session_server_restores_history_for_a_reconnected_session(monkeypatch) 
 def test_session_server_can_switch_tts_provider_per_turn() -> None:
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -541,7 +546,7 @@ def test_session_server_merges_default_and_per_turn_voice_config(monkeypatch) ->
     monkeypatch.setenv("NERDY_TTS_VOICE_MINIMAX", "teacher-warm")
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -566,7 +571,7 @@ def test_session_server_merges_default_and_per_turn_voice_config(monkeypatch) ->
 def test_session_server_returns_error_for_unknown_tts_provider() -> None:
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -591,7 +596,7 @@ def test_session_server_returns_error_for_unknown_tts_provider() -> None:
 def test_session_server_uses_subject_aware_tutor_draft_for_math_truth_checks() -> None:
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {
@@ -640,7 +645,7 @@ def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
     monkeypatch.setattr(server, "build_tutor_messages", tracking_build_tutor_messages)
     client = TestClient(server.app)
 
-    with client.websocket_connect("/ws/session") as websocket:
+    with _session_ws(client) as websocket:
         websocket.receive_json()
         websocket.send_json(
             {

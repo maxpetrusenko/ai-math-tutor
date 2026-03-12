@@ -14,6 +14,7 @@ type Avatar3DProps = {
   timestamps: WordTimestamp[];
   nowMs: number;
   energy?: number;
+  onError?: (error: Error) => void;
 };
 
 export function Avatar3D({
@@ -23,6 +24,7 @@ export function Avatar3D({
   timestamps,
   nowMs,
   energy = 0.5,
+  onError,
 }: Avatar3DProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -49,8 +51,13 @@ export function Avatar3D({
   // Initialize Three.js scene
   useEffect(() => {
     if (!containerRef.current) return;
-
-    const sceneHandle = createAvatar3DScene(containerRef.current, config, asset);
+    let sceneHandle;
+    try {
+      sceneHandle = createAvatar3DScene(containerRef.current, config, asset);
+    } catch (error) {
+      onError?.(error instanceof Error ? error : new Error("Failed to create 3D avatar scene"));
+      return;
+    }
 
     // Animation loop - reads current props via refs to avoid stale closures
     let frameId: number | undefined;
@@ -81,7 +88,7 @@ export function Avatar3D({
       }
       sceneHandle.dispose();
     };
-  }, [asset, config]);
+  }, [asset, config, onError]);
 
   return (
     <div

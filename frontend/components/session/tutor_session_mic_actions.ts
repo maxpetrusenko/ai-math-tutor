@@ -4,15 +4,36 @@ import type { BrowserAudioCapture, CapturedAudioChunk } from "../../lib/audio_ca
 import { normalizeRuntimeSelection } from "../../lib/runtime_options";
 import { resolveAvatarPersona } from "../../lib/avatar_persona";
 import type { PersistedTurnDebug } from "../../lib/lesson_thread_store";
+import { appendSessionActivityLog, getSessionActivityLogSnapshot } from "../../lib/session_activity_log";
 import type { LatencyMetrics } from "../LatencyMonitor";
 import type { LessonConversationTurn } from "../LessonThreadPanels";
 import type { SessionTransport } from "./session_types";
 import { describeMicTurnFailure, normalizeLessonSessionId, resolveTransportKind, summarizeAudioChunks } from "./tutor_session_utils";
 
 const TUTOR_SESSION_LOG_PREFIX = "[TutorSession]";
+const NO_SPEECH_DETECTED_MESSAGE = "No speech detected";
+const NO_SPEECH_DETECTED_HINT = "No speech detected. Hold the mic a bit longer and try again.";
 
 function logTutorSessionInfo(event: string, details: Record<string, unknown>) {
   console.info(TUTOR_SESSION_LOG_PREFIX, event, details);
+  appendSessionActivityLog({
+    event,
+    level: "info",
+    metadata: details,
+    scope: "tutor-session",
+    summary: event.replaceAll(".", " "),
+  });
+}
+
+function logTutorSessionWarn(event: string, details: Record<string, unknown>) {
+  console.warn(TUTOR_SESSION_LOG_PREFIX, event, details);
+  appendSessionActivityLog({
+    event,
+    level: "warn",
+    metadata: details,
+    scope: "tutor-session",
+    summary: event.replaceAll(".", " "),
+  });
 }
 
 type TutorSessionMicDeps = {
@@ -48,6 +69,7 @@ type TutorSessionMicDeps = {
 };
 
 export function createTutorSessionMicActions(deps: TutorSessionMicDeps) {
+  const isNoSpeechDetectedError = (message: string) => message.trim() === NO_SPEECH_DETECTED_MESSAGE;
   const appendFailedMicTurn = (
     audioChunks: CapturedAudioChunk[],
     transcriptText: string,
@@ -91,6 +113,7 @@ export function createTutorSessionMicActions(deps: TutorSessionMicDeps) {
         transcriptLength: normalizedTranscript.length,
         tutorTextLength: normalizedError.length,
       },
+      sessionEvents: getSessionActivityLogSnapshot(24),
       sessionId: normalizeLessonSessionId(deps.lessonSessionId),
       startedAt,
       transport: resolveTransportKind(runtimeSelection),
@@ -156,6 +179,14 @@ export function createTutorSessionMicActions(deps: TutorSessionMicDeps) {
       deps.setMicActive(false);
       deps.setSessionState("idle");
       const errorMessage = caughtError instanceof Error ? caughtError.message : "Could not stop microphone";
+      if (isNoSpeechDetectedError(errorMessage)) {
+        logTutorSessionWarn("mic.no_speech_detected", {
+          audioChunkCount: chunks.length,
+          totalBytes: chunks.reduce((sum, chunk) => sum + chunk.size, 0),
+        });
+        deps.setError(NO_SPEECH_DETECTED_HINT);
+        return;
+      }
       appendFailedMicTurn(chunks, deps.transcript.trim() || deps.studentPrompt.trim(), errorMessage, startedAt);
       deps.setError(errorMessage);
     }

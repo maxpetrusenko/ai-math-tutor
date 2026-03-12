@@ -7,9 +7,15 @@ import { useFirebaseAuth } from "../../lib/firebase_auth";
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
+  headerActions?: React.ReactNode;
+  headerContext?: {
+    badge?: string | null;
+    subtitle?: string;
+    title: string;
+  } | null;
 };
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export function DashboardLayout({ children, headerActions, headerContext }: DashboardLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const { signOutUser, user } = useFirebaseAuth();
@@ -22,6 +28,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className={`app-shell ${sidebarCollapsed ? "app-shell--sidebar-collapsed" : ""}`}>
       <Header
+        actions={headerActions}
+        context={headerContext}
         onToggleSidebar={() => {
           if (window.innerWidth < 768) {
             setMobileSidebarOpen(!mobileSidebarOpen);

@@ -38,6 +38,15 @@ def test_load_local_env_allows_later_files_to_override_earlier_loaded_values(tmp
     assert env["DEEPGRAM_API_KEY"] == "dg-local"
 
 
+def test_load_local_env_mirrors_backend_firebase_auth_requirement_for_frontend(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("NERDY_REQUIRE_FIREBASE_AUTH=1\n")
+    env: dict[str, str] = {}
+
+    load_local_env(base_dir=tmp_path, env=env, files=(".env",))
+
+    assert env["NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH"] == "1"
+
+
 def test_shell_export_commands_include_loaded_values(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text("DEEPGRAM_API_KEY=dg-shell\n")
 
