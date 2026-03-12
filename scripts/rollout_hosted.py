@@ -80,6 +80,11 @@ def _rollout_once(
         secret_name="FIREBASE_WEBAPP_CONFIG",
         value=firebase_web_config_json(project=target.firebase_project, app_id=app_id),
     )
+    set_apphosting_secret(
+        project=target.firebase_project,
+        secret_name="REQUIRE_FIREBASE_AUTH",
+        value="1",
+    )
     image_tag = _image_tag_from_commit(git_commit)
     backend_image, session_service_url = deploy_session_backend(
         repo_root=REPO_ROOT,
