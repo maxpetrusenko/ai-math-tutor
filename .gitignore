@@ -1,6 +1,7 @@
 .agents/
 .codex/
 .claude/
+.worktrees/
 .DS_Store
 .next/
 .turbo/

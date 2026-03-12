@@ -8,8 +8,11 @@ def build_tutor_messages(
     history: list[dict[str, str]],
     student_profile: dict[str, str] | None = None,
 ) -> list[dict[str, str]]:
+    normalized_profile = {key: value for key, value in (student_profile or {}).items() if value}
+    avatar_label = normalized_profile.pop("avatarLabel", "")
+    avatar_persona = normalized_profile.pop("avatarPersona", "")
     profile_bits = []
-    for key, value in (student_profile or {}).items():
+    for key, value in normalized_profile.items():
         profile_bits.append(f"{key}: {value}")
 
     system_prompt = (
@@ -22,6 +25,9 @@ def build_tutor_messages(
         "For short follow-ups, decide whether the student is answering the current problem, asking for clarification, or starting a fresh problem. "
         "Reference the current student problem explicitly, keep the reply to one or two coherent sentences, and end with one concrete next-step question."
     )
+    if avatar_persona:
+        persona_name = avatar_label or "selected avatar"
+        system_prompt = f"{system_prompt} On-screen tutor persona: {persona_name}. {avatar_persona}"
     if profile_bits:
         system_prompt = f"{system_prompt} Student profile: {'; '.join(profile_bits)}."
     return [{"role": "system", "content": system_prompt}, *history, {"role": "user", "content": latest_student_text}]

@@ -2,9 +2,10 @@ export type AvatarVisualState = "idle" | "listening" | "thinking" | "speaking" |
 
 export type AvatarConfig = {
   provider: string;
-  type: "2d" | "3d";
+  type: "2d" | "3d" | "video";
   assetRef?: string;
   model_url?: string;
+  providerId?: string;
   scale?: number;
   enable_shadows?: boolean;
   features?: {
@@ -12,6 +13,9 @@ export type AvatarConfig = {
     eye_tracking: boolean;
     head_rotation: boolean;
     idle_animation: boolean;
+  };
+  livekit?: {
+    provider: "simli" | "liveavatar";
   };
 };
 

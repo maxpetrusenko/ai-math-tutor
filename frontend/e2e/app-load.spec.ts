@@ -9,15 +9,16 @@ test("app loads with core controls", async ({ page }) => {
     }
   });
 
-  const response = await page.goto("/", { waitUntil: "networkidle" });
+  const response = await page.goto("/session", { waitUntil: "networkidle" });
 
   expect(response?.status()).toBe(200);
   expect(errors).toEqual([]);
 
-  await expect(page.getByText("Live AI Video Tutor")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AI Tutor" })).toBeVisible();
   await expect(page.getByLabel("Student prompt")).toBeVisible();
-  await expect(page.getByLabel("Subject")).toBeVisible();
-  await expect(page.getByLabel("Grade band")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send Text Turn" })).toBeVisible();
+  await expect(page.getByTestId("avatar-surface-2d")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Hold to talk" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New Lesson" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Toggle history" })).toBeVisible();
 });

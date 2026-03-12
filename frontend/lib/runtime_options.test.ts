@@ -7,11 +7,11 @@ import {
   normalizeRuntimeSelection,
 } from "./runtime_options";
 
-test("runtime defaults start on the openai realtime combo", () => {
-  expect(DEFAULT_LLM_PROVIDER).toBe("openai-realtime");
-  expect(DEFAULT_LLM_MODEL).toBe("gpt-realtime-mini");
-  expect(DEFAULT_TTS_PROVIDER).toBe("openai-realtime");
-  expect(DEFAULT_TTS_MODEL).toBe("gpt-realtime-mini");
+test("runtime defaults start on the socket pipeline combo", () => {
+  expect(DEFAULT_LLM_PROVIDER).toBe("gemini");
+  expect(DEFAULT_LLM_MODEL).toBe("gemini-3-flash-preview");
+  expect(DEFAULT_TTS_PROVIDER).toBe("cartesia");
+  expect(DEFAULT_TTS_MODEL).toBe("sonic-2");
 });
 
 test("switching llm away from realtime falls back to the chosen llm plus cartesia", () => {
@@ -34,7 +34,7 @@ test("switching llm away from realtime falls back to the chosen llm plus cartesi
   });
 });
 
-test("switching tts away from realtime falls back to openai plus cartesia", () => {
+test("switching tts away from realtime falls back to the socket defaults", () => {
   expect(
     applyRuntimeProviderChange(
       normalizeRuntimeSelection({
@@ -47,8 +47,8 @@ test("switching tts away from realtime falls back to openai plus cartesia", () =
       "cartesia"
     )
   ).toEqual({
-    llmProvider: "openai",
-    llmModel: "gpt-4.1-mini",
+    llmProvider: "gemini",
+    llmModel: "gemini-3-flash-preview",
     ttsProvider: "cartesia",
     ttsModel: "sonic-2",
   });

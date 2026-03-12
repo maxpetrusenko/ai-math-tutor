@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import types
 
 from backend.benchmarks.run_latency_benchmark import (
     BenchmarkOutcome,
@@ -169,6 +170,39 @@ def test_benchmark_main_writes_fixture_output(tmp_path) -> None:
     payload = json.loads(output_path.read_text())
     assert exit_code == 0
     assert payload["mode"] == "fixture"
+    assert payload["total_runs"] == 3
+
+
+def test_benchmark_main_writes_runtime_output(tmp_path, monkeypatch) -> None:
+    output_path = tmp_path / "runtime-benchmark.json"
+
+    fake_outcome = BenchmarkOutcome(
+        mode="runtime",
+        total_runs=3,
+        raw_event_logs=[],
+        summary={"speech_end->tts_first_audio": {"count": 3, "min_ms": 200, "max_ms": 240, "p50_ms": 220, "p95_ms": 238, "failure_count": 0}},
+        pass_fail={
+            "time_to_first_audio_p50_pass": True,
+            "time_to_first_audio_p95_pass": True,
+            "speech_end_to_stt_final_p95_pass": True,
+            "required_event_set_pass": True,
+        },
+        required_event_coverage={
+            "required_events": [],
+            "complete_runs": 3,
+            "total_runs": 3,
+            "missing_event_counts": {},
+            "missing_runs": [],
+        },
+    )
+    runtime_module = types.SimpleNamespace(run_runtime_fast_benchmark=lambda path, runs_per_prompt=1: fake_outcome)
+    monkeypatch.setitem(__import__("sys").modules, "backend.benchmarks.runtime_fast_benchmark", runtime_module)
+
+    exit_code = main(["--mode", "runtime", "--runs-per-prompt", "1", "--output", str(output_path)])
+
+    payload = json.loads(output_path.read_text())
+    assert exit_code == 0
+    assert payload["mode"] == "runtime"
     assert payload["total_runs"] == 3
 
 

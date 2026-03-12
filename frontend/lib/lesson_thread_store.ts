@@ -18,6 +18,7 @@ import {
   DEFAULT_TTS_MODEL,
   DEFAULT_TTS_PROVIDER,
 } from "./runtime_options";
+import type { LessonState } from "./lesson_catalog";
 
 export type PersistedConversationTurn = {
   debug?: PersistedTurnDebug;
@@ -73,6 +74,7 @@ export type PersistedLessonThread = {
   avatarProviderId: string;
   conversation: PersistedConversationTurn[];
   gradeBand: string;
+  lessonState?: LessonState | null;
   llmModel: string;
   llmProvider: string;
   preference: string;
@@ -108,6 +110,41 @@ export type PersistedLessonThreadStore = {
 const LESSON_THREAD_STORAGE_KEY = "nerdy.lesson-thread.v2";
 const LEGACY_LESSON_THREAD_STORAGE_KEY = "nerdy.lesson-thread.v1";
 const MAX_ARCHIVED_THREADS = 8;
+
+function isLessonState(value: unknown): value is LessonState {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Partial<LessonState>;
+  return (
+    typeof candidate.currentStepIndex === "number"
+    && typeof candidate.currentTask === "string"
+    && typeof candidate.lessonId === "number"
+    && typeof candidate.lessonTitle === "string"
+    && typeof candidate.nextQuestion === "string"
+    && Array.isArray(candidate.program)
+    && candidate.program.every((step) => typeof step === "string")
+    && typeof candidate.startedFromCatalog === "boolean"
+  );
+}
+
+function normalizeLessonState(value: unknown): LessonState | null {
+  if (!isLessonState(value)) {
+    return null;
+  }
+
+  return {
+    currentStepIndex: value.currentStepIndex,
+    currentTask: value.currentTask,
+    lastTutorAction: typeof value.lastTutorAction === "string" ? value.lastTutorAction : undefined,
+    lessonId: value.lessonId,
+    lessonTitle: value.lessonTitle,
+    nextQuestion: value.nextQuestion,
+    program: [...value.program],
+    startedFromCatalog: value.startedFromCatalog,
+  };
+}
 
 export function generateLessonSessionId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -230,9 +267,10 @@ function normalizeConversation(
 
 function normalizeThread(thread: Partial<PersistedLessonThread>): PersistedLessonThread {
   return {
-    avatarProviderId: typeof thread.avatarProviderId === "string" ? thread.avatarProviderId : "human-css-2d",
+    avatarProviderId: typeof thread.avatarProviderId === "string" ? thread.avatarProviderId : "sage-svg-2d",
     conversation: normalizeConversation(thread),
     gradeBand: typeof thread.gradeBand === "string" ? thread.gradeBand : "6-8",
+    lessonState: normalizeLessonState(thread.lessonState),
     llmModel: typeof thread.llmModel === "string" ? thread.llmModel : DEFAULT_LLM_MODEL,
     llmProvider: typeof thread.llmProvider === "string" ? thread.llmProvider : DEFAULT_LLM_PROVIDER,
     preference: typeof thread.preference === "string" ? thread.preference : "",
@@ -259,6 +297,11 @@ function normalizeStore(store: PersistedLessonThreadStore): PersistedLessonThrea
 }
 
 function buildLessonTitle(thread: PersistedLessonThread): string {
+  const lessonTitle = thread.lessonState?.lessonTitle?.trim();
+  if (lessonTitle) {
+    return lessonTitle;
+  }
+
   const firstTurn = thread.conversation[0]?.transcript || thread.transcript || thread.studentPrompt;
   const trimmed = firstTurn.trim();
   if (!trimmed) {
@@ -329,6 +372,7 @@ function readStore(): PersistedLessonThreadStore {
             avatarProviderId: candidate.avatarProviderId,
             conversation: candidate.conversation as PersistedConversationTurn[],
             gradeBand: candidate.gradeBand,
+            lessonState: normalizeLessonState(candidate.lessonState),
             llmModel: typeof candidate.llmModel === "string" ? candidate.llmModel : DEFAULT_LLM_MODEL,
             llmProvider: typeof candidate.llmProvider === "string" ? candidate.llmProvider : DEFAULT_LLM_PROVIDER,
             preference: candidate.preference,

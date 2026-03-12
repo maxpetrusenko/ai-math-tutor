@@ -1,54 +1,88 @@
 # Demo Operator Notes
 
-## Local Startup
+Last verified: 2026-03-12
 
-One command:
+## Startup
+
+Use:
 
 ```bash
 bash scripts/dev.sh
 ```
 
-Manual split:
-
-```bash
-uvicorn backend.session.server:app --reload --port 8000
-
-cd frontend
-pnpm dev --hostname 127.0.0.1 --port 3000
-```
-
 Open:
 
-- `http://localhost:3000`
+- `http://127.0.0.1:3000/session`
+- `http://127.0.0.1:3000/avatar`
 
-## Before Demo
+## Preflight
 
-- confirm backend is listening on port `8000`
-- confirm frontend loads and shows `connected`
-- keep the first prompt ready in the textarea
-- keep DevTools closed unless debugging
+Before recording:
 
-## During Demo
+- confirm session page loads
+- confirm the hero avatar is visible
+- confirm prompt box is enabled
+- confirm `Send`, `History`, `New`, and `Hold to talk` are visible
+- confirm audio is on
+- keep DevTools closed
 
-- use `Send Text Turn` for the primary math lesson so the history panel proves follow-up continuity
-- use the hold-to-talk mic icon only for the voice-path backup or interruption pass
-- use `New Lesson` between concepts to clear context
-- use `Interrupt` once during the first or second turn
-- point to `speech → stt`, `stt → llm`, and `llm → tts` cards
-- point to avatar and audio state together
-- point to the conversation history after turn 2 of the math arc
+## Controls That Actually Matter
 
-## Locked Demo Presets
+Session page:
 
-- primary avatar: `human-css-2d`
-- alternate 2D: `robot-css-2d`
-- alternate 3D: `human-threejs-3d`
-- primary concept: linear equations
-- backup concepts: photosynthesis basics, subject-verb agreement
+- `Send` submits typed turns
+- `Hold to talk` is the mic path
+- `History` opens the lesson drawer
+- `New` archives current work and starts a fresh lesson
+- `Escape` interrupts active playback
+
+Avatar page:
+
+- `2D` and `3D` switch render mode
+- avatar cards choose the active tutor look
+
+## Recording Order
+
+1. open `/session`
+2. run one typed fraction turn
+3. run one follow-up turn
+4. open `History`
+5. close `History`
+6. run one more turn and press `Escape`
+7. open `/avatar`
+8. switch from default 2D to `Human 3D`
+9. switch back to `Robot`
+10. return to `/session`
+
+## Reliable Demo Prompt Set
+
+- `Fractions still confuse me.`
+- `I think one slice out of four is one fourth.`
+- `Can you give me one more hint?`
 
 ## Recovery
 
-- if connection shows `failed`, refresh the page after backend restart
-- if the tutor state sticks, click `Interrupt`
-- if the lesson context is noisy, click `New Lesson`
-- if frontend deps are missing, run `pnpm install` in `frontend/`
+- if session state feels stale, press `Escape`
+- if lesson context is noisy, click `New`
+- if avatar page looks wrong, hard refresh and reopen `/avatar`
+- if app does not load, restart with `bash scripts/dev.sh`
+
+## Operator Warnings
+
+- there is no dedicated on-screen `Interrupt` button in the current session shell
+- subject and grade are shown as chips on the session page, not active selectors there
+- science and english remain documented in fixtures and eval docs, not as a current live selector flow on `/session`
+- public-provider bakeoff remains comparison evidence, not the acceptance lane
+
+## Gate Evidence
+
+Current verified gates:
+
+- `python3 -m pytest -q` -> `174 passed`
+- `cd frontend && pnpm verify` -> pass
+- `cd frontend && pnpm e2e` -> `10 passed`
+
+## Done Standard
+
+For engineering, the app is ready.  
+For submission packaging, the remaining manual step is recording the final demo video from the approved script.

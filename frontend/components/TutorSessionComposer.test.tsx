@@ -17,6 +17,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+async function waitForSessionComposerReady() {
+  await waitFor(() => expect(screen.getByLabelText("Student prompt")).toBeEnabled());
+}
+
 test("send text turn clears the composer after a successful turn", async () => {
   render(
     <TutorSession
@@ -47,6 +51,7 @@ test("send text turn clears the composer after a successful turn", async () => {
     />
   );
 
+  await waitForSessionComposerReady();
   fireEvent.change(screen.getByLabelText("Student prompt"), {
     target: { value: "send this text" },
   });
@@ -85,7 +90,8 @@ test("student prompt starts empty for a fresh lesson", async () => {
     />
   );
 
-  await waitFor(() => expect(screen.getByText("Lesson")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText("Tutor Session")).toBeInTheDocument());
+  await waitForSessionComposerReady();
   expect(screen.getByLabelText("Student prompt")).toHaveValue("");
 });
 
@@ -129,6 +135,7 @@ test("mic turn writes the final transcript into the composer", async () => {
     />
   );
 
+  await waitForSessionComposerReady();
   const micButton = screen.getByRole("button", { name: "Hold to talk" });
   fireEvent.mouseDown(micButton, { button: 0 });
   fireEvent.pointerDown(micButton, { button: 0, pointerId: 1 });
@@ -200,6 +207,7 @@ test("restored lessons do not reuse duplicate conversation keys on the next turn
   );
 
   await waitFor(() => expect(screen.getByLabelText("Student prompt")).toHaveValue("saved prompt"));
+  await waitForSessionComposerReady();
   fireEvent.change(screen.getByLabelText("Student prompt"), {
     target: { value: "fresh question" },
   });
@@ -233,6 +241,7 @@ test("send surfaces transport connection failures without appending a new turn",
     />
   );
 
+  await waitForSessionComposerReady();
   fireEvent.change(screen.getByLabelText("Student prompt"), {
     target: { value: "1+1" },
   });

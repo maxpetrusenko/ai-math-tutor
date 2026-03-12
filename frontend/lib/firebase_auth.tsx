@@ -14,6 +14,28 @@ import { ensureFirebaseApp, getFirebaseAuthClient, isFirebaseEnabled } from "./f
 export const FIREBASE_AUTH_NOT_CONFIGURED_MESSAGE =
   "Firebase auth is not configured on this dev server. Set FIREBASE_WEBAPP_CONFIG in .env.local and restart bash scripts/dev.sh.";
 
+function getBrowserHostname() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.location.hostname || null;
+}
+
+export function describeFirebaseAuthError(error: unknown) {
+  const code = typeof error === "object" && error && "code" in error ? error.code : null;
+  if (code === "auth/unauthorized-domain") {
+    const hostname = getBrowserHostname() ?? "this host";
+    return `This host is not authorized for Firebase Google sign-in. Add \`${hostname}\` to Firebase Console -> Authentication -> Settings -> Authorized domains.`;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return "Google sign-in failed.";
+}
+
 type FirebaseAuthContextValue = {
   authReady: boolean;
   firebaseEnabled: boolean;
@@ -87,7 +109,11 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
             throw new Error(FIREBASE_AUTH_NOT_CONFIGURED_MESSAGE);
           }
 
-          await signInWithPopup(auth, new GoogleAuthProvider());
+          try {
+            await signInWithPopup(auth, new GoogleAuthProvider());
+          } catch (error) {
+            throw new Error(describeFirebaseAuthError(error));
+          }
         },
         async signOutUser() {
           const auth = getFirebaseAuthClient();

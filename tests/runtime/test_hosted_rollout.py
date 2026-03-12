@@ -11,6 +11,7 @@ from backend.runtime.hosted_rollout import (
     build_cloud_build_command,
     build_rollout_ref_args,
     build_run_deploy_command,
+    collect_hosted_backend_env_errors,
     extract_cloud_build_id,
     extract_json_payload,
     parse_env_file,
@@ -63,6 +64,56 @@ def test_parse_env_file_supports_json(tmp_path: Path) -> None:
     env_file.write_text(json.dumps({"FOO": "bar", "NUM": 7}), encoding="utf-8")
 
     assert parse_env_file(env_file) == {"FOO": "bar", "NUM": "7"}
+
+
+def test_parse_env_file_applies_runtime_aliases(tmp_path: Path) -> None:
+    env_file = tmp_path / "deploy.env"
+    env_file.write_text(
+        "GOOGLE_AI_API_KEY=google-test\nMINIMAX_API_KEY=minimax-test\n",
+        encoding="utf-8",
+    )
+
+    assert parse_env_file(env_file) == {
+        "GOOGLE_AI_API_KEY": "google-test",
+        "GEMINI_API_KEY": "google-test",
+        "MINIMAX_API_KEY": "minimax-test",
+        "MINIMAX_SPEECH_API_KEY": "minimax-test",
+    }
+
+
+def test_collect_hosted_backend_env_errors_requires_openai_for_hosted_default() -> None:
+    errors = collect_hosted_backend_env_errors(
+        {
+            "DEEPGRAM_API_KEY": "deepgram-test",
+            "CARTESIA_API_KEY": "cartesia-test",
+            "GOOGLE_AI_API_KEY": "google-test",
+            "NERDY_STT_PROVIDER": "deepgram",
+            "NERDY_TTS_PROVIDER": "cartesia",
+            "NERDY_LLM_PROVIDER": "gemini",
+            "NERDY_RUNTIME_LLM_PROVIDER": "gemini",
+        }
+    )
+
+    assert errors == ["OPENAI_API_KEY is required for the default hosted OpenAI Realtime session path."]
+
+
+def test_collect_hosted_backend_env_errors_checks_provider_specific_keys() -> None:
+    errors = collect_hosted_backend_env_errors(
+        {
+            "OPENAI_API_KEY": "openai-test",
+            "NERDY_STT_PROVIDER": "deepgram",
+            "NERDY_TTS_PROVIDER": "cartesia",
+            "NERDY_LLM_PROVIDER": "anthropic",
+            "NERDY_RUNTIME_LLM_FALLBACK_PROVIDER": "minimax",
+        }
+    )
+
+    assert errors == [
+        "DEEPGRAM_API_KEY is required for NERDY_STT_PROVIDER=deepgram.",
+        "CARTESIA_API_KEY is required for NERDY_TTS_PROVIDER=cartesia.",
+        "ANTHROPIC_API_KEY is required for NERDY_LLM_PROVIDER=anthropic.",
+        "MINIMAX_API_KEY or MINIMAX_SPEECH_API_KEY is required for NERDY_RUNTIME_LLM_FALLBACK_PROVIDER=minimax.",
+    ]
 
 
 def test_extract_json_payload_skips_firebase_progress_lines() -> None:

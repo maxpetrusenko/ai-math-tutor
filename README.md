@@ -30,24 +30,24 @@ This repo is aimed at builders who want a working realtime tutoring spine, not a
 | --- | --- |
 | Core loop | browser mic/text -> STT -> LLM -> TTS -> avatar |
 | Provider model | env-driven STT, LLM, TTS, and avatar selection |
-| Backend verification | `76` passing `pytest` tests in current tree |
-| Browser path | session UI, interruption, avatar switching, playback, latency cards |
+| Backend verification | `174` passing `pytest` tests in current tree |
+| Browser path | session UI, interruption, history continuity, avatar switching, visible lip sync |
 | Benchmark harness | `90` synthetic local runs, `30` per prompt |
-| Timing snapshot | `speech_end -> tts_first_audio` p50 `440 ms`, p95 `480 ms` |
-| STT snapshot | `speech_end -> stt_final` p95 `120 ms` |
+| Timing snapshot | `speech_end -> tts_first_audio` p50 `363.6 ms`, p95 `658.97 ms` |
+| STT snapshot | `speech_end -> stt_final` p95 `112.23 ms` |
 
 High-signal results:
 
 - provider swaps now happen behind stable registry-backed session contracts
 - browser mic sends `audio.chunk.bytes_b64`
-- default tutor is `2D CSS`; repo-original `2D SVG` tutors and lazy `3D Three.js` presets are available on demand
+- default demo tutor is `2D SVG`; alternate `2D` and lazy `3D Three.js` presets are available on demand
 - eval, docs, smoke tests, and benchmark reports all live in the repo
 
 Benchmark numbers and live-vendor evidence are tracked in [`docs/planning/benchmark-report-v1.md`](docs/planning/benchmark-report-v1.md). The live stack is wired end to end and still misses the latency target explicitly.
 
 ## Closure Lanes
 
-Current lane state as of 2026-03-10:
+Current lane state as of 2026-03-12:
 
 - Lane A `avatar selector`: done
 - Lane B `local avatar assets`: done
@@ -57,6 +57,8 @@ Current lane state as of 2026-03-10:
 - Lane F `pedagogy + demo + acceptance`: done
 - Lane G `cost + licensing`: done
 - Lane H `UI polish`: done
+
+Lane F note: engineering is complete; final recording remains a manual packaging step.
 
 ---
 
@@ -185,6 +187,8 @@ Keep the backend deploy env in local ignored files:
 
 Full operator flow: [`docs/staging-rollout.md`](docs/staging-rollout.md)
 
+Managed LiveKit avatars: [`docs/livekit-managed-avatars.md`](docs/livekit-managed-avatars.md)
+
 ### Environment
 
 Backend:
@@ -204,12 +208,29 @@ MINIMAX_API_KEY=
 NERDY_TTS_PROVIDER=cartesia
 CARTESIA_API_KEY=
 NERDY_AVATAR_PROVIDER=threejs
+LIVEKIT_URL=
+LIVEKIT_API_KEY=
+LIVEKIT_API_SECRET=
+SIMLI_API_KEY=
+SIMLI_FACE_ID=
+LIVEAVATAR_API_KEY=
+LIVEAVATAR_AVATAR_ID=
+HEYGEN_API_KEY=
+HEYGEN_AVATAR_ID=
+NERDY_LIVEKIT_OPENAI_VOICE=alloy
+NERDY_LIVEKIT_AGENT_INSTRUCTIONS=Talk to me like a clear, encouraging tutor.
 DEEPGRAM_API_KEY=
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 LANGSMITH_PROJECT=nerdy
 LANGCHAIN_PROJECT=nerdy
 LANGCHAIN_TRACING_V2=false
+```
+
+Managed avatar worker:
+
+```bash
+python3 -m backend.livekit.avatar_agent start
 ```
 
 Frontend:
@@ -251,10 +272,10 @@ That keeps the realtime loop stable while you change vendors.
 
 - connection pill for the live session
 - text prompt plus browser mic capture
-- `Send Text Turn`, hold-to-talk mic icon, `Interrupt`, `New Lesson`
+- `Send`, `Hold to talk`, `History`, `New`, `Escape` interruption
 - latency cards and transcript panels
 - tutor reply and conversation history
-- avatar mode switch between `2D CSS` and `3D Three.js`
+- avatar mode switch between `2D` and `3D`
 
 The current UI now carries explicit lesson controls, readable history, and demo-ready layout defaults across desktop and mobile.
 
@@ -311,6 +332,8 @@ See also:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/STACK.md`](docs/STACK.md)
 - [`docs/requirements-trace.md`](docs/requirements-trace.md)
+- [`docs/script-demo.md`](docs/script-demo.md)
+- [`docs/post.md`](docs/post.md)
 - [`docs/progress.md`](docs/progress.md)
 
 ---

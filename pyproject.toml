@@ -13,6 +13,11 @@ dependencies = [
   "langchain-anthropic>=1.0,<2.0",
   "langchain-google-genai>=4.2,<5.0",
   "langchain-openai>=1.0,<2.0",
+  "livekit-agents>=1.4,<2.0",
+  "livekit-api>=1.1,<2.0",
+  "livekit-plugins-liveavatar>=1.4,<2.0",
+  "livekit-plugins-openai>=1.4,<2.0",
+  "livekit-plugins-simli>=1.4,<2.0",
   "uvicorn>=0.35,<1.0",
   "websockets>=15,<16"
 ]

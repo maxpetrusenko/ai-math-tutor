@@ -12,12 +12,16 @@ type DashboardLayoutProps = {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const { user } = useFirebaseAuth();
+  const { signOutUser, user } = useFirebaseAuth();
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    window.location.href = "/";
+  };
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? "app-shell--sidebar-collapsed" : ""}`}>
       <Header
-        sidebarCollapsed={sidebarCollapsed}
         onToggleSidebar={() => {
           if (window.innerWidth < 768) {
             setMobileSidebarOpen(!mobileSidebarOpen);
@@ -25,6 +29,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             setSidebarCollapsed(!sidebarCollapsed);
           }
         }}
+        onSignOut={handleSignOut}
         user={user ? { email: user.email ?? undefined, name: user.displayName ?? undefined } : undefined}
       />
       <Sidebar

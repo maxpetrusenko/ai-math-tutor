@@ -13,17 +13,22 @@ function logAudioPlayerInfo(event: string, details: Record<string, unknown>) {
 
 type AudioPlayerProps = {
   controller: PlaybackController;
+  initialVolume?: number;
   variant?: "panel" | "inline" | "hidden";
 };
 
-export function AudioPlayer({ controller, variant = "panel" }: AudioPlayerProps) {
+export function AudioPlayer({ controller, initialVolume = 1, variant = "panel" }: AudioPlayerProps) {
   const [snapshot, setSnapshot] = useState<PlaybackSnapshot>(controller.snapshot());
-  const [volume, setVolume] = useState(1);
+  const [volume, setVolume] = useState(initialVolume);
   const spokenItemIdRef = useRef<string | null>(null);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => controller.subscribe(setSnapshot), [controller]);
+
+  useEffect(() => {
+    setVolume(initialVolume);
+  }, [initialVolume]);
 
   useEffect(() => {
     if (typeof window === "undefined") {

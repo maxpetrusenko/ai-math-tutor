@@ -18,6 +18,7 @@ type AvatarSelectorProps = {
 const MODE_DESCRIPTIONS: Record<AvatarMode, string> = {
   "2d": "Fast default for lesson work and demo rehearsal",
   "3d": "Lazy-loaded Three.js view for richer presentation",
+  "live": "LiveKit-managed remote avatars with built-in lip sync",
 };
 
 export function AvatarSelector({
@@ -29,6 +30,7 @@ export function AvatarSelector({
   const modeOptions: Array<{ value: AvatarMode; label: string }> = [
     { value: "2d", label: "2D" },
     { value: "3d", label: "3D" },
+    { value: "live", label: "Live" },
   ];
   const avatarOptions: AvatarProviderOption[] = listAvatarProvidersForMode(selectedMode);
   const selectedAvatar = avatarOptions.find((a) => a.id === selectedAvatarId);

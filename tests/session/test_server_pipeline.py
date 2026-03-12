@@ -33,6 +33,19 @@ class _FakeSTTProvider:
         return self.session
 
 
+def _read_turn_events(websocket) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    while True:
+        event = websocket.receive_json()
+        events.append(event)
+        if event.get("type") == "tts.flush":
+            return events
+
+
+def _committed_reply(events: list[dict[str, object]]) -> str:
+    return " ".join(str(event["text"]) for event in events if event.get("type") == "tutor.text.committed").strip()
+
+
 @pytest.fixture(autouse=True)
 def disable_live_runtime(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("NERDY_DISABLE_LIVE_LLM", "1")
@@ -67,15 +80,12 @@ def test_session_server_streams_transcript_tutor_text_and_tts_audio(monkeypatch)
                 "grade_band": "6-8",
             }
         )
+        turn_events = _read_turn_events(websocket)
 
-        thinking = websocket.receive_json()
-        transcript = websocket.receive_json()
-        speaking = websocket.receive_json()
-        turn_started = websocket.receive_json()
-        tts_context = websocket.receive_json()
-        committed_text = websocket.receive_json()
-        tts_audio = websocket.receive_json()
-        tts_flush = websocket.receive_json()
+    thinking, transcript, speaking, turn_started, tts_context = turn_events[:5]
+    committed_events = [event for event in turn_events if event["type"] == "tutor.text.committed"]
+    tts_audio_events = [event for event in turn_events if event["type"] == "tts.audio"]
+    tts_flush = turn_events[-1]
 
     assert thinking["state"] == "thinking"
     assert transcript["type"] == "transcript.final"
@@ -84,9 +94,9 @@ def test_session_server_streams_transcript_tutor_text_and_tts_audio(monkeypatch)
     assert speaking["state"] == "speaking"
     assert turn_started["type"] == "tutor.turn.started"
     assert tts_context["type"] == "tts.context.started"
-    assert committed_text["type"] == "tutor.text.committed"
-    assert tts_audio["type"] == "tts.audio"
-    assert tts_audio["timestamps"]
+    assert committed_events
+    assert tts_audio_events
+    assert tts_audio_events[0]["timestamps"]
     assert tts_flush["type"] == "tts.flush"
     assert fake_session.audio_payloads == [b"real-audio"]
     assert fake_session.closed is True
@@ -94,12 +104,70 @@ def test_session_server_streams_transcript_tutor_text_and_tts_audio(monkeypatch)
     trace_files = sorted((Path(server.os.getenv("NERDY_TURN_TRACE_DIR", ""))).glob("*.json"))
     assert len(trace_files) == 1
     trace_payload = json.loads(trace_files[0].read_text())
-    assert trace_payload["stt"]["source"] == "stt"
+    assert trace_payload["stt"]["source"] == "stt_final"
     assert trace_payload["stt"]["transcript_text"] == "heard from audio"
     assert trace_payload["llm"]["messages"][-1]["content"] == "heard from audio"
-    assert trace_payload["llm"]["result"]["text"] == committed_text["text"]
+    assert trace_payload["llm"]["result"]["text"] == _committed_reply(turn_events)
     assert trace_payload["tts"]["chunks"][0]["provider"] == "cartesia"
     assert trace_payload["latency"]["events"][0]["name"] == "speech_end"
+
+
+def test_session_server_updates_turn_trace_with_frontend_playback_metrics(monkeypatch) -> None:
+    fake_session = _FakeSTTSession(final_text="heard from audio")
+    monkeypatch.setattr(server, "create_stt_provider", lambda: _FakeSTTProvider(fake_session))
+    client = TestClient(server.app)
+
+    with client.websocket_connect("/ws/session") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "audio.chunk",
+                "sequence": 1,
+                "size": 320,
+                "bytes_b64": base64.b64encode(b"real-audio").decode("ascii"),
+            }
+        )
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "speech.end",
+                "ts_ms": 1000,
+                "text": "fallback text should not win",
+                "subject": "math",
+                "grade_band": "6-8",
+            }
+        )
+        turn_events = _read_turn_events(websocket)
+        turn_started = next(event for event in turn_events if event["type"] == "tutor.turn.started")
+
+        websocket.send_json(
+            {
+                "type": "latency.metric",
+                "turn_id": turn_started["turn_id"],
+                "name": "first_viseme",
+                "ts_ms": 1125,
+            }
+        )
+        websocket.send_json(
+            {
+                "type": "latency.metric",
+                "turn_id": turn_started["turn_id"],
+                "name": "audio_done",
+                "ts_ms": 1450,
+            }
+        )
+
+    trace_files = sorted((Path(server.os.getenv("NERDY_TURN_TRACE_DIR", ""))).glob("*.json"))
+    assert len(trace_files) == 1
+    trace_payload = json.loads(trace_files[0].read_text())
+    latency_events = {event["name"]: event for event in trace_payload["latency"]["events"]}
+
+    assert latency_events["first_viseme"]["ts_ms"] == 1125
+    assert latency_events["first_viseme"]["metadata"]["source"] == "frontend_playback"
+    assert latency_events["audio_done"]["ts_ms"] == 1450
+    assert trace_payload["latency"]["stage_durations"]["speech_end->first_viseme"] == 125
+    assert trace_payload["latency"]["stage_durations"]["speech_end->audio_done"] == 450
 
 
 def test_session_server_rejects_invalid_runtime_model_and_recovers_idle() -> None:
@@ -188,8 +256,7 @@ def test_session_server_persists_history_and_profile_between_turns(monkeypatch) 
                 "student_profile": {"pacing": "slow"},
             }
         )
-        for _ in range(8):
-            websocket.receive_json()
+        _read_turn_events(websocket)
 
         websocket.send_json(
             {
@@ -198,8 +265,7 @@ def test_session_server_persists_history_and_profile_between_turns(monkeypatch) 
                 "text": "Is it 5?",
             }
         )
-        for _ in range(8):
-            websocket.receive_json()
+        _read_turn_events(websocket)
 
     assert captured_calls[0]["history_length"] == 0
     assert captured_calls[0]["latest_student_text"] != "typed fallback should lose"
@@ -262,7 +328,7 @@ def test_session_server_uses_history_aware_follow_up_reply_for_math_stub() -> No
                 "grade_band": "6-8",
             }
         )
-        first_events = [websocket.receive_json() for _ in range(8)]
+        first_events = _read_turn_events(websocket)
 
         websocket.send_json(
             {
@@ -271,10 +337,10 @@ def test_session_server_uses_history_aware_follow_up_reply_for_math_stub() -> No
                 "text": "4",
             }
         )
-        second_events = [websocket.receive_json() for _ in range(8)]
+        second_events = _read_turn_events(websocket)
 
-    first_reply = " ".join(event["text"] for event in first_events if event["type"] == "tutor.text.committed").strip()
-    second_reply = " ".join(event["text"] for event in second_events if event["type"] == "tutor.text.committed").strip()
+    first_reply = _committed_reply(first_events)
+    second_reply = _committed_reply(second_events)
 
     assert first_reply == "Let's work on 2+2. What total do you get when you add 2 and 2?"
     assert second_reply == "That's right; 2+2 gives 4. How did you get 4?"
@@ -294,7 +360,7 @@ def test_session_server_keeps_active_math_problem_for_help_follow_up() -> None:
                 "grade_band": "6-8",
             }
         )
-        first_events = [websocket.receive_json() for _ in range(8)]
+        first_events = _read_turn_events(websocket)
 
         websocket.send_json(
             {
@@ -303,10 +369,10 @@ def test_session_server_keeps_active_math_problem_for_help_follow_up() -> None:
                 "text": "yes pelase help me to sovle it",
             }
         )
-        second_events = [websocket.receive_json() for _ in range(8)]
+        second_events = _read_turn_events(websocket)
 
-    first_reply = " ".join(event["text"] for event in first_events if event["type"] == "tutor.text.committed").strip()
-    second_reply = " ".join(event["text"] for event in second_events if event["type"] == "tutor.text.committed").strip()
+    first_reply = _committed_reply(first_events)
+    second_reply = _committed_reply(second_events)
 
     assert first_reply == "Let's work on 2+2. What total do you get when you add 2 and 2?"
     assert second_reply == "Great, let's go step by step. What do you get if you start with 2 and add 2?"
@@ -359,8 +425,7 @@ def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
                 "student_profile": {"pacing": "slow"},
             }
         )
-        for _ in range(8):
-            websocket.receive_json()
+        _read_turn_events(websocket)
 
         websocket.send_json({"type": "session.reset"})
         reset_event = websocket.receive_json()
@@ -372,8 +437,7 @@ def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
                 "text": "Fresh lesson turn",
             }
         )
-        for _ in range(8):
-            websocket.receive_json()
+        _read_turn_events(websocket)
 
     assert reset_event == {"type": "session.reset", "state": "idle"}
     assert captured_calls[0]["history_length"] == 0
@@ -443,8 +507,7 @@ def test_session_server_restores_history_for_a_reconnected_session(monkeypatch) 
                 "text": "So it pulls things down?",
             }
         )
-        for _ in range(8):
-            websocket.receive_json()
+        _read_turn_events(websocket)
 
     assert captured_calls[0]["subject"] == "science"
     assert captured_calls[0]["grade_band"] == "9-10"
@@ -465,11 +528,10 @@ def test_session_server_can_switch_tts_provider_per_turn() -> None:
                 "tts_provider": "minimax",
             }
         )
-        for _ in range(6):
-            websocket.receive_json()
-        tts_audio = websocket.receive_json()
-        tts_flush = websocket.receive_json()
+        turn_events = _read_turn_events(websocket)
 
+    tts_audio = next(event for event in turn_events if event["type"] == "tts.audio")
+    tts_flush = turn_events[-1]
     assert tts_audio["type"] == "tts.audio"
     assert tts_audio["provider"] == "minimax"
     assert tts_flush == {"type": "tts.flush", "provider": "minimax"}
@@ -490,10 +552,9 @@ def test_session_server_merges_default_and_per_turn_voice_config(monkeypatch) ->
                 "voice_config": {"style": "calm"},
             }
         )
-        for _ in range(4):
-            websocket.receive_json()
-        tts_context = websocket.receive_json()
+        turn_events = _read_turn_events(websocket)
 
+    tts_context = next(event for event in turn_events if event["type"] == "tts.context.started")
     assert tts_context["type"] == "tts.context.started"
     assert tts_context["provider"] == "minimax"
     assert tts_context["voice_config"] == {
@@ -542,13 +603,11 @@ def test_session_server_uses_subject_aware_tutor_draft_for_math_truth_checks() -
                 "student_profile": {"preference": "Slow down, use concrete examples..."},
             }
         )
-        for _ in range(5):
-            websocket.receive_json()
-        committed_text = websocket.receive_json()
+        turn_events = _read_turn_events(websocket)
 
-    assert committed_text["type"] == "tutor.text.committed"
-    assert "2 blocks" in committed_text["text"].lower()
-    assert "what do you notice about" not in committed_text["text"].lower()
+    reply_text = _committed_reply(turn_events).lower()
+    assert "2 blocks" in reply_text
+    assert "what do you notice about" not in reply_text
 
 
 def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
@@ -591,8 +650,7 @@ def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
                 "student_profile": {"preference": "go slow"},
             }
         )
-        for _ in range(8):
-            websocket.receive_json()
+        _read_turn_events(websocket)
 
         websocket.send_json({"type": "session.reset"})
         websocket.receive_json()
@@ -604,8 +662,7 @@ def test_session_server_reset_clears_history_and_profile(monkeypatch) -> None:
                 "text": "second question",
             }
         )
-        for _ in range(8):
-            websocket.receive_json()
+        _read_turn_events(websocket)
 
     assert captured_calls[0]["history_length"] == 0
     assert captured_calls[0]["student_profile"] == {"preference": "go slow"}

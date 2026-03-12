@@ -411,6 +411,25 @@ test("session transport sends interrupt on the open socket", async () => {
   expect(FakeWebSocket.instances[0]?.sent.map((payload) => JSON.parse(payload))).toContainEqual({ type: "interrupt" });
 });
 
+test("session transport reports playback metrics on the open socket", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
+
+  const transport = createSessionSocketTransport();
+  await transport.connect();
+  await transport.reportMetric?.({
+    turnId: "turn-123",
+    name: "first_viseme",
+    tsMs: 1234,
+  });
+
+  expect(FakeWebSocket.instances[0]?.sent.map((payload) => JSON.parse(payload))).toContainEqual({
+    type: "latency.metric",
+    turn_id: "turn-123",
+    name: "first_viseme",
+    ts_ms: 1234,
+  });
+});
+
 test("session transport rejects active turn on session error", async () => {
   vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
 

@@ -1,171 +1,135 @@
 "use client";
 
-import React from "react";
-import { DashboardLayout } from "../../components/layout";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 
-export default function DashboardPage() {
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
+import { DashboardLayout } from "../../components/layout";
+import { MetricCard } from "../../components/ui/MetricCard";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { SurfaceCard } from "../../components/ui/SurfaceCard";
+import {
+  hydrateLessonThreadStore,
+  listArchivedLessonThreads,
+  readArchivedLessonThread,
+  readPersistedLessonThread,
+  type PersistedLessonArchiveEntry,
+} from "../../lib/lesson_thread_store";
+import { useFirebaseAuth } from "../../lib/firebase_auth";
+import { readSessionPreferences } from "../../lib/session_preferences";
+import { buildDashboardViewModel } from "../../lib/dashboard_view_model";
+
+function readDashboardLearningSnapshot() {
+  const activeThread = readPersistedLessonThread();
+  const archivedLessons = listArchivedLessonThreads()
+    .map((summary) => {
+      const thread = readArchivedLessonThread(summary.id);
+      if (!thread) {
+        return null;
+      }
+
+      return {
+        ...summary,
+        thread,
+      } satisfies PersistedLessonArchiveEntry;
+    })
+    .filter((entry): entry is PersistedLessonArchiveEntry => entry !== null);
+
+  return {
+    activeThread,
+    archivedLessons,
   };
+}
 
-  // Mock data - replace with real data from your backend
-  const stats = [
-    { label: "Lessons Completed", value: "12" },
-    { label: "Current Streak", value: "5 days" },
-    { label: "Time Learning", value: "4.2h" },
-  ];
+export default function DashboardPage() {
+  const { user } = useFirebaseAuth();
+  const [learningSnapshot, setLearningSnapshot] = useState(() => readDashboardLearningSnapshot());
 
-  const recentLessons = [
-    { id: 1, title: "Introduction to Fractions", subject: "Math", grade: "3-5", progress: 75 },
-    { id: 2, title: "Basic Algebra", subject: "Math", grade: "6-8", progress: 45 },
-    { id: 3, title: "Geometry Basics", subject: "Math", grade: "3-5", progress: 100 },
-  ];
+  useEffect(() => {
+    let cancelled = false;
 
-  const recommendedLessons = [
-    { id: 4, title: "Multiplication Master", subject: "Math", grade: "3-5", difficulty: "easy" },
-    { id: 5, title: "Division Challenge", subject: "Math", grade: "3-5", difficulty: "medium" },
-    { id: 6, title: "Word Problems", subject: "Math", grade: "6-8", difficulty: "hard" },
-  ];
+    const hydrate = async () => {
+      await hydrateLessonThreadStore();
+      if (!cancelled) {
+        setLearningSnapshot(readDashboardLearningSnapshot());
+      }
+    };
+
+    void hydrate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const viewModel = buildDashboardViewModel({
+    activeThread: learningSnapshot.activeThread,
+    archivedLessons: learningSnapshot.archivedLessons,
+    displayName: user?.displayName,
+    email: user?.email,
+    preferences: readSessionPreferences(),
+  });
 
   return (
     <DashboardLayout>
-      <div className="dashboard-page">
-        {/* Hero Section */}
-        <section className="dashboard-hero">
-          <p className="dashboard-hero__greeting">{getGreeting()}!</p>
-          <h1 className="dashboard-hero__title">Ready to learn?</h1>
-          <p className="dashboard-hero__subtitle">
-            Continue where you left off or try something new today.
-          </p>
-          <Link
-            href="/session"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              marginTop: "16px",
-              padding: "12px 24px",
-              background: "linear-gradient(135deg, var(--accent), var(--secondary))",
-              color: "white",
-              borderRadius: "10px",
-              fontWeight: 600,
-              textDecoration: "none",
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <polygon points="5 3 19 12 5 21 5 3" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Start Learning
-          </Link>
-        </section>
+      <div className="page-shell dashboard-page">
+        <SurfaceCard className="dashboard-hero">
+          <PageHeader
+            badge="Today"
+            subtitle={viewModel.subtitle}
+            title={`Hey ${viewModel.learnerName}!`}
+          />
+        </SurfaceCard>
 
-        {/* Stats */}
-        <div className="dashboard-stats">
-          {stats.map((stat) => (
-            <div key={stat.label} className="stat-card">
-              <div className="stat-card__label">{stat.label}</div>
-              <div className="stat-card__value">{stat.value}</div>
-            </div>
+        <div className="metric-grid">
+          {viewModel.metrics.map((metric) => (
+            <MetricCard
+              key={metric.id}
+              accent={metric.accent}
+              label={metric.label}
+              value={metric.value}
+            />
           ))}
         </div>
 
-        {/* Recent Lessons */}
         <section className="dashboard-section">
           <div className="dashboard-section__header">
             <h2 className="dashboard-section__title">Continue Learning</h2>
-            <Link href="/lessons" className="dashboard-section__link">
-              View all →
+            <Link className="dashboard-section__link" href="/lessons">
+              See all
             </Link>
           </div>
-          <div className="lessons-grid">
-            {recentLessons.map((lesson) => (
+          <div className="section-stack">
+            {viewModel.continueLessons.map((lesson) => (
               <Link
+                aria-label={lesson.actionLabel}
+                className="row-card dashboard-continue-card"
+                href={lesson.href}
                 key={lesson.id}
-                href={`/session?lesson=${lesson.id}`}
-                className="lesson-card"
-                style={{ textDecoration: "none", color: "inherit" }}
               >
-                <div className="lesson-card__header">
-                  <span className="lesson-card__subject">{lesson.subject}</span>
-                  <span className="lesson-card__difficulty lesson-card__difficulty--easy">
-                    {lesson.grade}
-                  </span>
+                <div className="row-card__icon">{lesson.icon}</div>
+                <div className="row-card__content">
+                  <div className="row-card__title">{lesson.title}</div>
+                  <div className="row-card__copy">{lesson.task}</div>
+                  <div className="row-card__meta">{lesson.meta}</div>
                 </div>
-                <h3 className="lesson-card__title">{lesson.title}</h3>
-                <div style={{ marginTop: "12px" }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: "0.8rem",
-                      color: "var(--ink-dim)",
-                      marginBottom: "6px",
-                    }}
-                  >
-                    <span>Progress</span>
-                    <span>{lesson.progress}%</span>
-                  </div>
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "6px",
-                      background: "var(--bg-subtle)",
-                      borderRadius: "3px",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${lesson.progress}%`,
-                        height: "100%",
-                        background: "linear-gradient(90deg, var(--accent), var(--secondary))",
-                        borderRadius: "3px",
-                      }}
-                    />
-                  </div>
-                </div>
+                <span className="dashboard-continue-card__cta">{lesson.actionLabel}</span>
               </Link>
             ))}
           </div>
         </section>
 
-        {/* Recommended Lessons */}
-        <section className="dashboard-section">
-          <div className="dashboard-section__header">
-            <h2 className="dashboard-section__title">Recommended for You</h2>
-            <Link href="/lessons" className="dashboard-section__link">
-              View all →
+        <SurfaceCard className="surface-card--soft">
+          <div className="row-card" style={{ background: "transparent", border: "none", padding: 0 }}>
+            <div className="row-card__icon">AI</div>
+            <div className="row-card__content">
+              <div className="row-card__title">{viewModel.quickStart.title}</div>
+              <div className="row-card__copy">{viewModel.quickStart.description}</div>
+            </div>
+            <Link className="primary-button" href={viewModel.quickStart.ctaHref}>
+              {viewModel.quickStart.ctaLabel}
             </Link>
           </div>
-          <div className="lessons-grid">
-            {recommendedLessons.map((lesson) => (
-              <Link
-                key={lesson.id}
-                href={`/session?lesson=${lesson.id}`}
-                className="lesson-card"
-                style={{ textDecoration: "none", color: "inherit" }}
-              >
-                <div className="lesson-card__header">
-                  <span className="lesson-card__subject">{lesson.subject}</span>
-                  <span
-                    className={`lesson-card__difficulty lesson-card__difficulty--${lesson.difficulty}`}
-                  >
-                    {lesson.difficulty}
-                  </span>
-                </div>
-                <h3 className="lesson-card__title">{lesson.title}</h3>
-                <div className="lesson-card__meta">
-                  <span>{lesson.grade}</span>
-                  <span>• ~15 min</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
+        </SurfaceCard>
       </div>
     </DashboardLayout>
   );

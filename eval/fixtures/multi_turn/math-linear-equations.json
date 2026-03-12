@@ -16,7 +16,7 @@
       "turn_goal": "diagnose",
       "student_utterance": "I don't understand how to solve for x.",
       "student_outcome": "unsure",
-      "tutor_response": "What equation are you working with? Let's start there.",
+      "tutor_response": "Good question. What equation are you working with?",
       "rubric_hooks": ["diagnoses-prior-knowledge", "asks-guiding-question", "grade-fit"]
     },
     {
@@ -32,7 +32,7 @@
       "turn_goal": "practice",
       "student_utterance": "I think I add 4 to both sides?",
       "student_outcome": "incorrect",
-      "tutor_response": "Not quite. We want to move the 4 away from the x side. What's the opposite of adding?",
+      "tutor_response": "Good thinking, but not quite. We want to move the 4 away from the x side. What's the opposite of adding?",
       "rubric_hooks": ["redirects-gently", "explains-opposite", "guides-correctly"]
     },
     {
@@ -48,7 +48,7 @@
       "turn_goal": "reflect",
       "student_utterance": "Divide both sides by 2, so x = 3",
       "student_outcome": "correct",
-      "tutor_response": "You got it. Subtract first to isolate the term with x, then divide.",
+      "tutor_response": "You got it. What two steps did you use to isolate x?",
       "rubric_hooks": ["confirms-understanding", "summarizes-steps", "closes-lesson"]
     }
   ],

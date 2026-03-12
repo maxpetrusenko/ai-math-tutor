@@ -80,6 +80,8 @@ function resolveRealtimeApiUrl() {
 }
 
 function buildRealtimeInstructions(request: TutorTurnRequest) {
+  const avatarLabel = request.studentProfile?.avatarLabel?.trim();
+  const avatarPersona = request.studentProfile?.avatarPersona?.trim();
   const preference = request.studentProfile?.preference?.trim();
   const pacing = request.studentProfile?.pacing?.trim();
   return [
@@ -87,6 +89,7 @@ function buildRealtimeInstructions(request: TutorTurnRequest) {
     `Subject: ${request.subject}.`,
     `Grade band: ${request.gradeBand}.`,
     "Teach Socratically, keep responses concise, and end with a short next-step question when appropriate.",
+    avatarPersona ? `${avatarLabel ?? "Avatar"} persona: ${avatarPersona}.` : "",
     preference ? `Student preference: ${preference}.` : "",
     pacing ? `Student pacing: ${pacing}.` : "",
   ]

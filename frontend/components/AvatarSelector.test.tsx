@@ -5,7 +5,7 @@ import { AvatarSelector } from "./AvatarSelector";
 import { resolveAvatarProvider } from "./avatar_registry";
 
 test("avatar selector filters avatar options by render mode", () => {
-  const selectedAvatar = resolveAvatarProvider("human-css-2d");
+  const selectedAvatar = resolveAvatarProvider("sage-svg-2d");
   const onAvatarChange = vi.fn();
   const onModeChange = vi.fn();
 
@@ -13,14 +13,14 @@ test("avatar selector filters avatar options by render mode", () => {
     <AvatarSelector
       onAvatarChange={onAvatarChange}
       onModeChange={onModeChange}
-      selectedAvatarId="human-css-2d"
+      selectedAvatarId="sage-svg-2d"
       selectedMode={selectedAvatar.mode}
     />
   );
 
   expect(screen.getByLabelText("Render mode")).toHaveValue("2d");
-  expect(screen.getByLabelText("Avatar")).toHaveValue("human-css-2d");
-  expect(screen.getByRole("option", { name: "Human" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Avatar")).toHaveValue("sage-svg-2d");
+  expect(screen.getByRole("option", { name: "Sage" })).toBeInTheDocument();
   expect(screen.queryByRole("option", { name: "Human 3D" })).not.toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("Render mode"), {
@@ -28,4 +28,10 @@ test("avatar selector filters avatar options by render mode", () => {
   });
 
   expect(onModeChange).toHaveBeenCalledWith("3d");
+
+  fireEvent.change(screen.getByLabelText("Render mode"), {
+    target: { value: "live" },
+  });
+
+  expect(onModeChange).toHaveBeenCalledWith("live");
 });

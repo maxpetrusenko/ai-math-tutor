@@ -2,10 +2,11 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type HeaderProps = {
-  sidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
+  onSignOut?: () => Promise<void> | void;
   user?: {
     name?: string;
     email?: string;
@@ -13,8 +14,12 @@ type HeaderProps = {
   };
 };
 
-export function Header({ sidebarCollapsed, onToggleSidebar, user }: HeaderProps) {
+export function Header({ onToggleSidebar, onSignOut, user }: HeaderProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [searchValue, setSearchValue] = useState(() => searchParams.get("q") ?? "");
 
   const getInitials = (name?: string, email?: string) => {
     if (name) {
@@ -29,6 +34,16 @@ export function Header({ sidebarCollapsed, onToggleSidebar, user }: HeaderProps)
       return email[0].toUpperCase();
     }
     return "?";
+  };
+
+  const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextQuery = searchValue.trim();
+    const params = new URLSearchParams();
+    if (nextQuery) {
+      params.set("q", nextQuery);
+    }
+    router.push(`/lessons${params.size ? `?${params.toString()}` : ""}`);
   };
 
   return (
@@ -60,7 +75,7 @@ export function Header({ sidebarCollapsed, onToggleSidebar, user }: HeaderProps)
       </div>
 
       <div className="app-header__right">
-        <div className="app-header__search">
+        <form className="app-header__search" onSubmit={submitSearch}>
           <svg
             className="app-header__search-icon"
             viewBox="0 0 24 24"
@@ -71,8 +86,14 @@ export function Header({ sidebarCollapsed, onToggleSidebar, user }: HeaderProps)
             <circle cx="11" cy="11" r="8" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M21 21l-4.35-4.35" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          <input type="search" placeholder="Search lessons..." aria-label="Search" />
-        </div>
+          <input
+            aria-label="Search lessons"
+            onChange={(event) => setSearchValue(event.target.value)}
+            placeholder={pathname === "/lessons" ? "Search this lesson library..." : "Search lessons..."}
+            type="search"
+            value={searchValue}
+          />
+        </form>
 
         <button
           className="icon-button"
@@ -135,6 +156,10 @@ export function Header({ sidebarCollapsed, onToggleSidebar, user }: HeaderProps)
             </Link>
             <hr style={{ border: "none", borderTop: "1px solid var(--line)", margin: "8px 0" }} />
             <button
+              onClick={() => {
+                setShowMenu(false);
+                void onSignOut?.();
+              }}
               style={{
                 width: "100%",
                 padding: "10px 16px",

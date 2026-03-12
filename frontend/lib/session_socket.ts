@@ -129,6 +129,12 @@ function summarizePayload(payload: Record<string, unknown>) {
     summary.timestampCount = Array.isArray(payload.timestamps) ? payload.timestamps.length : 0;
   }
 
+  if (payload.type === "latency.metric") {
+    summary.name = payload.name;
+    summary.tsMs = payload.ts_ms;
+    summary.turnId = payload.turn_id;
+  }
+
   if (payload.type === "transcript.final" || payload.type === "transcript.partial_stable") {
     summary.text = typeof payload.text === "string" ? payload.text.slice(0, 120) : "";
     summary.textLength = typeof payload.text === "string" ? payload.text.length : 0;
@@ -234,6 +240,7 @@ export function createSessionSocketTransport(): SessionTransport {
         tutorText: string;
         state: string;
         phase: TurnPhase;
+        turnId?: string;
         timestamps: TutorTurnResult["timestamps"];
         audioSegments: NonNullable<TutorTurnResult["audioSegments"]>;
         pendingSegmentTexts: string[];
@@ -356,6 +363,9 @@ export function createSessionSocketTransport(): SessionTransport {
     if (payload.type === "state.changed") {
       activeTurn.state = String(payload.state);
     }
+    if (payload.type === "tutor.turn.started") {
+      activeTurn.turnId = String(payload.turn_id ?? "");
+    }
     if (payload.type === "tutor.text.committed") {
       const committedText = String(payload.text);
       activeTurn.phase = "tts";
@@ -386,6 +396,7 @@ export function createSessionSocketTransport(): SessionTransport {
       }
 
       activeTurn.resolve({
+        turnId: activeTurn.turnId,
         transcript: activeTurn.transcript,
         tutorText: activeTurn.tutorText,
         state: activeTurn.state,
@@ -707,6 +718,17 @@ export function createSessionSocketTransport(): SessionTransport {
         logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
         connectedSocket.send(JSON.stringify(payload));
       });
+    },
+    async reportMetric(event) {
+      const connectedSocket = await ensureSocket();
+      const payload = {
+        type: "latency.metric",
+        turn_id: event.turnId,
+        name: event.name,
+        ts_ms: event.tsMs,
+      };
+      logSessionInfo("send", { sessionId: ensureCurrentSessionId(), ...summarizePayload(payload) });
+      connectedSocket.send(JSON.stringify(payload));
     },
     getSessionId() {
       return ensureCurrentSessionId();

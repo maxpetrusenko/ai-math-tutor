@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from backend.runtime.local_env import ENV_ALIASES
+
 
 DEFAULT_REGION = "us-east4"
 DEFAULT_FRONTEND_BACKEND = "ai-math-tutor"
@@ -87,7 +89,9 @@ def parse_env_file(path: Path) -> dict[str, str]:
         payload = json.loads(raw_text)
         if not isinstance(payload, dict):
             raise ValueError(f"{path} must contain a JSON object.")
-        return {str(key): str(value) for key, value in payload.items()}
+        env_vars = {str(key): str(value) for key, value in payload.items()}
+        apply_env_aliases(env_vars)
+        return env_vars
 
     env_vars: dict[str, str] = {}
     for line in raw_text.splitlines():
@@ -104,7 +108,62 @@ def parse_env_file(path: Path) -> dict[str, str]:
         if value and value[0] in {'"', "'"}:
             value = shlex.split(f"token={value}", comments=False, posix=True)[0].split("=", 1)[1]
         env_vars[key] = value
+    apply_env_aliases(env_vars)
     return env_vars
+
+
+def apply_env_aliases(env_vars: dict[str, str]) -> None:
+    for target_key, source_key in ENV_ALIASES.items():
+        if env_vars.get(target_key, "").strip():
+            continue
+        source_value = env_vars.get(source_key, "").strip()
+        if source_value:
+            env_vars[target_key] = source_value
+
+
+def collect_hosted_backend_env_errors(env_vars: dict[str, str]) -> list[str]:
+    errors: list[str] = []
+    seen_messages: set[str] = set()
+
+    def require_any(keys: tuple[str, ...], *, reason: str) -> None:
+        if any(env_vars.get(key, "").strip() for key in keys):
+            return
+        message = f"{' or '.join(keys)} is required for {reason}."
+        if message not in seen_messages:
+            seen_messages.add(message)
+            errors.append(message)
+
+    require_any(("OPENAI_API_KEY",), reason="the default hosted OpenAI Realtime session path")
+
+    provider_requirements = {
+        "anthropic": ("ANTHROPIC_API_KEY",),
+        "cartesia": ("CARTESIA_API_KEY",),
+        "deepgram": ("DEEPGRAM_API_KEY",),
+        "gemini": ("GOOGLE_AI_API_KEY", "GEMINI_API_KEY"),
+        "minimax": ("MINIMAX_API_KEY", "MINIMAX_SPEECH_API_KEY"),
+        "openai": ("OPENAI_API_KEY",),
+        "openai-realtime": ("OPENAI_API_KEY",),
+    }
+
+    provider_env_keys = (
+        "NERDY_STT_PROVIDER",
+        "NERDY_TTS_PROVIDER",
+        "NERDY_LLM_PROVIDER",
+        "NERDY_LLM_FALLBACK_PROVIDER",
+        "NERDY_RUNTIME_LLM_PROVIDER",
+        "NERDY_RUNTIME_LLM_FALLBACK_PROVIDER",
+    )
+
+    for env_key in provider_env_keys:
+        provider = env_vars.get(env_key, "").strip().lower()
+        if not provider:
+            continue
+        required_keys = provider_requirements.get(provider)
+        if required_keys is None:
+            continue
+        require_any(required_keys, reason=f"{env_key}={provider}")
+
+    return errors
 
 
 def write_env_json_file(env_vars: dict[str, str]) -> tempfile.NamedTemporaryFile:
@@ -453,6 +512,9 @@ def deploy_session_backend(
             pass
 
     env_vars = parse_env_file(target.backend_env_file)
+    env_errors = collect_hosted_backend_env_errors(env_vars)
+    if env_errors:
+        raise RuntimeError("Hosted backend env is invalid:\n" + "\n".join(env_errors))
     env_vars["NERDY_ALLOWED_ORIGINS"] = normalize_url(frontend_url)
     env_vars["NERDY_REQUIRE_FIREBASE_AUTH"] = "1"
     env_file_handle = write_env_json_file(env_vars)

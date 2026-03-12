@@ -10,6 +10,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.livekit import create_avatar_room_session, is_managed_avatar_provider_id
 from backend.llm.draft_policy import build_draft_tutor_reply
 from backend.llm.prompt_builder import build_tutor_messages
 from backend.llm.topic_shift import filter_history_for_latest_turn
@@ -32,7 +33,11 @@ from backend.session.openai_realtime import (
 )
 from backend.session.runtime_options import runtime_options_payload, validate_runtime_config
 from backend.session.registry import clear_session_snapshot, load_session_snapshot, save_session_snapshot
-from backend.session.turn_trace import summarize_latency_tracker, write_turn_trace
+from backend.session.turn_trace import (
+    append_latency_trace_event,
+    summarize_latency_tracker,
+    write_turn_trace,
+)
 from backend.stt.provider import STTProviderFactory, StreamingSTTProvider, StreamingSTTSession
 from backend.tts.commit_manager import CommitManager
 from backend.tts.provider import TTSProviderFactory
@@ -91,6 +96,29 @@ def get_lessons(authorization: str | None = Header(default=None)) -> dict[str, o
 @app.get("/api/runtime-options")
 def get_runtime_options() -> dict[str, object]:
     return runtime_options_payload()
+
+
+@app.post("/api/avatars/livekit/session")
+async def post_livekit_avatar_session(
+    payload: dict[str, object] | None = None,
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    verify_firebase_bearer_token(authorization)
+    avatar_provider_id = str((payload or {}).get("avatarProviderId") or "").strip()
+    participant_name = str((payload or {}).get("participantName") or "Student").strip() or "Student"
+
+    if not is_managed_avatar_provider_id(avatar_provider_id):
+        raise HTTPException(status_code=400, detail=f"unsupported managed avatar provider: {avatar_provider_id or 'missing'}")
+
+    try:
+        return await create_avatar_room_session(
+            avatar_provider_id,
+            participant_name=participant_name,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
 
 
 @app.post("/api/realtime/client-secret")
@@ -245,6 +273,34 @@ async def _handle_message(
         transcript_events = await stt_session.push_audio(audio_bytes, ts_ms=chunk_ts_ms)
         events.extend(transcript_events)
         return events, stt_session
+    if message_type == "latency.metric":
+        turn_id = str(message.get("turn_id") or "").strip()
+        event_name = str(message.get("name") or "").strip()
+        if not turn_id:
+            raise ValueError("latency metric turn_id is required")
+        if event_name not in {"first_viseme", "audio_done"}:
+            raise ValueError(f"unsupported latency metric: {event_name}")
+
+        ts_ms = float(message["ts_ms"])
+        append_latency_trace_event(
+            session_id=controller.session_id,
+            turn_id=turn_id,
+            event_name=event_name,
+            ts_ms=ts_ms,
+            metadata={"source": "frontend_playback"},
+        )
+        logger.info(
+            "session latency metric recorded %s",
+            _json_summary(
+                {
+                    "event_name": event_name,
+                    "session_id": controller.session_id,
+                    "ts_ms": ts_ms,
+                    "turn_id": turn_id,
+                }
+            ),
+        )
+        return [], stt_session
     if message_type == "speech.end":
         speech_end_ts_ms = float(message["ts_ms"])
         events = controller.handle_speech_end(ts_ms=speech_end_ts_ms)
@@ -409,7 +465,7 @@ async def _handle_message(
                 }
             ),
         )
-        turn_id = str(uuid4())
+        turn_id = trace_turn_id
         events.extend(controller.begin_tutor_turn(turn_id=turn_id))
 
         commit_manager = CommitManager(mode="phrase")
@@ -644,6 +700,14 @@ def _summarize_browser_message(session_id: str, message: dict[str, object]) -> d
                 "subject": str(message.get("subject") or ""),
                 "text_length": len(str(message.get("text") or "")),
                 "ts_ms": float(message.get("ts_ms") or 0),
+            }
+        )
+    elif summary["type"] == "latency.metric":
+        summary.update(
+            {
+                "name": str(message.get("name") or ""),
+                "ts_ms": float(message.get("ts_ms") or 0),
+                "turn_id": str(message.get("turn_id") or ""),
             }
         )
     elif summary["type"] == "session.restore":

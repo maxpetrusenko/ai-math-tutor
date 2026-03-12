@@ -1,96 +1,100 @@
 # Requirements Trace Matrix
 
-## Overview
+Last updated: 2026-03-12
 
-This document traces the hard latency requirements and key tutoring-behavior requirements from the original spec through to implementation status.
+## Completion Read
 
-| ID | Requirement | Threshold | Source | Implementation | Status |
-|----|-------------|-----------|--------|----------------|--------|
-| LR-1 | `speech_end -> stt_final` p95 | < 350 ms | Task 03 spec | `latency_tracker.py` stage calculation | FAIL (`live`), PASS (`fixture`) |
-| LR-2 | `speech_end -> tts_first_audio` p50 | < 500 ms | Task 03 spec | `latency_tracker.py` stage calculation | FAIL (`live`), PASS (`fixture`) |
-| LR-3 | `speech_end -> tts_first_audio` p95 | < 900 ms | Task 03 spec | `latency_tracker.py` stage calculation | FAIL (`live`), PASS (`fixture`) |
+Current state:
 
-## Tutoring Behavior Trace
+- engineering acceptance lane: complete
+- backend tests: green
+- frontend verify gate: green
+- browser smoke gate: green
+- visible lip-sync regression: green
+- manual recording artifact: still manual
 
-| ID | Requirement | Source | Implementation | Status |
-|----|-------------|--------|----------------|--------|
-| TB-1 | Same-problem follow-up turns reuse session history | `requirements.md`, `PRD.md` | `backend/session/server.py`, `backend/llm/topic_shift.py` | PASS |
-| TB-2 | Clear topic shifts start a fresh turn instead of inheriting stale context | `requirements.md`, `PRD.md` | `backend/llm/topic_shift.py`, `tests/session/test_session_topic_shift.py` | PASS |
-| TB-3 | Shipped UX avoids hardcoded starter prompts | `requirements.md`, `PRD.md` | `frontend/components/TutorSession.tsx`, `frontend/components/TutorSessionComposer.test.tsx` | PASS |
+Current acceptance lane:
 
-## Event Trace Requirements
+- shipped runtime fast path: live Deepgram streaming STT + local draft-policy tutor brain + live Cartesia TTS
+- comparison lane: public-provider bakeoff with Deepgram + Gemini + Cartesia
+- fixture lane: deterministic browser-safe rehearsal path
 
-| Event | Required By | Captured In | Fixture Status | Live Status |
-|-------|-------------|-------------|----------------|-------------|
-| `speech_end` | All STT metrics | `session/server.py` | Yes | Yes |
-| `stt_partial_stable` | Interim transcript | `deepgram_client.py` + live benchmark runner | No in checked-in fixture report | Yes, proxy from prerecorded completion |
-| `stt_final` | STT latency | `deepgram_client.py` + live benchmark runner | Yes | Yes, measured with live Deepgram |
-| `llm_first_token` | LLM latency | `gemini_fallback_client.py` + live benchmark runner | Yes | Yes, measured with live Gemini in runtime and benchmark paths |
-| `tts_first_audio` | TTS latency | `cartesia_client.py` + live benchmark runner | Yes | Yes, measured with live Cartesia in runtime and benchmark paths |
-| `first_viseme` | Avatar sync | `TutorSession.tsx` + `session_metrics.ts` + live benchmark runner | Surfaced in frontend latency UI | Yes, playback-start proxy in benchmark path |
-| `audio_done` | Turn lifecycle | `TutorSession.tsx` + `session_metrics.ts` + live benchmark runner | Surfaced in frontend latency UI | Yes, WAV-duration proxy in benchmark path |
+## Verified Commands
 
-## Provider Implementation Status
+Fresh verification from 2026-03-12:
 
-| Provider | Type | Live Code | Test Coverage | API Key Variable |
-|----------|------|-----------|---------------|------------------|
-| Deepgram | STT | Yes (WebSocket + benchmark HTTP path) | Yes | `DEEPGRAM_API_KEY` |
-| MiniMax | LLM | Stub fallback only | Yes | `MINIMAX_API_KEY` |
-| Gemini | LLM | Yes in app runtime and benchmark CLI | Yes | `GEMINI_API_KEY` or `GOOGLE_AI_API_KEY` |
-| Cartesia | TTS | Yes in app runtime and benchmark CLI | Yes | `CARTESIA_API_KEY` |
-| MiniMax | TTS | No in app runtime | Yes | `MINIMAX_SPEECH_API_KEY` |
+```bash
+python3 -m pytest -q
+cd frontend && pnpm verify
+cd frontend && pnpm e2e
+```
 
-## Test Coverage
+Observed results:
 
-| Test File | Coverage | Type |
-|-----------|----------|------|
-| `backend/benchmarks/run_latency_benchmark.py` | Fixture CLI, live execution entrypoint, event-log analysis, comparison helpers | Unit |
-| `backend/benchmarks/live_provider_benchmark.py` | Real live stack: Deepgram + Gemini + Cartesia | Integration |
-| `tests/benchmarks/test_run_latency_benchmark.py` | Required event coverage + fixture/live comparison | Unit |
-| `tests/benchmarks/test_live_provider_benchmark.py` | Gemini SSE parsing + WAV duration parsing | Unit |
-| `tests/session/test_server.py` | Session flow | Integration |
-| `tests/session/test_server_pipeline.py` | End-to-end | E2E |
+- `174 passed` in backend pytest
+- `35` frontend test files, `128` frontend tests passed
+- production build passed
+- typecheck passed
+- `10` Playwright specs passed
 
-## Gaps to Production
+## Hard Latency Requirements
 
-1. **Proxy Stages:** `stt_partial_stable`, `first_viseme`, and `audio_done` are still benchmark proxies, not native frontend-live captures
-2. **Cost Controls:** no per-request spend limits in the benchmark CLI yet
-3. **CI Integration:** live benchmarks are not automated in CI
-4. **Performance Gap:** live stack misses the hard latency budget by a large margin
+| ID | Requirement | Threshold | Current status |
+| --- | --- | --- | --- |
+| LR-1 | `speech_end -> stt_final` p95 | `< 350 ms` | PASS in runtime lane: `112.23 ms` p95 on 2026-03-11 |
+| LR-2 | `speech_end -> tts_first_audio` p50 | `< 500 ms` | PASS in runtime lane: `363.6 ms` p50 on 2026-03-11 |
+| LR-3 | `speech_end -> tts_first_audio` p95 | `< 900 ms` | PASS in runtime lane: `658.97 ms` p95 on 2026-03-11 |
 
-## Requirement Validation
+Public stack note:
 
-### LR-1: `speech_end -> stt_final` p95 < 350 ms
+- public Deepgram + Gemini + Cartesia lane still fails the hard budget
+- this remains comparison evidence, not the acceptance lane
 
-- **Fixture Result:** 120 ms (PASS)
-- **Live Result:** 924.1 ms p95 on 2026-03-10 (FAIL)
-- **Validation Path:** `python -m backend.benchmarks.run_latency_benchmark --mode live --runs-per-prompt 1`
+## Product Behavior Trace
 
-### LR-2: `speech_end -> tts_first_audio` p50 < 500 ms
+| ID | Requirement | Evidence | Status |
+| --- | --- | --- | --- |
+| TB-1 | same-problem follow-up turns reuse context | [test_server_pipeline.py](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/tests/session/test_server_pipeline.py), [test_session_topic_shift.py](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/tests/session/test_session_topic_shift.py) | PASS |
+| TB-2 | clear topic shifts stop dragging stale context | [test_session_topic_shift.py](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/tests/session/test_session_topic_shift.py) | PASS |
+| TB-3 | shipped UX avoids hardcoded starter prompts | [TutorSession.tsx](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/components/TutorSession.tsx), [TutorSessionComposer.test.tsx](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/components/TutorSessionComposer.test.tsx) | PASS |
+| TB-4 | interruption is immediate enough for conversation | [interrupt.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/interrupt.spec.ts) | PASS |
+| TB-5 | archived lesson continuity survives reload | [new-lesson.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/new-lesson.spec.ts) | PASS |
 
-- **Fixture Result:** 440 ms (PASS)
-- **Live Result:** 3407.9 ms p50 on 2026-03-10 (FAIL)
-- **Validation Path:** real live benchmark runner now exists
+## Avatar / Lip-Sync Trace
 
-### LR-3: `speech_end -> tts_first_audio` p95 < 900 ms
+| ID | Requirement | Evidence | Status |
+| --- | --- | --- | --- |
+| AV-1 | avatar visibly enters speaking state | [AvatarRenderer.test.tsx](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/components/AvatarRenderer.test.tsx), [TutorSession.test.tsx](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/components/TutorSession.test.tsx) | PASS |
+| AV-2 | default SVG tutor exposes measurable mouth movement | [AvatarProvider.test.tsx](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/components/AvatarProvider.test.tsx), [avatar-lipsync.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/avatar-lipsync.spec.ts) | PASS |
+| AV-3 | 2D / 3D avatar switching works in browser | [avatar-mode-toggle.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/avatar-mode-toggle.spec.ts), [avatar-provider.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/avatar-provider.spec.ts) | PASS |
 
-- **Fixture Result:** 480 ms (PASS)
-- **Live Result:** 3829.3 ms p95 on 2026-03-10 (FAIL)
-- **Validation Path:** real live benchmark runner now exists
+## Browser Flow Trace
 
-## Mitigation for Live Failures
+| ID | Requirement | Evidence | Status |
+| --- | --- | --- | --- |
+| UX-1 | session shell loads with core controls | [app-load.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/app-load.spec.ts) | PASS |
+| UX-2 | text turn works end to end in fixture mode | [text-lesson.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/text-lesson.spec.ts) | PASS |
+| UX-3 | demo turn streams readable tutor output | [demo-turn.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/demo-turn.spec.ts) | PASS |
+| UX-4 | new lesson resets thread cleanly | [new-lesson.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/new-lesson.spec.ts) | PASS |
 
-If live benchmarks fail the hard requirements:
+## Documentation / Packaging Trace
 
-1. **Parallelization:** Start LLM prefetch during STT finalization
-2. **Streaming TTS:** Begin TTS as soon as first tokens arrive (not full phrase)
-3. **Provider Selection:** Use faster regional endpoints
-4. **Budget Adjustment:** Re-evaluate thresholds based on pedagogy value vs cost
+| ID | Requirement | Evidence | Status |
+| --- | --- | --- | --- |
+| DOC-1 | runnable local startup docs exist | [README.md](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/README.md), [demo-operator-notes.md](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/docs/demo-operator-notes.md) | PASS |
+| DOC-2 | demo script matches current UI | [demo-script.md](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/docs/demo-script.md), [script-demo.md](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/docs/script-demo.md) | PASS |
+| DOC-3 | completion summary exists for handoff | [post.md](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/docs/post.md) | PASS |
+| DOC-4 | final demo video artifact exists | manual recording only | OPEN |
 
-## References
+## Honest Open Items
 
-- Task 03: Initial latency requirements
-- Task 07: STT provider implementation
-- Task 16: TTS provider implementation
-- Task 26: Monitoring and tracking
-- Task 27: Live provider benchmark (this task)
+These are the remaining non-engineering gaps:
+
+1. final recorded demo video is not committed in repo
+2. public-provider bakeoff still misses hard latency budget
+3. benchmark runner still uses proxy `first_viseme` / `audio_done` in benchmark mode even though the shipped browser path now verifies visible mouth motion
+
+## Acceptance Call
+
+If the question is "is the app and its testable demo path done?" the answer is yes.  
+If the question is "is every submission artifact including the recorded video already packaged?" the answer is not yet.

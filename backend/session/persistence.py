@@ -13,10 +13,22 @@ class SessionSnapshot(TypedDict):
     subject: str
 
 
+class LessonState(TypedDict, total=False):
+    currentStepIndex: int
+    currentTask: str
+    lastTutorAction: str
+    lessonId: int
+    lessonTitle: str
+    nextQuestion: str
+    program: list[str]
+    startedFromCatalog: bool
+
+
 class PersistedLessonThread(TypedDict):
     avatarProviderId: str
     conversation: list[dict[str, str]]
     gradeBand: str
+    lessonState: LessonState | None
     llmModel: str
     llmProvider: str
     preference: str
@@ -284,7 +296,7 @@ def _coerce_lesson_thread(value: object) -> PersistedLessonThread | None:
 
     conversation = value.get("conversation", [])
     return {
-        "avatarProviderId": str(value.get("avatarProviderId") or "human-css-2d"),
+        "avatarProviderId": str(value.get("avatarProviderId") or "sage-svg-2d"),
         "conversation": [
             {
                 "id": str(item.get("id", "")),
@@ -295,6 +307,7 @@ def _coerce_lesson_thread(value: object) -> PersistedLessonThread | None:
             if isinstance(item, dict)
         ],
         "gradeBand": str(value.get("gradeBand") or "6-8"),
+        "lessonState": _coerce_lesson_state(value.get("lessonState")),
         "llmModel": str(value.get("llmModel") or "gemini-3-flash-preview"),
         "llmProvider": str(value.get("llmProvider") or "gemini"),
         "preference": str(value.get("preference") or ""),
@@ -306,6 +319,23 @@ def _coerce_lesson_thread(value: object) -> PersistedLessonThread | None:
         "transcript": str(value.get("transcript") or ""),
         "tutorText": str(value.get("tutorText") or ""),
         "version": int(value.get("version") or 1),
+    }
+
+
+def _coerce_lesson_state(value: object) -> LessonState | None:
+    if not isinstance(value, dict):
+        return None
+
+    program = value.get("program", [])
+    return {
+        "currentStepIndex": int(value.get("currentStepIndex") or 0),
+        "currentTask": str(value.get("currentTask") or ""),
+        "lastTutorAction": str(value.get("lastTutorAction") or ""),
+        "lessonId": int(value.get("lessonId") or 0),
+        "lessonTitle": str(value.get("lessonTitle") or ""),
+        "nextQuestion": str(value.get("nextQuestion") or ""),
+        "program": [str(item) for item in program] if isinstance(program, list) else [],
+        "startedFromCatalog": bool(value.get("startedFromCatalog")),
     }
 
 
@@ -348,6 +378,7 @@ def _clone_lesson_thread(thread: PersistedLessonThread) -> PersistedLessonThread
         "avatarProviderId": thread["avatarProviderId"],
         "conversation": [dict(item) for item in thread["conversation"]],
         "gradeBand": thread["gradeBand"],
+        "lessonState": _clone_lesson_state(thread.get("lessonState")),
         "llmModel": thread["llmModel"],
         "llmProvider": thread["llmProvider"],
         "preference": thread["preference"],
@@ -359,6 +390,22 @@ def _clone_lesson_thread(thread: PersistedLessonThread) -> PersistedLessonThread
         "transcript": thread["transcript"],
         "tutorText": thread["tutorText"],
         "version": thread["version"],
+    }
+
+
+def _clone_lesson_state(lesson_state: LessonState | None) -> LessonState | None:
+    if lesson_state is None:
+        return None
+
+    return {
+        "currentStepIndex": lesson_state.get("currentStepIndex", 0),
+        "currentTask": lesson_state.get("currentTask", ""),
+        "lastTutorAction": lesson_state.get("lastTutorAction", ""),
+        "lessonId": lesson_state.get("lessonId", 0),
+        "lessonTitle": lesson_state.get("lessonTitle", ""),
+        "nextQuestion": lesson_state.get("nextQuestion", ""),
+        "program": list(lesson_state.get("program", [])),
+        "startedFromCatalog": lesson_state.get("startedFromCatalog", False),
     }
 
 

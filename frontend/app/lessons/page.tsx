@@ -1,224 +1,108 @@
 "use client";
 
 import React, { useState } from "react";
-import { DashboardLayout } from "../../components/layout";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
-type Filter = "all" | "math" | "science" | "english";
-type Difficulty = "easy" | "medium" | "hard";
+import { DashboardLayout } from "../../components/layout";
+import { OptionPillRow } from "../../components/ui/OptionPillRow";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { filterLessonCatalog } from "../../lib/lesson_catalog";
+import { writeSessionPreferences } from "../../lib/session_preferences";
 
-const allLessons = [
-  {
-    id: 1,
-    title: "Introduction to Fractions",
-    subject: "math",
-    grade: "3-5",
-    difficulty: "easy" as Difficulty,
-    time: "15 min",
-    description: "Learn the basics of fractions with visual examples.",
-  },
-  {
-    id: 2,
-    title: "Basic Algebra",
-    subject: "math",
-    grade: "6-8",
-    difficulty: "medium" as Difficulty,
-    time: "20 min",
-    description: "Solve for x and understand algebraic expressions.",
-  },
-  {
-    id: 3,
-    title: "Geometry Fundamentals",
-    subject: "math",
-    grade: "3-5",
-    difficulty: "easy" as Difficulty,
-    time: "18 min",
-    description: "Shapes, angles, and perimeter explained simply.",
-  },
-  {
-    id: 4,
-    title: "Advanced Calculus",
-    subject: "math",
-    grade: "9-12",
-    difficulty: "hard" as Difficulty,
-    time: "30 min",
-    description: "Derivatives and integrals made understandable.",
-  },
-  {
-    id: 5,
-    title: "Multiplication Master",
-    subject: "math",
-    grade: "3-5",
-    difficulty: "easy" as Difficulty,
-    time: "12 min",
-    description: "Master your times tables with fun practice.",
-  },
-  {
-    id: 6,
-    title: "Division Challenge",
-    subject: "math",
-    grade: "3-5",
-    difficulty: "medium" as Difficulty,
-    time: "15 min",
-    description: "Long division made easy with step-by-step guidance.",
-  },
-  {
-    id: 7,
-    title: "Plant Biology Basics",
-    subject: "science",
-    grade: "6-8",
-    difficulty: "easy" as Difficulty,
-    time: "20 min",
-    description: "Learn how plants grow and make their food.",
-  },
-  {
-    id: 8,
-    title: "Chemistry: Atoms",
-    subject: "science",
-    grade: "9-12",
-    difficulty: "medium" as Difficulty,
-    time: "25 min",
-    description: "Understanding the building blocks of matter.",
-  },
-];
+const GRADE_OPTIONS = ["All", "K-2", "3-5", "6-8", "9-12"];
+
+function mapLessonGradeToPreference(grade: string) {
+  if (grade === "9-12") {
+    return "11-12";
+  }
+
+  if (grade === "K-2" || grade === "3-5") {
+    return "6-8";
+  }
+
+  return grade;
+}
 
 export default function LessonsPage() {
-  const [activeFilter, setActiveFilter] = useState<Filter>("all");
-  const [activeDifficulty, setActiveDifficulty] = useState<Difficulty | "all">("all");
-
-  const filteredLessons = allLessons.filter((lesson) => {
-    if (activeFilter !== "all" && lesson.subject !== activeFilter) return false;
-    if (activeDifficulty !== "all" && lesson.difficulty !== activeDifficulty) return false;
-    return true;
-  });
+  const searchParams = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
+  const [activeGrade, setActiveGrade] = useState("All");
+  const lessons = filterLessonCatalog({ activeGrade, query });
 
   return (
     <DashboardLayout>
-      <div style={{ padding: 0 }}>
-        {/* Page Header */}
-        <div style={{ marginBottom: "32px" }}>
-          <h1 style={{ fontSize: "1.8rem", fontWeight: 700, marginBottom: "8px" }}>
-            Lessons
-          </h1>
-          <p style={{ color: "var(--ink-dim)" }}>
-            Browse lessons by subject and difficulty level
-          </p>
-        </div>
+      <div className="page-shell">
+        <PageHeader
+          subtitle="Browse, filter, and jump straight into a tutor-guided lesson."
+          title="Lessons"
+        />
 
-        {/* Filters */}
-        <div className="lessons-page__filters">
-          <button
-            className={`filter-chip ${activeFilter === "all" ? "filter-chip--active" : ""}`}
-            onClick={() => setActiveFilter("all")}
-          >
-            All Subjects
-          </button>
-          <button
-            className={`filter-chip ${activeFilter === "math" ? "filter-chip--active" : ""}`}
-            onClick={() => setActiveFilter("math")}
-          >
-            Math
-          </button>
-          <button
-            className={`filter-chip ${activeFilter === "science" ? "filter-chip--active" : ""}`}
-            onClick={() => setActiveFilter("science")}
-          >
-            Science
-          </button>
-          <button
-            className={`filter-chip ${activeFilter === "english" ? "filter-chip--active" : ""}`}
-            onClick={() => setActiveFilter("english")}
-          >
-            English
-          </button>
-        </div>
+        <SurfaceHeader />
 
-        <div className="lessons-page__filters">
-          <span style={{ color: "var(--ink-dim)", fontSize: "0.9rem", marginRight: "12px" }}>
-            Difficulty:
-          </span>
-          <button
-            className={`filter-chip ${activeDifficulty === "all" ? "filter-chip--active" : ""}`}
-            onClick={() => setActiveDifficulty("all")}
-          >
-            All
-          </button>
-          <button
-            className={`filter-chip ${activeDifficulty === "easy" ? "filter-chip--active" : ""}`}
-            onClick={() => setActiveDifficulty("easy")}
-          >
-            Easy
-          </button>
-          <button
-            className={`filter-chip ${activeDifficulty === "medium" ? "filter-chip--active" : ""}`}
-            onClick={() => setActiveDifficulty("medium")}
-          >
-            Medium
-          </button>
-          <button
-            className={`filter-chip ${activeDifficulty === "hard" ? "filter-chip--active" : ""}`}
-            onClick={() => setActiveDifficulty("hard")}
-          >
-            Hard
-          </button>
-        </div>
+        <OptionPillRow
+          activeValue={activeGrade}
+          ariaLabel="Lesson grade filters"
+          onSelect={setActiveGrade}
+          options={GRADE_OPTIONS.map((grade) => ({ label: grade, value: grade }))}
+        />
 
-        {/* Results */}
-        <p style={{ color: "var(--ink-dim)", fontSize: "0.9rem", margin: "16px 0" }}>
-          Showing {filteredLessons.length} lesson{filteredLessons.length !== 1 ? "s" : ""}
-        </p>
-
-        {/* Lessons Grid */}
         <div className="lessons-grid">
-          {filteredLessons.map((lesson) => (
+          {lessons.map((lesson) => (
             <Link
-              key={lesson.id}
-              href={`/session?lesson=${lesson.id}`}
               className="lesson-card"
-              style={{ textDecoration: "none", color: "inherit" }}
+              href={`/session?lesson=${lesson.id}`}
+              key={lesson.id}
+              onClick={() => {
+                writeSessionPreferences({
+                  gradeBand: mapLessonGradeToPreference(lesson.grade),
+                  subject: lesson.subject.toLowerCase() === "fractions" || lesson.subject.toLowerCase() === "geometry"
+                    ? "math"
+                    : "math",
+                });
+              }}
             >
               <div className="lesson-card__header">
-                <span className="lesson-card__subject">
-                  {lesson.subject.charAt(0).toUpperCase() + lesson.subject.slice(1)}
-                </span>
-                <span
-                  className={`lesson-card__difficulty lesson-card__difficulty--${lesson.difficulty}`}
-                >
-                  {lesson.difficulty}
+                <span className="lesson-card__subject">{lesson.grade}</span>
+                <span className={`lesson-card__difficulty lesson-card__difficulty--${lesson.level === "Beginner" ? "easy" : lesson.level === "Intermediate" ? "medium" : "hard"}`}>
+                  {lesson.level}
                 </span>
               </div>
+              <div className="row-card__icon" style={{ marginBottom: "18px" }}>{lesson.symbol}</div>
               <h3 className="lesson-card__title">{lesson.title}</h3>
-              <p style={{ color: "var(--ink-dim)", fontSize: "0.9rem", lineHeight: 1.5, marginBottom: "12px" }}>
-                {lesson.description}
-              </p>
+              <p className="row-card__copy">{lesson.description}</p>
               <div className="lesson-card__meta">
-                <span>Grade {lesson.grade}</span>
-                <span>• {lesson.time}</span>
+                <span>{lesson.subject}</span>
+                <span>{lesson.duration}</span>
               </div>
             </Link>
           ))}
         </div>
 
-        {filteredLessons.length === 0 && (
-          <div
-            style={{
-              textAlign: "center",
-              padding: "60px 20px",
-              color: "var(--ink-dim)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "48px",
-                marginBottom: "16px",
-              }}
-            >
-              📚
-            </div>
-            <p>No lessons match your filters. Try selecting different options.</p>
+        {lessons.length === 0 ? (
+          <div className="surface-card">
+            <div className="section-title">No lessons found</div>
+            <p className="section-copy">Try a different query or switch grade bands.</p>
           </div>
-        )}
+        ) : null}
       </div>
     </DashboardLayout>
   );
+
+  function SurfaceHeader() {
+    return (
+      <div className="surface-card">
+        <div className="field">
+          <span>Search lessons</span>
+          <input
+            aria-label="Search lessons"
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Addition, fractions, algebra..."
+            type="search"
+            value={query}
+          />
+        </div>
+      </div>
+    );
+  }
 }

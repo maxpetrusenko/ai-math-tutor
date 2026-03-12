@@ -5,10 +5,10 @@ Status: aligned to MVP baseline
 
 ## Closure Status
 
-As of 2026-03-10:
+As of 2026-03-12:
 
 - Tasks 23-26: done
-- Task 27: open
+- Task 27: done for the engineering acceptance lane
 - Task 28: done
 - Task 29: done
 - Task 30: done

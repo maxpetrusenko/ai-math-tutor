@@ -69,6 +69,7 @@ Do not commit them.
 Minimum expectation:
 
 - provider API keys
+- `OPENAI_API_KEY` for the default hosted realtime session path
 - `NERDY_STT_PROVIDER`
 - `NERDY_LLM_PROVIDER`
 - `NERDY_RUNTIME_LLM_PROVIDER`
@@ -76,6 +77,8 @@ Minimum expectation:
 - `NERDY_RUNTIME_LLM_FALLBACK_PROVIDER`
 - `NERDY_TTS_PROVIDER`
 - any runtime flags you need in hosted mode
+
+The rollout script now fails before deploy if the backend env is missing the keys required by the configured providers or the default hosted OpenAI Realtime path.
 
 Do not set these in the file; the rollout script injects them:
 

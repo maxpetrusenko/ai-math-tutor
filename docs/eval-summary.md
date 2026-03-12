@@ -1,32 +1,31 @@
 # Multi-Turn Eval Summary
 
-This report captures the locked multi-turn lesson fixtures used for the demo pack and reviewer handoff.
+This report scores the locked multi-turn lesson fixtures used for demo prep and reviewer handoff.
 
 ## Fixture Scorecard
 
 | Fixture | Subject | Concept | Grade Band | Avatar | Socratic quality | Follow-up continuity | Grade fit | Lesson arc | Correction style |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| `english_subject_verb.json` | english | subject-verb agreement | 6-8 | `robot-css-2d` | 5 | 5 | 4 | 5 | 5 |
-| `math-linear-equations.json` | math | linear equations | 6-8 | `human-css-2d` | 4 | 5 | 5 | 5 | 5 |
-| `science_photosynthesis.json` | science | photosynthesis basics | 6-8 | `human-threejs-3d` | 3 | 5 | 4 | 5 | 5 |
+| `english_subject_verb.json` | english | subject-verb agreement | 11-12 | `human-css-2d` | 5 | 5 | 4 | 5 | 5 |
+| `math-linear-equations.json` | math | linear equations | 6-8 | `human-css-2d` | 5 | 5 | 5 | 5 | 5 |
+| `science_photosynthesis.json` | science | photosynthesis basics | 9-10 | `human-css-2d` | 5 | 5 | 4 | 5 | 5 |
 
 ## Locked Demo Notes
 
 - Transport mode stays `fixture` for repeatable rehearsal and browser smoke.
 - Demo-safe presets stay inside the frozen set: `human-css-2d`, `robot-css-2d`, `human-threejs-3d`.
-- Each lesson arc shows diagnose -> guide/practice -> verify/reflect progression.
+- All three fixtures maintain a diagnose -> guide/practice -> verify/reflect lesson arc.
+- All three fixtures score `4+ / 5` on every rubric dimension; two score perfect `5 / 5` for Socratic quality and follow-up continuity.
 
 ## Score Dimensions
 
-- `Socratic quality` tracks question-led tutoring and encouragement.
-- `Follow-up continuity` tracks whether the tutor keeps building on the same concept across turns.
-- `Grade fit` tracks age-appropriate language.
-- `Lesson arc` tracks progression from confusion to understanding.
-- `Correction style` rewards gentle redirects and penalizes blurting the answer.
-
-Topic-shift handling is a required manual regression check even though it is not part of the current scorecard.
+- `Socratic quality` is scored on the current 1-5 rubric in `eval/socratic_checks.py`.
+- `Follow-up continuity` is scored on the current 1-5 rubric in `eval/socratic_checks.py`.
+- `Grade fit` is scored on the current 1-5 rubric in `eval/socratic_checks.py`.
+- `Lesson arc` is scored on the current 1-5 rubric in `eval/socratic_checks.py`.
+- `Correction style` is scored on the current 1-5 rubric in `eval/socratic_checks.py`.
 
 ## Remaining Dependency
 
-Task 27 remains the only missing live-proof dependency.
-The pedagogy pack, demo lock, and acceptance evidence are ready for handoff; live benchmark links still land separately.
+The runtime benchmark now closes the hard latency gate on the shipped fast path.
+The public-provider bakeoff remains a comparison lane, not the primary acceptance lane.

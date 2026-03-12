@@ -29,4 +29,4 @@ def test_multi_turn_report_markdown_mentions_fixtures_and_score_dimensions() -> 
     assert "Socratic quality" in report
     assert "Follow-up continuity" in report
     assert "Lesson arc" in report
-    assert "Task 27 remains the only missing live-proof dependency." in report
+    assert "runtime benchmark now closes the hard latency gate" in report

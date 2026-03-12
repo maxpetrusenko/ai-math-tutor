@@ -88,6 +88,58 @@ test("audio player prefers provider audio bytes over speech synthesis", async ()
   expect(speak).not.toHaveBeenCalled();
 });
 
+test("audio player falls back to speech synthesis when provider audio playback is rejected", async () => {
+  const play = vi.fn().mockRejectedValue(new Error("autoplay blocked"));
+  const pause = vi.fn();
+  const audioInstance = {
+    onended: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    onplaying: null as (() => void) | null,
+    play,
+    pause,
+    volume: 1,
+  };
+  const speak = vi.fn();
+  const cancel = vi.fn();
+
+  vi.stubGlobal("Audio", vi.fn(() => audioInstance));
+  vi.stubGlobal("speechSynthesis", { speak, cancel });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class SpeechSynthesisUtterance {
+      text: string;
+
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+  );
+
+  const controller = new PlaybackController();
+  render(<AudioPlayer controller={controller} />);
+
+  await act(async () => {
+    controller.enqueue({
+      id: "a",
+      text: "hello from fallback",
+      audioBase64: "YQ==",
+      durationMs: 200,
+    });
+    await Promise.resolve();
+  });
+
+  expect(play).toHaveBeenCalledTimes(1);
+  expect(speak).toHaveBeenCalledTimes(1);
+  expect(speak.mock.calls[0]?.[0]?.text).toBe("hello from fallback");
+
+  await act(async () => {
+    speak.mock.calls[0]?.[0]?.onend?.();
+    await Promise.resolve();
+  });
+
+  expect(screen.getByText("idle")).toBeInTheDocument();
+});
+
 test("provider audio does not auto-complete from the fallback text timer", async () => {
   vi.useFakeTimers();
   const play = vi.fn().mockResolvedValue(undefined);

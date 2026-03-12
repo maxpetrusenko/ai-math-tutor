@@ -23,7 +23,7 @@
       "turn_goal": "guide",
       "student_utterance": "I know plants need sunlight and water",
       "student_outcome": "partial",
-      "tutor_response": "That's right. What else do plants take in from the air?",
+      "tutor_response": "Good thinking. What else do plants take in from the air?",
       "rubric_hooks": ["encouragement", "builds-on-prior", "introduces-co2"]
     },
     {
@@ -47,7 +47,7 @@
       "turn_goal": "reflect",
       "student_utterance": "Energy to turn CO2 and water into glucose and oxygen",
       "student_outcome": "correct",
-      "tutor_response": "You've got it. Sunlight provides the energy for the whole process.",
+      "tutor_response": "You got it. If sunlight provides the energy, what ingredients does it help turn into glucose and oxygen?",
       "rubric_hooks": ["confirms-understanding", "summarizes-process", "positive-closure"]
     }
   ],

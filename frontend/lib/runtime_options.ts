@@ -1,15 +1,19 @@
 export const OPENAI_REALTIME_PROVIDER = "openai-realtime";
 export const OPENAI_REALTIME_MODEL = "gpt-realtime-mini";
+export const DEFAULT_SOCKET_LLM_PROVIDER = "gemini";
+export const DEFAULT_SOCKET_LLM_MODEL = "gemini-3-flash-preview";
+export const DEFAULT_SOCKET_TTS_PROVIDER = "cartesia";
+export const DEFAULT_SOCKET_TTS_MODEL = "sonic-2";
 export const OPENAI_PROVIDER = "openai";
 export const OPENAI_MODEL = "gpt-4.1-mini";
-export const FALLBACK_LLM_PROVIDER = OPENAI_PROVIDER;
-export const FALLBACK_LLM_MODEL = OPENAI_MODEL;
-export const FALLBACK_TTS_PROVIDER = "cartesia";
-export const FALLBACK_TTS_MODEL = "sonic-2";
-export const DEFAULT_LLM_PROVIDER = OPENAI_REALTIME_PROVIDER;
-export const DEFAULT_LLM_MODEL = OPENAI_REALTIME_MODEL;
-export const DEFAULT_TTS_PROVIDER = OPENAI_REALTIME_PROVIDER;
-export const DEFAULT_TTS_MODEL = OPENAI_REALTIME_MODEL;
+export const FALLBACK_LLM_PROVIDER = DEFAULT_SOCKET_LLM_PROVIDER;
+export const FALLBACK_LLM_MODEL = DEFAULT_SOCKET_LLM_MODEL;
+export const FALLBACK_TTS_PROVIDER = DEFAULT_SOCKET_TTS_PROVIDER;
+export const FALLBACK_TTS_MODEL = DEFAULT_SOCKET_TTS_MODEL;
+export const DEFAULT_LLM_PROVIDER = DEFAULT_SOCKET_LLM_PROVIDER;
+export const DEFAULT_LLM_MODEL = DEFAULT_SOCKET_LLM_MODEL;
+export const DEFAULT_TTS_PROVIDER = DEFAULT_SOCKET_TTS_PROVIDER;
+export const DEFAULT_TTS_MODEL = DEFAULT_SOCKET_TTS_MODEL;
 
 export const RUNTIME_OPTIONS = {
   llm: {
@@ -38,6 +42,21 @@ export const RUNTIME_OPTIONS = {
     ],
   },
 } as const;
+
+export const UPCOMING_PROVIDER_INTEGRATIONS = [
+  {
+    id: "simpy",
+    description: "Conversation orchestration and richer teaching flows.",
+    kind: "workflow",
+    label: "Simpy",
+  },
+  {
+    id: "heygen",
+    description: "High-fidelity talking avatar outputs for future tutor surfaces.",
+    kind: "avatar",
+    label: "HeyGen",
+  },
+] as const;
 
 export type LlmProviderId = keyof typeof RUNTIME_OPTIONS.llm;
 export type TtsProviderId = keyof typeof RUNTIME_OPTIONS.tts;

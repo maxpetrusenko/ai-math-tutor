@@ -4,7 +4,7 @@ This note freezes the cheap, demo-safe rules for avatar work in the MVP tree.
 
 ## Default Policy
 
-- Local CSS and local Three.js presets are the default for all day-to-day avatar work.
+- Local CSS, local SVG, and local Three.js presets are the default for all day-to-day avatar work.
 - Fixture transport is the default for browser smoke, UI polish, and demo rehearsal.
 - Premium avatar vendors stay out of the main session path unless the task explicitly says bakeoff.
 
@@ -14,6 +14,10 @@ The repo currently ships only repo-original placeholders:
 
 | Preset | Render modes | Source | Demo-safe status |
 | --- | --- | --- | --- |
+| `sage` | `2d` | repo-original SVG | allowed |
+| `albert` | `2d` | repo-original SVG | allowed |
+| `nova` | `2d` | repo-original SVG | allowed |
+| `dex` | `2d` | repo-original SVG | allowed |
 | `banana` | `2d`, `3d` | repo-original | allowed |
 | `apple` | `2d`, `3d` | repo-original | allowed |
 | `human` | `2d`, `3d` | repo-original | allowed |
@@ -67,5 +71,6 @@ Outside those cases:
 ## Reviewer Notes
 
 - The MVP demo is built to run without any premium avatar dependency.
+- The local SVG tutors are repo-original characters wired into the `svg-2d` provider lane.
 - The “inspired” presets are intentionally original lookalikes, not branded character reproductions.
 - If a future asset source enters the repo, update this file, `docs/cost-performance.md`, and `frontend/public/avatars/ATTRIBUTION.md` in the same change.

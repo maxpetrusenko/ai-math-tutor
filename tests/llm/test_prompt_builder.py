@@ -30,3 +30,22 @@ def test_build_tutor_messages_includes_student_preferences() -> None:
 
     assert "pacing: slow" in messages[0]["content"].lower()
     assert "use concrete examples" in messages[0]["content"].lower()
+
+
+def test_build_tutor_messages_includes_avatar_persona_separately() -> None:
+    messages = build_tutor_messages(
+        subject="math",
+        grade_band="6-8",
+        latest_student_text="Can you help me factor this?",
+        history=[],
+        student_profile={
+            "avatarLabel": "Nova",
+            "avatarPersona": "Sound playful and hint-first.",
+            "preference": "celebrate small wins",
+        },
+    )
+
+    content = messages[0]["content"]
+    assert "On-screen tutor persona: Nova" in content
+    assert "Sound playful and hint-first." in content
+    assert "preference: celebrate small wins" in content

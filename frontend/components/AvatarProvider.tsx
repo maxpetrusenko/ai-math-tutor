@@ -3,7 +3,8 @@
 import React from "react";
 import dynamic from "next/dynamic";
 import { AvatarRenderer } from "./AvatarRenderer";
-import { resolveAvatarProvider } from "./avatar_registry";
+import { AvatarSvgRenderer } from "./AvatarSvgRenderer";
+import { resolveAvatarProvider, resolveAvatarProviderId } from "./avatar_registry";
 import {
   loadAvatarAsset,
   type Avatar2DAsset,
@@ -26,6 +27,32 @@ const Avatar3D = dynamic(() => import("./Avatar3D").then((m) => ({ default: m.Av
   ),
 });
 
+type Avatar3DLoadBoundaryProps = {
+  children: React.ReactNode;
+  fallback: React.ReactNode;
+};
+
+type Avatar3DLoadBoundaryState = {
+  hasError: boolean;
+};
+
+class Avatar3DLoadBoundary extends React.Component<Avatar3DLoadBoundaryProps, Avatar3DLoadBoundaryState> {
+  state: Avatar3DLoadBoundaryState = {
+    hasError: false,
+  };
+
+  static getDerivedStateFromError(): Avatar3DLoadBoundaryState {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+
 type AvatarProviderProps = {
   avatarId?: string;
   config?: AvatarConfig;
@@ -36,7 +63,7 @@ type AvatarProviderProps = {
   subtitle?: string;
   timestamps: WordTimestamp[];
   nowMs: number;
-  variant?: "panel" | "hero";
+  variant?: "panel" | "hero" | "gallery";
 };
 
 export function AvatarProvider({
@@ -52,9 +79,63 @@ export function AvatarProvider({
   variant = "panel",
 }: AvatarProviderProps) {
   const signal: AvatarSignal = { energy, nowMs, state, timestamps };
-  const avatarOption = resolveAvatarProvider(avatarId);
+  const resolvedAvatarId = avatarId ?? (config ? resolveAvatarProviderId(config) : undefined);
+  const avatarOption = resolveAvatarProvider(resolvedAvatarId);
   const avatarConfig: AvatarConfig = config ?? avatarOption.config;
+  const frame = buildAvatarFrame(signal);
+
+  if (avatarConfig.type === "video" || avatarOption.kind === "managed") {
+    return (
+      <div className={`avatar-surface avatar-surface--managed avatar-surface--${variant}`} data-testid="avatar-surface-managed">
+        <div className="avatar avatar--managed">
+          <div className="avatar__managed-card">
+            <div className="avatar__managed-chip">{avatarOption.label}</div>
+            <div className="avatar__managed-provider">{avatarConfig.provider}</div>
+            <div className="avatar__managed-copy">
+              Remote LiveKit avatar.
+            </div>
+            {subtitle ? (
+              <div className="avatar__subtitle" data-testid="avatar-subtitle">
+                {subtitle}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (avatarConfig.provider === "svg") {
+    return (
+      <AvatarSvgRenderer
+        assetRef={avatarConfig.assetRef}
+        controls={variant === "hero" || variant === "gallery" ? null : controls}
+        frame={frame}
+        historyToggle={variant === "hero" || variant === "gallery" ? null : historyToggle}
+        subtitle={subtitle}
+        title={variant === "panel" ? avatarOption.label : ""}
+        variant={variant}
+      />
+    );
+  }
+
   const avatarAsset = loadAvatarAsset(avatarConfig);
+
+  const avatar2DAsset = (
+    avatarAsset.mode === "2d" ? avatarAsset : loadAvatarAsset({ type: "2d", assetRef: avatarConfig.assetRef ?? "human" })
+  ) as Avatar2DAsset;
+
+  const avatar2DFallback = (
+    <AvatarRenderer
+      asset={avatar2DAsset}
+      controls={variant === "hero" || variant === "gallery" ? null : controls}
+      frame={frame}
+      historyToggle={variant === "hero" || variant === "gallery" ? null : historyToggle}
+      subtitle={subtitle}
+      title={variant === "panel" ? avatarOption.label : ""}
+      variant={variant}
+    />
+  );
 
   if (avatarConfig.type === "3d") {
     const avatar3DAsset = (
@@ -75,38 +156,30 @@ export function AvatarProvider({
           </div>
         )}
         <div className="avatar avatar--three">
-          <Avatar3D
-            asset={avatar3DAsset}
-            config={avatarConfig}
-            state={mappedState}
-            timestamps={timestamps}
-            nowMs={nowMs}
-            energy={energy}
-          />
-          {subtitle ? (
-            <div className="avatar__subtitle" data-testid="avatar-subtitle">
-              {subtitle}
-            </div>
-          ) : null}
+          <Avatar3DLoadBoundary
+            key={`${avatarConfig.assetRef ?? "default"}:${avatarConfig.model_url ?? "local"}`}
+            fallback={avatar2DFallback}
+          >
+            <>
+              <Avatar3D
+                asset={avatar3DAsset}
+                config={avatarConfig}
+                state={mappedState}
+                timestamps={timestamps}
+                nowMs={nowMs}
+                energy={energy}
+              />
+              {subtitle ? (
+                <div className="avatar__subtitle" data-testid="avatar-subtitle">
+                  {subtitle}
+                </div>
+              ) : null}
+            </>
+          </Avatar3DLoadBoundary>
         </div>
       </div>
     );
   }
 
-  // Fall back to 2D CSS avatar
-  const avatar2DAsset = (
-    avatarAsset.mode === "2d" ? avatarAsset : loadAvatarAsset({ type: "2d", assetRef: "human" })
-  ) as Avatar2DAsset;
-
-  return (
-    <AvatarRenderer
-      asset={avatar2DAsset}
-      controls={variant === "hero" ? null : controls}
-      frame={buildAvatarFrame(signal)}
-      historyToggle={variant === "hero" ? null : historyToggle}
-      subtitle={subtitle}
-      title={variant === "hero" ? "" : avatarOption.label}
-      variant={variant}
-    />
-  );
+  return avatar2DFallback;
 }

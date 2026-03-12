@@ -1,45 +1,57 @@
 import { expect, test } from "@playwright/test";
 
 test("new lesson clears transcript, reply, and conversation history", async ({ page }) => {
-  await page.goto("/");
+  const prompt = `Custom lesson prompt ${Date.now()}`;
 
-  await page.getByLabel("Student prompt").fill("Custom lesson prompt");
-  await page.getByRole("button", { name: "Send Text Turn" }).click();
+  await page.addInitScript(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  });
+  await page.goto("/session");
 
-  await page.getByRole("button", { name: "Show history" }).click();
-  await expect(page.getByText("Turn 1")).toBeVisible();
-  await expect(page.getByTestId("conversation-history-panel").getByText("Custom lesson prompt")).toBeVisible();
+  await page.getByLabel("Student prompt").fill(prompt);
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await page.getByRole("button", { name: "Toggle history" }).click();
+  await expect(page.getByTestId("conversation-history-panel").getByText(prompt)).toBeVisible();
+  await page.getByRole("button", { name: "Close history" }).click();
 
   await page.getByRole("button", { name: "New Lesson" }).click();
 
-  await expect(page.getByRole("button", { name: "Show history" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Toggle history" })).toBeVisible();
   await expect(page.getByLabel("Student prompt")).toHaveValue("");
-  await expect(page.getByLabel("Subject")).toHaveValue("math");
-  await expect(page.getByLabel("Grade band")).toHaveValue("6-8");
+  await expect(page.getByRole("heading", { name: "AI Tutor" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Show history" }).click();
-  await expect(page.getByText("Previous lessons (1)")).toBeVisible();
-  await page.getByRole("button", { name: "Custom lesson prompt" }).click();
+  await page.getByRole("button", { name: "Toggle history" }).click();
+  await expect(page.getByRole("heading", { name: "Previous lessons" })).toBeVisible();
+  const archivedLessonButton = page.getByTestId(/^resume-lesson-/).first();
+  await expect(archivedLessonButton).toBeVisible();
+  await archivedLessonButton.click();
 
-  await page.getByRole("button", { name: "Show history" }).click();
-  await expect(page.getByText("Turn 1")).toBeVisible();
-  await expect(page.getByLabel("Student prompt")).toHaveValue("Custom lesson prompt");
+  await page.getByRole("button", { name: "Toggle history" }).click();
+  await expect(page.getByLabel("Student prompt")).toHaveValue(prompt);
 });
 
 test("lesson thread stays visible after a page reload", async ({ page }) => {
-  await page.goto("/");
+  await page.addInitScript(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  });
+  await page.goto("/session");
 
   await page.getByLabel("Student prompt").fill("Persist this lesson");
-  await page.getByRole("button", { name: "Send Text Turn" }).click();
+  await page.getByRole("button", { name: "Send" }).click();
 
-  await page.getByRole("button", { name: "Show history" }).click();
-  await expect(page.getByText("Turn 1")).toBeVisible();
-  await expect(page.getByTestId("conversation-history-panel").getByText("Persist this lesson")).toBeVisible();
+  await page.getByRole("button", { name: "Toggle history" }).click();
+  await expect(
+    page.getByTestId("conversation-history-panel").locator(".conversation-turn__student p").first()
+  ).toHaveText("Persist this lesson");
 
   await page.reload();
 
   await expect(page.getByLabel("Student prompt")).toHaveValue("Persist this lesson");
-  await page.getByRole("button", { name: "Show history" }).click();
-  await expect(page.getByText("Turn 1")).toBeVisible();
-  await expect(page.getByTestId("conversation-history-panel").getByText("Persist this lesson")).toBeVisible();
+  await page.getByRole("button", { name: "Toggle history" }).click();
+  await expect(
+    page.getByTestId("conversation-history-panel").locator(".conversation-turn__student p").first()
+  ).toHaveText("Persist this lesson");
 });

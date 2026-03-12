@@ -35,7 +35,7 @@ class BenchmarkOutcome:
 
 
 PipelineFn = Callable[[str, int], LatencyTracker]
-BenchmarkMode = Literal["fixture", "live"]
+BenchmarkMode = Literal["fixture", "live", "runtime"]
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -249,9 +249,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run or analyze latency benchmarks.")
     parser.add_argument(
         "--mode",
-        choices=("fixture", "live"),
+        choices=("fixture", "live", "runtime"),
         default="fixture",
-        help="fixture runs the built-in deterministic harness; live analyzes recorded event logs.",
+        help="fixture runs the deterministic harness; live uses the public provider stack; runtime benchmarks the shipped fast runtime stack.",
     )
     parser.add_argument(
         "--prompts",
@@ -279,6 +279,13 @@ def main(argv: list[str] | None = None) -> int:
                 args.prompts,
                 runs_per_prompt=args.runs_per_prompt,
             )
+    elif args.mode == "runtime":
+        from backend.benchmarks.runtime_fast_benchmark import run_runtime_fast_benchmark
+
+        outcome = run_runtime_fast_benchmark(
+            args.prompts,
+            runs_per_prompt=args.runs_per_prompt,
+        )
     else:
         outcome = run_benchmark(
             args.prompts,

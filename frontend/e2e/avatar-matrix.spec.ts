@@ -8,17 +8,25 @@ const avatarCases = [
 ] as const;
 
 test("avatar matrix covers local presets across both render modes", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/avatar");
 
   for (const avatarCase of avatarCases) {
-    await page.getByLabel("Render mode").selectOption(avatarCase.mode);
-    await page.getByLabel("Avatar").selectOption(avatarCase.value);
+    await page
+      .getByRole("button", { name: avatarCase.mode === "3d" ? "3D tutors" : "2D tutors" })
+      .click();
+    await page
+      .locator(".avatar-option")
+      .filter({
+        has: page.locator(".avatar-option__name", { hasText: new RegExp(`^${avatarCase.heading}$`, "i") }),
+      })
+      .first()
+      .click();
 
-    await expect(page.getByRole("heading", { name: avatarCase.heading }).first()).toBeVisible();
+    await expect(page.locator(".section-title")).toHaveText(avatarCase.heading);
     if (avatarCase.mode === "3d") {
-      await expect(page.getByTestId("avatar-surface-3d")).toBeVisible();
+      await expect(page.getByTestId("avatar-surface-3d").first()).toBeVisible();
     } else {
-      await expect(page.getByTestId("avatar-surface-2d")).toBeVisible();
+      await expect(page.getByTestId("avatar-surface-2d").first()).toBeVisible();
     }
   }
 });

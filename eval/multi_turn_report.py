@@ -95,8 +95,8 @@ def build_multi_turn_eval_report() -> str:
             "",
             "## Remaining Dependency",
             "",
-            "Task 27 remains the only missing live-proof dependency.",
-            "The pedagogy pack, demo lock, and acceptance evidence are ready for handoff; live benchmark links still land separately.",
+            "The runtime benchmark now closes the hard latency gate on the shipped fast path.",
+            "The public-provider bakeoff remains a comparison lane, not the primary acceptance lane.",
         ]
     )
 

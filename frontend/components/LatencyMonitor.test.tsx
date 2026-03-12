@@ -46,8 +46,8 @@ test("shows pending sync metrics when required events are missing", () => {
   expect(screen.getByText("missing: first_viseme, audio_done")).toBeInTheDocument();
 });
 
-test("shows unified realtime guidance when openai realtime is selected", () => {
-  render(
+test("hides the inline strip until a turn produces latency metrics", () => {
+  const { container } = render(
     <LatencyMonitor
       metrics={null}
       transport="openai-realtime"
@@ -55,6 +55,5 @@ test("shows unified realtime guidance when openai realtime is selected", () => {
     />
   );
 
-  expect(screen.getByText("OpenAI realtime")).toBeInTheDocument();
-  expect(screen.getByText("Unified speech path selected; run a turn for token and socket timing")).toBeInTheDocument();
+  expect(container).toBeEmptyDOMElement();
 });

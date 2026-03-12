@@ -1,23 +1,33 @@
 import { expect, test } from "@playwright/test";
 
 test("avatar provider switch keeps 2d default and allows opting into 3d", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/avatar");
 
-  await expect(page.getByRole("heading", { name: "Human" })).toBeVisible();
-  await expect(page.getByLabel("Render mode")).toHaveValue("2d");
-  await expect(page.getByLabel("Avatar")).toHaveValue("human-css-2d");
+  await expect(page.getByRole("heading", { name: "Choose Your Tutor" })).toBeVisible();
+  await expect(page.locator(".section-title")).toHaveText("Sage");
+  await expect(page.locator(".section-copy")).toContainText("Warm mentor who explains it clearly.");
 
-  await page.getByLabel("Render mode").selectOption("3d");
-  await page.getByLabel("Avatar").selectOption("human-threejs-3d");
+  await page.getByRole("button", { name: "3D tutors" }).click();
+  await page
+    .locator(".avatar-option")
+    .filter({
+      has: page.locator(".avatar-option__name", { hasText: /^Human 3D$/i }),
+    })
+    .first()
+    .click();
 
-  await expect(page.getByRole("heading", { name: "Human 3D" })).toBeVisible();
-  await expect(page.getByLabel("Render mode")).toHaveValue("3d");
-  await expect(page.getByLabel("Avatar")).toHaveValue("human-threejs-3d");
+  await expect(page.locator(".section-title")).toHaveText("Human 3D");
+  await expect(page.locator(".section-copy")).toContainText("Full-scene tutor for the most lifelike sessions.");
 
-  await page.getByLabel("Render mode").selectOption("2d");
-  await page.getByLabel("Avatar").selectOption("banana-css-2d");
+  await page.getByRole("button", { name: "2D tutors" }).click();
+  await page
+    .locator(".avatar-option")
+    .filter({
+      has: page.locator(".avatar-option__name", { hasText: /^Banana$/i }),
+    })
+    .first()
+    .click();
 
-  await expect(page.getByRole("heading", { name: "Banana" })).toBeVisible();
-  await expect(page.getByLabel("Render mode")).toHaveValue("2d");
-  await expect(page.getByLabel("Avatar")).toHaveValue("banana-css-2d");
+  await expect(page.locator(".section-title")).toHaveText("Banana");
+  await expect(page.locator(".section-copy")).toContainText("Bright and playful for warm-up practice.");
 });

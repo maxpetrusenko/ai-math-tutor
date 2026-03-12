@@ -46,6 +46,10 @@ export function LatencyMonitor({
     : "awaiting turn";
 
   if (variant === "inline") {
+    if (!metrics) {
+      return null;
+    }
+
     return (
       <div className="latency-strip" data-testid="latency-strip">
         <span>Latency</span>

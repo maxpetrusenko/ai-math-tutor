@@ -12,7 +12,7 @@ type AvatarRendererProps = {
   controls?: React.ReactNode;
   historyToggle?: React.ReactNode;
   subtitle?: string;
-  variant?: "panel" | "hero";
+  variant?: "panel" | "hero" | "gallery";
 };
 
 export function AvatarRenderer({
@@ -57,15 +57,15 @@ export function AvatarRenderer({
             />
           </div>
         </div>
-        {variant === "hero" ? null : <p className="avatar__caption">{frame.caption}</p>}
-        {subtitle ? <div className="avatar__subtitle" data-testid="avatar-subtitle">{subtitle}</div> : null}
+        {variant === "panel" ? <p className="avatar__caption">{frame.caption}</p> : null}
+        {subtitle && variant !== "gallery" ? <div className="avatar__subtitle" data-testid="avatar-subtitle">{subtitle}</div> : null}
       </div>
     </div>
   );
 
-  if (variant === "hero") {
+  if (variant === "hero" || variant === "gallery") {
     return (
-      <div className="avatar-surface avatar-surface--hero" data-testid="avatar-surface-2d" style={theme}>
+      <div className={`avatar-surface avatar-surface--${variant}`} data-testid="avatar-surface-2d" style={theme}>
         {avatarContent}
       </div>
     );

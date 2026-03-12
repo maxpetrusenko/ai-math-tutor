@@ -10,6 +10,19 @@ def disable_live_runtime(monkeypatch) -> None:
     monkeypatch.setenv("NERDY_DISABLE_LIVE_TTS", "1")
 
 
+def _read_turn_events(websocket) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+    while True:
+        event = websocket.receive_json()
+        events.append(event)
+        if event.get("type") == "tts.flush":
+            return events
+
+
+def _committed_reply(events: list[dict[str, object]]) -> str:
+    return " ".join(str(event["text"]) for event in events if event.get("type") == "tutor.text.committed").strip()
+
+
 def test_session_server_treats_clear_math_topic_shift_as_fresh_turn(monkeypatch) -> None:
     captured_calls: list[dict[str, object]] = []
 
@@ -52,7 +65,7 @@ def test_session_server_treats_clear_math_topic_shift_as_fresh_turn(monkeypatch)
                 "grade_band": "6-8",
             }
         )
-        first_events = [websocket.receive_json() for _ in range(8)]
+        first_events = _read_turn_events(websocket)
 
         websocket.send_json(
             {
@@ -61,10 +74,10 @@ def test_session_server_treats_clear_math_topic_shift_as_fresh_turn(monkeypatch)
                 "text": "1+1",
             }
         )
-        second_events = [websocket.receive_json() for _ in range(8)]
+        second_events = _read_turn_events(websocket)
 
-    first_reply = " ".join(event["text"] for event in first_events if event["type"] == "tutor.text.committed").strip()
-    second_reply = " ".join(event["text"] for event in second_events if event["type"] == "tutor.text.committed").strip()
+    first_reply = _committed_reply(first_events)
+    second_reply = _committed_reply(second_events)
 
     assert "x" in first_reply.lower()
     assert captured_calls[0]["history_length"] == 0

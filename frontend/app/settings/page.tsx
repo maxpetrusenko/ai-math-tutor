@@ -1,161 +1,176 @@
 "use client";
 
 import React, { useState } from "react";
-import { DashboardLayout } from "../../components/layout";
-import { useFirebaseAuth } from "../../lib/firebase_auth";
+import Link from "next/link";
 
-type SettingsPageProps = {};
+import { DashboardLayout } from "../../components/layout";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { SurfaceCard } from "../../components/ui/SurfaceCard";
+import { useFirebaseAuth } from "../../lib/firebase_auth";
+import { readSessionPreferences, writeSessionPreferences } from "../../lib/session_preferences";
 
 export default function SettingsPage() {
   const { signOutUser, user } = useFirebaseAuth();
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [notifications, setNotifications] = useState(true);
-  const [emailUpdates, setEmailUpdates] = useState(true);
-  const [soundEffects, setSoundEffects] = useState(true);
+  const [preferences, setPreferences] = useState(() => readSessionPreferences());
 
-  const handleSignOut = async () => {
-    await signOutUser();
-    window.location.href = "/";
+  const updatePreferences = (nextPreferences: Partial<typeof preferences>) => {
+    const saved = writeSessionPreferences({
+      ...preferences,
+      ...nextPreferences,
+    });
+    setPreferences(saved);
   };
 
   return (
     <DashboardLayout>
-      <div style={{ padding: 0 }}>
-        <div style={{ marginBottom: "32px" }}>
-          <h1 style={{ fontSize: "1.8rem", fontWeight: 700, marginBottom: "8px" }}>
-            Settings
-          </h1>
-          <p style={{ color: "var(--ink-dim)" }}>
-            Customize your learning experience
-          </p>
-        </div>
+      <div className="page-shell">
+        <PageHeader
+          subtitle="Customize reminders, sound, and language without touching runtime controls."
+          title="Settings"
+        />
 
-        {/* Appearance */}
-        <section className="settings-page__section">
-          <h2 className="settings-page__section-title">Appearance</h2>
+        <SurfaceCard>
+          <div className="section-title" style={{ marginBottom: "20px" }}>Preferences</div>
 
           <div className="settings-page__item">
             <div className="settings-page__item-info">
-              <h3>Theme</h3>
-              <p>Choose your preferred color scheme</p>
-            </div>
-            <div className="settings-page__item-control">
-              <button
-                style={{
-                  padding: "8px 16px",
-                  background: theme === "light" ? "var(--accent)" : "var(--bg-subtle)",
-                  color: theme === "light" ? "white" : "var(--ink)",
-                  border: "1px solid var(--line)",
-                  borderRadius: "8px",
-                  marginRight: "8px",
-                  cursor: "pointer",
-                }}
-                onClick={() => setTheme("light")}
-              >
-                Light
-              </button>
-              <button
-                style={{
-                  padding: "8px 16px",
-                  background: theme === "dark" ? "var(--accent)" : "var(--bg-subtle)",
-                  color: theme === "dark" ? "white" : "var(--ink)",
-                  border: "1px solid var(--line)",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                }}
-                onClick={() => setTheme("dark")}
-              >
-                Dark
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* Notifications */}
-        <section className="settings-page__section">
-          <h2 className="settings-page__section-title">Notifications</h2>
-
-          <div className="settings-page__item">
-            <div className="settings-page__item-info">
-              <h3>Push Notifications</h3>
-              <p>Get reminded about your learning schedule</p>
-            </div>
-            <div
-              className={`toggle-switch ${notifications ? "toggle-switch--active" : ""}`}
-              onClick={() => setNotifications(!notifications)}
-              style={{ cursor: "pointer" }}
-            />
-          </div>
-
-          <div className="settings-page__item">
-            <div className="settings-page__item-info">
-              <h3>Email Updates</h3>
-              <p>Weekly progress reports and tips</p>
-            </div>
-            <div
-              className={`toggle-switch ${emailUpdates ? "toggle-switch--active" : ""}`}
-              onClick={() => setEmailUpdates(!emailUpdates)}
-              style={{ cursor: "pointer" }}
-            />
-          </div>
-        </section>
-
-        {/* Sound & Speech */}
-        <section className="settings-page__section">
-          <h2 className="settings-page__section-title">Sound & Speech</h2>
-
-          <div className="settings-page__item">
-            <div className="settings-page__item-info">
-              <h3>Sound Effects</h3>
-              <p>Play sounds for interactions and achievements</p>
-            </div>
-            <div
-              className={`toggle-switch ${soundEffects ? "toggle-switch--active" : ""}`}
-              onClick={() => setSoundEffects(!soundEffects)}
-              style={{ cursor: "pointer" }}
-            />
-          </div>
-        </section>
-
-        {/* Account */}
-        <section className="settings-page__section">
-          <h2 className="settings-page__section-title">Account</h2>
-
-          <div className="settings-page__item">
-            <div className="settings-page__item-info">
-              <h3>Signed in as</h3>
-              <p>{user?.email}</p>
+              <h3>Push notifications</h3>
+              <p>Get gentle reminders to come back for practice.</p>
             </div>
             <button
-              onClick={handleSignOut}
-              style={{
-                padding: "10px 20px",
-                background: "transparent",
-                color: "var(--danger)",
-                border: "1px solid var(--line)",
-                borderRadius: "10px",
-                fontWeight: 500,
-                cursor: "pointer",
-              }}
+              aria-label="Toggle push notifications"
+              className={`settings-toggle${preferences.pushNotifications ? " settings-toggle--active" : ""}`}
+              onClick={() => updatePreferences({ pushNotifications: !preferences.pushNotifications })}
+              type="button"
+            />
+          </div>
+
+          <div className="settings-page__item">
+            <div className="settings-page__item-info">
+              <h3>Sound effects</h3>
+              <p>Play celebration sounds and small progress cues.</p>
+            </div>
+            <button
+              aria-label="Toggle sound effects"
+              className={`settings-toggle${preferences.soundEffects ? " settings-toggle--active" : ""}`}
+              onClick={() => updatePreferences({ soundEffects: !preferences.soundEffects })}
+              type="button"
+            />
+          </div>
+
+          <div className="settings-page__item">
+            <div className="settings-page__item-info">
+              <h3>Language</h3>
+              <p>Choose your preferred interface language.</p>
+            </div>
+            <div className="settings-page__item-control" style={{ minWidth: "180px" }}>
+              <select
+                aria-label="Interface language"
+                onChange={(event) => updatePreferences({ interfaceLanguage: event.target.value })}
+                value={preferences.interfaceLanguage}
+              >
+                <option value="en">English</option>
+                <option value="es">Espanol</option>
+                <option value="fr">Francais</option>
+              </select>
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard>
+          <div className="section-title" style={{ marginBottom: "20px" }}>Learning defaults</div>
+          <div className="field-grid">
+            <label className="field">
+              <span>Preferred subject</span>
+              <select
+                aria-label="Preferred subject"
+                onChange={(event) => updatePreferences({ subject: event.target.value })}
+                value={preferences.subject}
+              >
+                <option value="math">Math</option>
+                <option value="science">Science</option>
+                <option value="english">English</option>
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Grade band</span>
+              <select
+                aria-label="Preferred grade band"
+                onChange={(event) => updatePreferences({ gradeBand: event.target.value })}
+                value={preferences.gradeBand}
+              >
+                <option value="6-8">6-8</option>
+                <option value="9-10">9-10</option>
+                <option value="11-12">11-12</option>
+              </select>
+            </label>
+          </div>
+
+          <label className="field" style={{ marginTop: "16px" }}>
+            <span>Study style</span>
+            <textarea
+              aria-label="Study style preference"
+              onChange={(event) => updatePreferences({ preference: event.target.value })}
+              placeholder="Examples: more worked examples, slower pacing, ask me to explain my thinking"
+              value={preferences.preference}
+            />
+          </label>
+        </SurfaceCard>
+
+        <SurfaceCard className="surface-card--soft">
+          <div className="section-title" style={{ marginBottom: "16px" }}>Current setup</div>
+          <div className="info-list">
+            <div className="info-list__row">
+              <div className="info-list__label">Subject</div>
+              <div className="info-list__value">{preferences.subject.charAt(0).toUpperCase() + preferences.subject.slice(1)}</div>
+            </div>
+            <div className="info-list__row">
+              <div className="info-list__label">Grade band</div>
+              <div className="info-list__value">{preferences.gradeBand}</div>
+            </div>
+            <div className="info-list__row">
+              <div className="info-list__label">Language</div>
+              <div className="info-list__value">
+                {preferences.interfaceLanguage === "es"
+                  ? "Espanol"
+                  : preferences.interfaceLanguage === "fr"
+                    ? "Francais"
+                    : "English"}
+              </div>
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard>
+          <div className="section-title" style={{ marginBottom: "20px" }}>Account</div>
+          <div className="info-list">
+            <div className="info-list__row">
+              <div className="info-list__label">Signed in as</div>
+              <div className="info-list__value">{user?.email ?? "Guest mode"}</div>
+            </div>
+          </div>
+          <div className="pill-row" style={{ marginTop: "20px" }}>
+            <Link className="secondary-button" href="/profile">
+              Review profile
+            </Link>
+            <button
+              className="secondary-button"
+              onClick={() => void signOutUser().then(() => {
+                window.location.href = "/";
+              })}
+              type="button"
             >
-              Sign Out
+              Sign out
             </button>
           </div>
-        </section>
+        </SurfaceCard>
 
-        {/* Info */}
-        <div
-          style={{
-            padding: "20px",
-            background: "var(--bg-subtle)",
-            borderRadius: "16px",
-            textAlign: "center",
-          }}
-        >
-          <p style={{ color: "var(--ink-dim)", fontSize: "0.9rem", margin: 0 }}>
-            Nerdy v1.0.0 • Built with ❤️ for learners everywhere
-          </p>
-        </div>
+        <SurfaceCard className="surface-card--soft">
+          <div className="section-copy">
+            Runtime model defaults and avatar-specific controls live in Models and Avatars. Settings stays focused on the learner.
+          </div>
+        </SurfaceCard>
       </div>
     </DashboardLayout>
   );

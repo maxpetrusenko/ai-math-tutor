@@ -50,7 +50,7 @@ Responsibilities:
 - display transcript and latency panel
 - play streamed tutor audio
 - render avatar states through a provider shell
-- default to 2D CSS tutor visuals
+- default to 2D CSS tutor visuals, with repo-original 2D SVG tutors available behind the same lightweight provider lane
 - lazy-load Three.js only when the `3D Three.js` provider is selected
 - render mouth motion from timestamps and audio energy
 
@@ -106,7 +106,7 @@ Avatar states:
 6. commit manager promotes only safe text to playback
 7. selected TTS provider starts context and streams audio for committed text
 8. browser audio player starts playback
-9. avatar provider renders 2D by default or 3D on selection
+9. avatar provider renders 2D by default, with either CSS or SVG variants, or 3D on selection
 
 ## 7. Required Interfaces
 
@@ -205,7 +205,7 @@ Default avatar path should be:
 - simple to iterate
 - visually clear in `listening`, `thinking`, and `speaking`
 - driven by word timestamps plus energy smoothing
-- use the `2D CSS` provider by default
+- use the `2D CSS` provider by default; `2D SVG` stays in the same client-side low-latency path for richer tutor identities
 
 Optional avatar path:
 
