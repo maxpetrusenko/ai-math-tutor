@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.runtime.local_env import ENV_ALIASES
+from backend.livekit.avatar_bootstrap import collect_avatar_bootstrap_errors
 
 
 DEFAULT_REGION = "us-east4"
@@ -162,6 +163,11 @@ def collect_hosted_backend_env_errors(env_vars: dict[str, str]) -> list[str]:
         if required_keys is None:
             continue
         require_any(required_keys, reason=f"{env_key}={provider}")
+
+    for error in collect_avatar_bootstrap_errors("simli-b97a7777-live", env_vars):
+        if error not in seen_messages:
+            seen_messages.add(error)
+            errors.append(error)
 
     return errors
 
@@ -569,7 +575,12 @@ def rollout_frontend(
         "--project",
         project,
     ]
-    completed = run_command(args, cwd=frontend_root, check=False)
+    completed = run_command(
+        args,
+        cwd=frontend_root,
+        check=False,
+        input_text="y\n",
+    )
     if completed.returncode == 0:
         return
 

@@ -95,7 +95,14 @@ def test_collect_hosted_backend_env_errors_requires_openai_for_hosted_default() 
         }
     )
 
-    assert errors == ["OPENAI_API_KEY is required for the default hosted OpenAI Realtime session path."]
+    assert errors == [
+        "OPENAI_API_KEY is required for the default hosted OpenAI Realtime session path.",
+        "LIVEKIT_URL is required for managed avatar sessions.",
+        "LIVEKIT_API_KEY is required for managed avatar sessions.",
+        "LIVEKIT_API_SECRET is required for managed avatar sessions.",
+        "OPENAI_API_KEY is required for managed avatar sessions.",
+        "SIMLI_API_KEY is required for Simli avatar sessions.",
+    ]
 
 
 def test_collect_hosted_backend_env_errors_checks_provider_specific_keys() -> None:
@@ -114,6 +121,10 @@ def test_collect_hosted_backend_env_errors_checks_provider_specific_keys() -> No
         "CARTESIA_API_KEY is required for NERDY_TTS_PROVIDER=cartesia.",
         "ANTHROPIC_API_KEY is required for NERDY_LLM_PROVIDER=anthropic.",
         "MINIMAX_API_KEY or MINIMAX_SPEECH_API_KEY is required for NERDY_RUNTIME_LLM_FALLBACK_PROVIDER=minimax.",
+        "LIVEKIT_URL is required for managed avatar sessions.",
+        "LIVEKIT_API_KEY is required for managed avatar sessions.",
+        "LIVEKIT_API_SECRET is required for managed avatar sessions.",
+        "SIMLI_API_KEY is required for Simli avatar sessions.",
     ]
 
 
@@ -324,7 +335,7 @@ def test_rollout_frontend_deploys_local_apphosting_source(monkeypatch: pytest.Mo
         "demo-project",
     ]
     assert captured["cwd"] == tmp_path / "frontend"
-    assert captured["input_text"] is None
+    assert captured["input_text"] == "y\n"
     assert captured["check"] is False
 
 
