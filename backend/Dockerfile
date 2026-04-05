@@ -10,7 +10,10 @@ COPY pyproject.toml README.md /app/
 COPY backend /app/backend
 COPY eval /app/eval
 
-RUN pip install --no-cache-dir --upgrade pip \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir .
 
 EXPOSE 8080
