@@ -93,6 +93,11 @@ def _is_allowed_websocket_origin(origin: str | None) -> bool:
     return origin in allowed
 
 
+@app.get("/healthz")
+def get_healthz() -> dict[str, str]:
+    return {"service": "session", "status": "ok"}
+
+
 async def _authenticate_websocket(websocket: WebSocket) -> dict[str, object] | None:
     if not firebase_auth_required():
         return None

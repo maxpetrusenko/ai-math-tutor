@@ -1,6 +1,11 @@
 import { buildDashboardViewModel } from "./dashboard_view_model";
 import type { LearningAnalytics } from "./learning_analytics";
 import { DEFAULT_SESSION_PREFERENCES } from "./session_preferences";
+import { afterEach, vi } from "vitest";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 test("builds the learner-specific dashboard payload", () => {
   const model = buildDashboardViewModel({
@@ -19,6 +24,9 @@ test("builds the learner-specific dashboard payload", () => {
 });
 
 test("uses active lesson progress and archived resume items when learning data exists", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-03-12T12:00:00Z"));
+
   const model = buildDashboardViewModel({
     activeThread: {
       avatarProviderId: "sage-svg-2d",

@@ -1,8 +1,16 @@
 import { buildProfileViewModel } from "./profile_view_model";
 import type { LearningAnalytics } from "./learning_analytics";
 import { DEFAULT_SESSION_PREFERENCES } from "./session_preferences";
+import { afterEach, vi } from "vitest";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 test("builds an honest learner profile model from preferences and lesson progress", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-03-12T12:00:00Z"));
+
   const model = buildProfileViewModel({
     activeThread: {
       avatarProviderId: "sage-svg-2d",

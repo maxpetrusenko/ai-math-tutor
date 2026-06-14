@@ -37,6 +37,8 @@ const baseThread = {
   version: 1 as const,
 };
 
+const emptyStore = { activeThread: null, archive: [], version: 2 as const };
+
 beforeEach(async () => {
   vi.resetModules();
   doc.mockReset();
@@ -60,8 +62,8 @@ test("disables firebase lesson writes for the session after a blocked-by-client 
     resetFirebaseLessonTransportStateForTests,
   } = await import("./firebase_lessons");
 
-  await expect(saveFirebaseActiveLessonThread(baseThread, { activeThread: null, archive: [] })).resolves.toBeNull();
-  await expect(saveFirebaseActiveLessonThread(baseThread, { activeThread: null, archive: [] })).resolves.toBeNull();
+  await expect(saveFirebaseActiveLessonThread(baseThread, emptyStore)).resolves.toBeNull();
+  await expect(saveFirebaseActiveLessonThread(baseThread, emptyStore)).resolves.toBeNull();
 
   expect(setDoc).toHaveBeenCalledTimes(1);
 
