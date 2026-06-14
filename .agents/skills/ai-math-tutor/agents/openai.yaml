@@ -1,0 +1,6 @@
+interface:
+  display_name: "Ai Math Tutor"
+  short_description: "Repo-specific patterns and workflows for ai-math-tutor"
+  default_prompt: "Use the ai-math-tutor repo skill to follow existing architecture, testing, and workflow conventions."
+policy:
+  allow_implicit_invocation: true
