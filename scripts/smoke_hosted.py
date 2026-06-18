@@ -43,9 +43,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     frontend_url = args.frontend_url.rstrip("/")
-    frontend_status = _fetch_status(frontend_url)
+    frontend_health_url = f"{frontend_url}/healthz"
+    frontend_status = _fetch_status(frontend_health_url)
     if frontend_status != 200:
-        print(f"smoke: frontend returned {frontend_status} for {frontend_url}")
+        print(f"smoke: frontend healthz returned {frontend_status} for {frontend_health_url}")
         return 1
 
     runtime_status_code, runtime_status = _fetch_json(f"{frontend_url}/api/runtime/status")
