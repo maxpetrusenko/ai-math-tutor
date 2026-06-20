@@ -6,10 +6,13 @@ from typing import Any
 from urllib import error, parse, request
 
 
+SMOKE_REQUEST_TIMEOUT_SECONDS = 10
+
+
 def _fetch_json(url: str) -> tuple[int, dict[str, Any] | None]:
     req = request.Request(url, headers={"User-Agent": "nerdy-smoke/1.0"})
     try:
-        with request.urlopen(req) as response:
+        with request.urlopen(req, timeout=SMOKE_REQUEST_TIMEOUT_SECONDS) as response:
             payload = response.read().decode("utf-8")
             return response.getcode(), json.loads(payload) if payload else None
     except error.HTTPError as exc:
@@ -19,7 +22,7 @@ def _fetch_json(url: str) -> tuple[int, dict[str, Any] | None]:
 
 def _fetch_status(url: str) -> int:
     req = request.Request(url, headers={"User-Agent": "nerdy-smoke/1.0"})
-    with request.urlopen(req) as response:
+    with request.urlopen(req, timeout=SMOKE_REQUEST_TIMEOUT_SECONDS) as response:
         return response.getcode()
 
 
