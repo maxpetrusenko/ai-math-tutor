@@ -486,6 +486,11 @@ def deploy_session_backend(
     frontend_url: str,
     image_tag: str,
 ) -> tuple[str, str]:
+    env_vars = parse_env_file(target.backend_env_file)
+    env_errors = collect_hosted_backend_env_errors(env_vars)
+    if env_errors:
+        raise RuntimeError("Hosted backend env is invalid:\n" + "\n".join(env_errors))
+
     ensure_artifact_repository(
         project=target.firebase_project,
         region=target.region,
@@ -517,10 +522,6 @@ def deploy_session_backend(
         except FileNotFoundError:
             pass
 
-    env_vars = parse_env_file(target.backend_env_file)
-    env_errors = collect_hosted_backend_env_errors(env_vars)
-    if env_errors:
-        raise RuntimeError("Hosted backend env is invalid:\n" + "\n".join(env_errors))
     env_vars["NERDY_ALLOWED_ORIGINS"] = normalize_url(frontend_url)
     env_vars["NERDY_REQUIRE_FIREBASE_AUTH"] = "1"
     env_file_handle = write_env_json_file(env_vars)

@@ -8,11 +8,13 @@ from pathlib import Path
 import pytest
 
 from backend.runtime.hosted_rollout import (
+    DeployTarget,
     apphosting_backend_url,
     build_cloud_build_command,
     build_rollout_ref_args,
     build_run_deploy_command,
     collect_hosted_backend_env_errors,
+    deploy_session_backend,
     extract_cloud_build_id,
     extract_json_payload,
     parse_env_file,
@@ -126,6 +128,28 @@ def test_collect_hosted_backend_env_errors_checks_provider_specific_keys() -> No
         "LIVEKIT_API_SECRET is required for managed avatar sessions.",
         "SIMLI_API_KEY is required for Simli avatar sessions.",
     ]
+
+
+def test_deploy_session_backend_validates_env_before_cloud_build(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    env_file = tmp_path / "deploy.env"
+    env_file.write_text("NERDY_STT_PROVIDER=deepgram\n", encoding="utf-8")
+
+    monkeypatch.setattr("backend.runtime.hosted_rollout.ensure_artifact_repository", lambda **_: None)
+
+    def fail_if_cloud_build_starts(*_: object, **__: object) -> object:
+        raise AssertionError("cloud build started before hosted env validation")
+
+    monkeypatch.setattr("backend.runtime.hosted_rollout.run_json_command", fail_if_cloud_build_starts)
+
+    with pytest.raises(RuntimeError, match="Hosted backend env is invalid"):
+        deploy_session_backend(
+            repo_root=tmp_path,
+            target=DeployTarget(firebase_project="demo-project", backend_env_file=env_file),
+            frontend_url="https://frontend.example.com",
+            image_tag="abc123",
+        )
 
 
 def test_extract_json_payload_skips_firebase_progress_lines() -> None:
