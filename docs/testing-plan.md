@@ -75,6 +75,8 @@ Hosted smoke after deploy:
 pnpm smoke:prod -- --frontend-url https://your-hosted-frontend --expect-firebase --expect-auth
 ```
 
+The smoke first probes the hosted frontend `/healthz`, reads `/api/runtime/status`, derives the session backend from `sessionWsUrl`, probes the backend `/healthz`, then verifies the lessons API returns the expected auth status.
+
 Hosted staging gate before prod:
 
 ```bash

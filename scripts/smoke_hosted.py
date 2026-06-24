@@ -22,8 +22,11 @@ def _fetch_json(url: str) -> tuple[int, dict[str, Any] | None]:
 
 def _fetch_status(url: str) -> int:
     req = request.Request(url, headers={"User-Agent": "nerdy-smoke/1.0"})
-    with request.urlopen(req, timeout=SMOKE_REQUEST_TIMEOUT_SECONDS) as response:
-        return response.getcode()
+    try:
+        with request.urlopen(req, timeout=SMOKE_REQUEST_TIMEOUT_SECONDS) as response:
+            return response.getcode()
+    except error.HTTPError as exc:
+        return exc.code
 
 
 def _derive_backend_lessons_url(runtime_status: dict[str, Any]) -> str | None:
@@ -34,6 +37,11 @@ def _derive_backend_lessons_url(runtime_status: dict[str, Any]) -> str | None:
     parsed = parse.urlparse(session_ws_url)
     scheme = "https" if parsed.scheme == "wss" else "http"
     return parse.urlunparse((scheme, parsed.netloc, "/api/lessons", "", "", ""))
+
+
+def _derive_backend_healthz_url(backend_url: str) -> str:
+    parsed = parse.urlparse(backend_url)
+    return parse.urlunparse((parsed.scheme, parsed.netloc, "/healthz", "", "", ""))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -71,6 +79,12 @@ def main(argv: list[str] | None = None) -> int:
     backend_url = args.backend_url or _derive_backend_lessons_url(runtime_status)
     if not backend_url:
         print("smoke: could not determine backend lessons url")
+        return 1
+
+    backend_health_url = _derive_backend_healthz_url(backend_url)
+    backend_health_status = _fetch_status(backend_health_url)
+    if backend_health_status != 200:
+        print(f"smoke: backend healthz returned {backend_health_status} for {backend_health_url}")
         return 1
 
     lessons_status, _ = _fetch_json(backend_url.rstrip("/"))
