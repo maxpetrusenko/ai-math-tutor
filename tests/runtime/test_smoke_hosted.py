@@ -1,9 +1,28 @@
 from __future__ import annotations
 
+import io
+from email.message import Message
+from urllib import error
+
 from scripts import smoke_hosted
 
 
-def test_smoke_checks_frontend_healthz_before_runtime_status(monkeypatch) -> None:
+def test_fetch_status_returns_http_error_code(monkeypatch) -> None:
+    def fake_urlopen(*_args, **_kwargs):
+        raise error.HTTPError(
+            url="https://session.example.com/healthz",
+            code=404,
+            msg="Not Found",
+            hdrs=Message(),
+            fp=io.BytesIO(b"not found"),
+        )
+
+    monkeypatch.setattr(smoke_hosted.request, "urlopen", fake_urlopen)
+
+    assert smoke_hosted._fetch_status("https://session.example.com/healthz") == 404
+
+
+def test_smoke_checks_frontend_and_backend_healthz_before_auth_probe(monkeypatch) -> None:
     probed_status_urls: list[str] = []
     probed_json_urls: list[str] = []
 
@@ -37,7 +56,10 @@ def test_smoke_checks_frontend_healthz_before_runtime_status(monkeypatch) -> Non
     )
 
     assert exit_code == 0
-    assert probed_status_urls == ["https://aitutor.maxpetrusenko.com/healthz"]
+    assert probed_status_urls == [
+        "https://aitutor.maxpetrusenko.com/healthz",
+        "https://session.example.com/healthz",
+    ]
     assert probed_json_urls == [
         "https://aitutor.maxpetrusenko.com/api/runtime/status",
         "https://session.example.com/api/lessons",
