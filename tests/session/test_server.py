@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
@@ -260,8 +261,18 @@ def test_lesson_history_api_persists_active_and_archived_threads() -> None:
     assert clear_response.json()["activeThread"] is None
 
 
-def test_lessons_analytics_endpoint_summarizes_saved_history() -> None:
+def test_lessons_analytics_endpoint_summarizes_saved_history(monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.session import learning_analytics
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            fixed = datetime(2026, 3, 12, 12, 0, tzinfo=UTC)
+            return fixed.astimezone(tz) if tz else fixed
+
+    monkeypatch.setattr(learning_analytics, "datetime", FixedDateTime)
     client = TestClient(app)
+    yesterday = (datetime(2026, 3, 12, 12, 0, tzinfo=UTC) - timedelta(days=1)).isoformat()
     active_thread = {
         "avatarProviderId": "human-css-2d",
         "conversation": [
@@ -301,7 +312,7 @@ def test_lessons_analytics_endpoint_summarizes_saved_history() -> None:
         "thread": active_thread,
         "title": "Linear Equations",
         "turnCount": 3,
-        "updatedAt": "2026-03-11T00:00:00.000Z",
+        "updatedAt": yesterday,
     }
 
     client.put("/api/lessons/active", json=active_thread)
