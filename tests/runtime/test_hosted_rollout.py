@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import backend.runtime.hosted_rollout as hosted_rollout
 from backend.runtime.hosted_rollout import (
     apphosting_backend_url,
     build_cloud_build_command,
@@ -43,6 +44,30 @@ def test_build_rollout_ref_args_requires_one_ref() -> None:
 def test_build_rollout_ref_args_rejects_both_ref_types() -> None:
     with pytest.raises(ValueError):
         build_rollout_ref_args(git_branch="main", git_commit="abc123")
+
+
+def test_rollout_ref_guard_rejects_mismatched_git_commit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fake_run_command(
+        args: list[str],
+        *,
+        cwd: Path | None = None,
+        input_text: str | None = None,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[str]:
+        assert args == ["git", "rev-parse", "HEAD"]
+        assert cwd == tmp_path
+        return subprocess.CompletedProcess(args, 0, "abc123456789\n", "")
+
+    monkeypatch.setattr(hosted_rollout, "run_command", fake_run_command)
+
+    with pytest.raises(RuntimeError, match="does not match requested git commit deadbeef"):
+        hosted_rollout.assert_checkout_matches_rollout_ref(
+            repo_root=tmp_path,
+            git_branch=None,
+            git_commit="deadbeef",
+        )
 
 
 def test_parse_env_file_supports_dotenv(tmp_path: Path) -> None:
