@@ -110,6 +110,8 @@ What it does:
 
 Deploy staging first. If smoke passes, deploy the same git commit to prod:
 
+The rollout script refuses to deploy when `--git-commit` does not match the checked-out repo revision. App Hosting deploys the local frontend source, while the session backend image is tagged from the git commit, so this guard prevents split frontend/backend revisions.
+
 ```bash
 pnpm promote:prod \
   --stage-project your-staging-firebase-project \

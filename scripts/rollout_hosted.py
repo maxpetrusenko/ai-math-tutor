@@ -13,6 +13,7 @@ from backend.runtime.hosted_rollout import (
     DeployTarget,
     RolloutResult,
     apphosting_backend_url,
+    assert_checkout_matches_rollout_ref,
     deploy_session_backend,
     ensure_apphosting_backend,
     ensure_web_app,
@@ -63,6 +64,7 @@ def _rollout_once(
     git_branch: str | None,
     git_commit: str,
 ) -> RolloutResult:
+    assert_checkout_matches_rollout_ref(repo_root=REPO_ROOT, git_branch=git_branch, git_commit=git_commit)
     app_id = ensure_web_app(
         project=target.firebase_project,
         display_name=target.frontend_display_name,

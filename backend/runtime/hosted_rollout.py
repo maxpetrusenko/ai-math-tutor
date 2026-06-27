@@ -83,6 +83,36 @@ def build_rollout_ref_args(*, git_branch: str | None, git_commit: str | None) ->
     raise ValueError("A git branch or git commit is required.")
 
 
+def assert_checkout_matches_rollout_ref(
+    *,
+    repo_root: Path,
+    git_branch: str | None,
+    git_commit: str | None,
+) -> None:
+    branch = (git_branch or "").strip()
+    commit = (git_commit or "").strip()
+    if not branch and not commit:
+        raise ValueError("A git branch or git commit is required.")
+
+    if commit:
+        completed = run_command(["git", "rev-parse", "HEAD"], cwd=repo_root)
+        checkout_commit = completed.stdout.strip()
+        if not checkout_commit.startswith(commit):
+            raise RuntimeError(
+                f"Checked-out git commit {checkout_commit} does not match requested git commit {commit}; "
+                "App Hosting deploys the local frontend checkout, so refusing to deploy a split frontend/backend revision."
+            )
+
+    if branch:
+        completed = run_command(["git", "branch", "--show-current"], cwd=repo_root)
+        checkout_branch = completed.stdout.strip()
+        if checkout_branch != branch:
+            raise RuntimeError(
+                f"Checked-out git branch {checkout_branch!r} does not match requested git branch {branch!r}; "
+                "App Hosting deploys the local frontend checkout."
+            )
+
+
 def parse_env_file(path: Path) -> dict[str, str]:
     suffix = path.suffix.lower()
     raw_text = path.read_text(encoding="utf-8")
