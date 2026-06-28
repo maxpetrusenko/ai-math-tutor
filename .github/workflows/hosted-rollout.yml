@@ -56,11 +56,19 @@ jobs:
           printf '%s' "$HOSTED_BACKEND_ENV_JSON" > "$RUNNER_TEMP/hosted-backend-env.json"
 
       - name: Deploy staging
+        env:
+          STAGE_FRONTEND_SMOKE_URL: ${{ vars.STAGE_FRONTEND_SMOKE_URL }}
         run: |
-          python3 scripts/rollout_hosted.py stage \
-            --stage-project "${{ vars.STAGE_FIREBASE_PROJECT_ID }}" \
-            --stage-backend-env-file "$RUNNER_TEMP/hosted-backend-env.json" \
+          args=(
+            stage
+            --stage-project "${{ vars.STAGE_FIREBASE_PROJECT_ID }}"
+            --stage-backend-env-file "$RUNNER_TEMP/hosted-backend-env.json"
             --git-commit "${{ github.sha }}"
+          )
+          if [ -n "$STAGE_FRONTEND_SMOKE_URL" ]; then
+            args+=(--stage-smoke-url "$STAGE_FRONTEND_SMOKE_URL")
+          fi
+          python3 scripts/rollout_hosted.py "${args[@]}"
 
   prod:
     name: Prod
@@ -106,8 +114,16 @@ jobs:
           printf '%s' "$HOSTED_BACKEND_ENV_JSON" > "$RUNNER_TEMP/hosted-backend-env.json"
 
       - name: Deploy prod
+        env:
+          PROD_FRONTEND_SMOKE_URL: ${{ vars.PROD_FRONTEND_SMOKE_URL }}
         run: |
-          python3 scripts/rollout_hosted.py prod \
-            --prod-project "${{ vars.PROD_FIREBASE_PROJECT_ID }}" \
-            --prod-backend-env-file "$RUNNER_TEMP/hosted-backend-env.json" \
+          args=(
+            prod
+            --prod-project "${{ vars.PROD_FIREBASE_PROJECT_ID }}"
+            --prod-backend-env-file "$RUNNER_TEMP/hosted-backend-env.json"
             --git-commit "${{ github.sha }}"
+          )
+          if [ -n "$PROD_FRONTEND_SMOKE_URL" ]; then
+            args+=(--prod-smoke-url "$PROD_FRONTEND_SMOKE_URL")
+          fi
+          python3 scripts/rollout_hosted.py "${args[@]}"

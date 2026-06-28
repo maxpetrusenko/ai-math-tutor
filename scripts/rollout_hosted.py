@@ -62,6 +62,7 @@ def _rollout_once(
     target: DeployTarget,
     git_branch: str | None,
     git_commit: str,
+    frontend_smoke_url: str | None = None,
 ) -> RolloutResult:
     app_id = ensure_web_app(
         project=target.firebase_project,
@@ -91,6 +92,7 @@ def _rollout_once(
         target=target,
         frontend_url=frontend_url,
         image_tag=image_tag,
+        additional_allowed_origins=[frontend_smoke_url],
     )
     session_ws_url = service_url_to_ws_url(session_service_url)
     set_apphosting_secret(
@@ -134,15 +136,32 @@ def _wait_for_smoke(*, frontend_url: str, timeout_seconds: int, revision_hint: s
     raise RuntimeError(detail)
 
 
+def _frontend_smoke_urls(*, generated_url: str, custom_url: str | None) -> list[str]:
+    urls = [generated_url]
+    if custom_url and custom_url.strip():
+        urls.append(custom_url.strip())
+    return urls
+
+
 def _rollout_target(args: argparse.Namespace, *, prefix: str, label: str) -> RolloutResult:
     git_commit = args.git_commit or _default_git_commit()
     target = _deploy_target(args, prefix=prefix)
-    result = _rollout_once(target=target, git_branch=args.git_branch, git_commit=git_commit)
-    _wait_for_smoke(
-        frontend_url=result.frontend_url,
-        timeout_seconds=args.smoke_timeout_seconds,
-        revision_hint=args.expect_revision_contains,
+    frontend_smoke_url = getattr(args, f"{prefix}_smoke_url", None)
+    result = _rollout_once(
+        target=target,
+        git_branch=args.git_branch,
+        git_commit=git_commit,
+        frontend_smoke_url=frontend_smoke_url,
     )
+    for frontend_url in _frontend_smoke_urls(
+        generated_url=result.frontend_url,
+        custom_url=frontend_smoke_url,
+    ):
+        _wait_for_smoke(
+            frontend_url=frontend_url,
+            timeout_seconds=args.smoke_timeout_seconds,
+            revision_hint=args.expect_revision_contains,
+        )
     print(f"{label} frontend={result.frontend_url}")
     print(f"{label} session={result.session_service_url}")
     print(f"{label} image={result.backend_image}")
@@ -183,6 +202,7 @@ def _add_target_args(parser: argparse.ArgumentParser, *, prefix: str) -> None:
     parser.add_argument(f"--{prefix}-frontend-display-name", default=DEFAULT_FRONTEND_DISPLAY_NAME)
     parser.add_argument(f"--{prefix}-session-service", default=DEFAULT_SESSION_SERVICE)
     parser.add_argument(f"--{prefix}-region", default=DEFAULT_REGION)
+    parser.add_argument(f"--{prefix}-smoke-url")
 
 
 def build_parser() -> argparse.ArgumentParser:

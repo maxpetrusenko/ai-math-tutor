@@ -53,6 +53,21 @@ def normalize_url(url: str) -> str:
     return normalized.rstrip("/")
 
 
+def allowed_origins_value(
+    primary_url: str,
+    *,
+    additional_origins: list[str | None] | None = None,
+) -> str:
+    origins: list[str] = []
+    for candidate in [primary_url, *(additional_origins or [])]:
+        if not candidate or not candidate.strip():
+            continue
+        normalized = normalize_url(candidate)
+        if normalized not in origins:
+            origins.append(normalized)
+    return ",".join(origins)
+
+
 def apphosting_backend_url(uri: str) -> str:
     normalized = uri.strip()
     if not normalized:
@@ -485,6 +500,7 @@ def deploy_session_backend(
     target: DeployTarget,
     frontend_url: str,
     image_tag: str,
+    additional_allowed_origins: list[str | None] | None = None,
 ) -> tuple[str, str]:
     ensure_artifact_repository(
         project=target.firebase_project,
@@ -521,7 +537,10 @@ def deploy_session_backend(
     env_errors = collect_hosted_backend_env_errors(env_vars)
     if env_errors:
         raise RuntimeError("Hosted backend env is invalid:\n" + "\n".join(env_errors))
-    env_vars["NERDY_ALLOWED_ORIGINS"] = normalize_url(frontend_url)
+    env_vars["NERDY_ALLOWED_ORIGINS"] = allowed_origins_value(
+        frontend_url,
+        additional_origins=additional_allowed_origins,
+    )
     env_vars["NERDY_REQUIRE_FIREBASE_AUTH"] = "1"
     env_file_handle = write_env_json_file(env_vars)
     try:
