@@ -56,8 +56,10 @@ def test_build_parser_accepts_environment_specific_smoke_url() -> None:
 
 def test_rollout_target_smokes_generated_and_custom_frontend_urls(monkeypatch) -> None:
     smoked_urls: list[str] = []
+    rollout_kwargs: dict[str, object] = {}
 
     def fake_rollout_once(**kwargs) -> RolloutResult:
+        rollout_kwargs.update(kwargs)
         return RolloutResult(
             firebase_project="prod-project",
             frontend_url="https://generated.hosted.app",
@@ -88,6 +90,7 @@ def test_rollout_target_smokes_generated_and_custom_frontend_urls(monkeypatch) -
 
     rollout_hosted._rollout_target(args, prefix="prod", label="prod")
 
+    assert rollout_kwargs["frontend_smoke_url"] == "https://aitutor.maxpetrusenko.com/"
     assert smoked_urls == ["https://generated.hosted.app", "https://aitutor.maxpetrusenko.com/"]
 
 

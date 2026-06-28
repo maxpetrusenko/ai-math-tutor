@@ -62,6 +62,7 @@ def _rollout_once(
     target: DeployTarget,
     git_branch: str | None,
     git_commit: str,
+    frontend_smoke_url: str | None = None,
 ) -> RolloutResult:
     app_id = ensure_web_app(
         project=target.firebase_project,
@@ -91,6 +92,7 @@ def _rollout_once(
         target=target,
         frontend_url=frontend_url,
         image_tag=image_tag,
+        additional_allowed_origins=[frontend_smoke_url],
     )
     session_ws_url = service_url_to_ws_url(session_service_url)
     set_apphosting_secret(
@@ -144,10 +146,16 @@ def _frontend_smoke_urls(*, generated_url: str, custom_url: str | None) -> list[
 def _rollout_target(args: argparse.Namespace, *, prefix: str, label: str) -> RolloutResult:
     git_commit = args.git_commit or _default_git_commit()
     target = _deploy_target(args, prefix=prefix)
-    result = _rollout_once(target=target, git_branch=args.git_branch, git_commit=git_commit)
+    frontend_smoke_url = getattr(args, f"{prefix}_smoke_url", None)
+    result = _rollout_once(
+        target=target,
+        git_branch=args.git_branch,
+        git_commit=git_commit,
+        frontend_smoke_url=frontend_smoke_url,
+    )
     for frontend_url in _frontend_smoke_urls(
         generated_url=result.frontend_url,
-        custom_url=getattr(args, f"{prefix}_smoke_url", None),
+        custom_url=frontend_smoke_url,
     ):
         _wait_for_smoke(
             frontend_url=frontend_url,

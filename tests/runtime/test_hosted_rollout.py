@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from backend.runtime.hosted_rollout import (
+    allowed_origins_value,
     apphosting_backend_url,
     build_cloud_build_command,
     build_rollout_ref_args,
@@ -23,6 +24,16 @@ from backend.runtime.hosted_rollout import (
     write_cloud_build_config_file,
 )
 
+
+
+def test_allowed_origins_value_includes_unique_generated_and_custom_urls() -> None:
+    assert (
+        allowed_origins_value(
+            "https://generated.hosted.app/",
+            additional_origins=["https://aitutor.maxpetrusenko.com/", "https://generated.hosted.app"],
+        )
+        == "https://generated.hosted.app,https://aitutor.maxpetrusenko.com"
+    )
 
 def test_apphosting_backend_url_adds_https_scheme() -> None:
     assert apphosting_backend_url("example.us-east4.hosted.app") == "https://example.us-east4.hosted.app"
