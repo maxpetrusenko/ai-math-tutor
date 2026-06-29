@@ -12,6 +12,7 @@ def test_prod_env_contract_requires_firebase_config_when_auth_is_enabled() -> No
         mode="prod",
         env={
             "NERDY_REQUIRE_FIREBASE_AUTH": "1",
+            "NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH": "1",
             "NEXT_PUBLIC_SESSION_WS_URL": "wss://example.com/ws/session",
         },
     )
@@ -27,8 +28,50 @@ def test_prod_env_contract_accepts_runtime_json_config() -> None:
         env={
             "FIREBASE_WEBAPP_CONFIG": '{"apiKey":"key","appId":"app","authDomain":"demo.firebaseapp.com","messagingSenderId":"123","projectId":"demo","storageBucket":"demo.appspot.com"}',
             "NERDY_REQUIRE_FIREBASE_AUTH": "1",
+            "NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH": "1",
             "NEXT_PUBLIC_SESSION_WS_URL": "wss://example.com/ws/session",
         },
     )
 
     assert errors == []
+
+
+def test_prod_env_contract_requires_firebase_auth_to_be_enabled() -> None:
+    errors = collect_env_contract_errors(
+        mode="prod",
+        env={
+            "FIREBASE_WEBAPP_CONFIG": '{"apiKey":"key","appId":"app","authDomain":"demo.firebaseapp.com","messagingSenderId":"123","projectId":"demo","storageBucket":"demo.appspot.com"}',
+            "NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH": "1",
+            "NEXT_PUBLIC_SESSION_WS_URL": "wss://example.com/ws/session",
+        },
+    )
+
+    assert errors == ["NERDY_REQUIRE_FIREBASE_AUTH=1 is required in prod mode."]
+
+
+def test_prod_env_contract_requires_public_firebase_auth_to_be_enabled() -> None:
+    errors = collect_env_contract_errors(
+        mode="prod",
+        env={
+            "FIREBASE_WEBAPP_CONFIG": '{"apiKey":"key","appId":"app","authDomain":"demo.firebaseapp.com","messagingSenderId":"123","projectId":"demo","storageBucket":"demo.appspot.com"}',
+            "NERDY_REQUIRE_FIREBASE_AUTH": "1",
+            "NEXT_PUBLIC_SESSION_WS_URL": "wss://example.com/ws/session",
+        },
+    )
+
+    assert errors == ["NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH=1 is required in prod mode."]
+
+
+def test_prod_env_contract_reports_auth_and_config_when_both_are_missing() -> None:
+    errors = collect_env_contract_errors(
+        mode="prod",
+        env={
+            "NEXT_PUBLIC_SESSION_WS_URL": "wss://example.com/ws/session",
+        },
+    )
+
+    assert errors == [
+        "NERDY_REQUIRE_FIREBASE_AUTH=1 is required in prod mode.",
+        "NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH=1 is required in prod mode.",
+        "Firebase auth requires FIREBASE_WEBAPP_CONFIG, NEXT_PUBLIC_FIREBASE_WEBAPP_CONFIG, or the full NEXT_PUBLIC_FIREBASE_* set.",
+    ]

@@ -24,8 +24,16 @@ REQUIRED_FIREBASE_PUBLIC_ENV_KEYS = (
 )
 
 
+def _truthy(value: str | None) -> bool:
+    return (value or "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def firebase_auth_required(env: Mapping[str, str]) -> bool:
-    return env.get("NERDY_REQUIRE_FIREBASE_AUTH", "0").strip().lower() in {"1", "true", "yes", "on"}
+    return _truthy(env.get("NERDY_REQUIRE_FIREBASE_AUTH"))
+
+
+def public_firebase_auth_required(env: Mapping[str, str]) -> bool:
+    return _truthy(env.get("NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH"))
 
 
 def has_firebase_web_config(env: Mapping[str, str]) -> bool:
@@ -45,12 +53,20 @@ def has_firebase_web_config(env: Mapping[str, str]) -> bool:
 
 def collect_env_contract_errors(*, mode: str, env: Mapping[str, str] | None = None) -> list[str]:
     resolved_env = env or os.environ
+    auth_required = firebase_auth_required(resolved_env)
+    public_auth_required = public_firebase_auth_required(resolved_env)
     errors: list[str] = []
 
     if mode == "prod" and not resolved_env.get("NEXT_PUBLIC_SESSION_WS_URL", "").strip():
         errors.append("NEXT_PUBLIC_SESSION_WS_URL is required in prod mode.")
 
-    if firebase_auth_required(resolved_env) and not has_firebase_web_config(resolved_env):
+    if mode == "prod" and not auth_required:
+        errors.append("NERDY_REQUIRE_FIREBASE_AUTH=1 is required in prod mode.")
+
+    if mode == "prod" and not public_auth_required:
+        errors.append("NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH=1 is required in prod mode.")
+
+    if (mode == "prod" or auth_required) and not has_firebase_web_config(resolved_env):
         errors.append(
             "Firebase auth requires FIREBASE_WEBAPP_CONFIG, NEXT_PUBLIC_FIREBASE_WEBAPP_CONFIG, or the full NEXT_PUBLIC_FIREBASE_* set."
         )
