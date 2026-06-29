@@ -1,4 +1,5 @@
 export type LiveKitAvatarBootstrapResponse = {
+  avatar_participant_identity: string;
   participant_identity: string;
   provider: "simli" | "liveavatar";
   provider_id: string;

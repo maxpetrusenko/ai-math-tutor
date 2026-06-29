@@ -7,6 +7,7 @@ const {
   createLiveKitAvatarSession,
   emitAgentReady,
   emitAgentReadyOnConnect,
+  emitNonAvatarTrackOnConnect,
   emitTrackOnConnect,
   emitDisconnect,
   setMicrophoneEnabled,
@@ -14,6 +15,7 @@ const {
   createLiveKitAvatarSession: vi.fn(),
   emitAgentReady: vi.fn(),
   emitAgentReadyOnConnect: vi.fn(),
+  emitNonAvatarTrackOnConnect: vi.fn(),
   emitTrackOnConnect: vi.fn(),
   emitDisconnect: vi.fn(),
   setMicrophoneEnabled: vi.fn(),
@@ -59,10 +61,35 @@ vi.mock("livekit-client", () => {
       activeRoom = this;
       if (emitTrackOnConnect()) {
         const videoElement = document.createElement("video");
-        this.handlers.get("trackSubscribed")?.({
-          kind: "video",
-          attach: () => videoElement,
-        });
+        const audioElement = document.createElement("audio");
+        const participant = { identity: "avatar-simli" };
+        this.handlers.get("trackSubscribed")?.(
+          {
+            kind: "video",
+            attach: () => videoElement,
+          },
+          {},
+          participant,
+        );
+        this.handlers.get("trackSubscribed")?.(
+          {
+            kind: "audio",
+            attach: () => audioElement,
+          },
+          {},
+          participant,
+        );
+      }
+      if (emitNonAvatarTrackOnConnect()) {
+        const videoElement = document.createElement("video");
+        this.handlers.get("trackSubscribed")?.(
+          {
+            kind: "video",
+            attach: () => videoElement,
+          },
+          {},
+          { identity: "raw-agent" },
+        );
       }
       if (emitAgentReadyOnConnect()) {
         emitReady(this);
@@ -94,16 +121,19 @@ beforeEach(() => {
   createLiveKitAvatarSession.mockReset();
   createLiveKitAvatarSession
     .mockResolvedValueOnce({
+      avatar_participant_identity: "avatar-simli",
       room_name: "nerdy-simli-preview",
       token: "test-token",
       url: "wss://example.livekit.cloud",
     })
     .mockResolvedValueOnce({
+      avatar_participant_identity: "avatar-simli",
       room_name: "nerdy-simli-preview-2",
       token: "test-token-2",
       url: "wss://example.livekit.cloud",
     });
   emitTrackOnConnect.mockReturnValue(true);
+  emitNonAvatarTrackOnConnect.mockReturnValue(false);
   emitAgentReadyOnConnect.mockReturnValue(true);
   emitAgentReady.mockClear();
   emitDisconnect.mockClear();
@@ -204,7 +234,7 @@ test("keeps mic disabled after video attaches until the agent publishes ready", 
 
   fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
 
-  await waitFor(() => expect(screen.getAllByText("Video live").length).toBeGreaterThan(0));
+  await waitFor(() => expect(screen.getAllByText("Avatar live").length).toBeGreaterThan(0));
   await waitFor(() => expect(document.querySelector(".managed-avatar-session__video-frame video")).toBeTruthy());
   fireEvent.click(screen.getByRole("button", { name: "Toggle mic" }));
   expect(setMicrophoneEnabled).not.toHaveBeenCalled();
@@ -225,7 +255,7 @@ test("ignores push to talk until the agent publishes ready", async () => {
   renderManagedHarness();
 
   fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
-  await waitFor(() => expect(screen.getAllByText("Video live").length).toBeGreaterThan(0));
+  await waitFor(() => expect(screen.getAllByText("Avatar live").length).toBeGreaterThan(0));
 
   fireEvent.mouseDown(screen.getByRole("button", { name: "Hold to talk" }));
   expect(setMicrophoneEnabled).not.toHaveBeenCalled();
@@ -237,6 +267,24 @@ test("ignores push to talk until the agent publishes ready", async () => {
   await waitFor(() => expect(screen.getAllByText("Live").length).toBeGreaterThan(0));
   fireEvent.mouseDown(screen.getByRole("button", { name: "Hold to talk" }));
   await waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledWith(true, expect.any(Object)));
+});
+
+test("ignores remote media that does not come from the expected avatar participant", async () => {
+  emitTrackOnConnect.mockReturnValue(false);
+  emitNonAvatarTrackOnConnect.mockReturnValue(true);
+  emitAgentReadyOnConnect.mockReturnValue(true);
+  setMicrophoneEnabled.mockResolvedValue(undefined);
+
+  renderManagedHarness();
+
+  fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
+
+  await waitFor(() => expect(screen.getByText("Room nerdy-simli-preview")).toBeInTheDocument());
+  expect(screen.getByText("Connecting")).toBeInTheDocument();
+  expect(document.querySelector(".managed-avatar-session__video-frame video")).toBeFalsy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Toggle mic" }));
+  expect(setMicrophoneEnabled).not.toHaveBeenCalled();
 });
 
 test("primes the mic for managed session joins, then returns to muted after video attaches", async () => {

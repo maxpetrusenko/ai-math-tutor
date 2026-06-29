@@ -30,6 +30,8 @@ def test_simli_metadata_uses_default_face_id_when_env_missing() -> None:
 
     assert target.provider == "simli"
     assert target.avatar_id == "b97a7777-a82e-4925-ad14-861d62c32bec"
+    assert target.avatar_participant_identity == "avatar-simli"
+    assert target.metadata["avatar_participant_identity"] == "avatar-simli"
     assert target.metadata["instructions"] == "Tutor mode"
 
 
@@ -44,6 +46,8 @@ def test_liveavatar_metadata_prefers_liveavatar_env_aliases() -> None:
 
     assert target.provider == "liveavatar"
     assert target.avatar_id == "avatar-123"
+    assert target.avatar_participant_identity == "avatar-liveavatar"
+    assert target.metadata["avatar_participant_identity"] == "avatar-liveavatar"
     assert target.metadata["voice"] == "verse"
 
 
@@ -180,11 +184,52 @@ def test_create_avatar_room_session_loads_local_env_when_explicit_env_missing(mo
 
     assert loaded["count"] >= 1
     assert result["provider"] == "simli"
+    assert result["avatar_participant_identity"] == "avatar-simli"
     assert result["token"] == "fake-jwt"
     assert result["url"] == "wss://example.livekit.cloud"
     assert result["room_metadata"]["student_identity"] == result["participant_identity"]
+    assert result["room_metadata"]["avatar_participant_identity"] == "avatar-simli"
     assert created_rooms[0]["metadata"] == created_dispatches[0]["metadata"]
     assert "student_identity" in created_rooms[0]["metadata"]
+
+
+def test_avatar_agent_media_collection_requires_expected_audio_and_video() -> None:
+    from livekit import rtc
+    from backend.livekit.avatar_agent import _collect_avatar_media
+
+    room = types.SimpleNamespace(
+        remote_participants={
+            "avatar-simli": types.SimpleNamespace(
+                track_publications={
+                    "audio": types.SimpleNamespace(kind=rtc.TrackKind.KIND_AUDIO, muted=False),
+                    "video": types.SimpleNamespace(kind=rtc.TrackKind.KIND_VIDEO, muted=False),
+                    "muted": types.SimpleNamespace(kind=rtc.TrackKind.KIND_AUDIO, muted=True),
+                }
+            ),
+            "raw-agent": types.SimpleNamespace(
+                track_publications={
+                    "raw": types.SimpleNamespace(kind=rtc.TrackKind.KIND_AUDIO, muted=False),
+                }
+            ),
+        }
+    )
+
+    assert _collect_avatar_media(room, "avatar-simli") == {"audio", "video"}
+    assert _collect_avatar_media(room, "raw-agent") == {"audio"}
+    assert _collect_avatar_media(room, "missing") == set()
+
+
+def test_avatar_agent_wait_for_avatar_media_requires_identity() -> None:
+    from backend.livekit.avatar_agent import _wait_for_avatar_media
+
+    room = types.SimpleNamespace()
+
+    try:
+        asyncio.run(_wait_for_avatar_media(room, "", 0.01))
+    except RuntimeError as error:
+        assert "avatar_participant_identity" in str(error)
+    else:
+        raise AssertionError("expected missing avatar identity to fail")
 
 
 def test_avatar_agent_loads_local_env_at_import(monkeypatch) -> None:

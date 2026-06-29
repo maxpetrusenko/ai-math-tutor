@@ -14,6 +14,8 @@ from backend.runtime.local_env import load_local_env
 
 LIVEKIT_AVATAR_AGENT_NAME = "nerdy-avatar-agent"
 DEFAULT_SIMLI_FACE_ID = "b97a7777-a82e-4925-ad14-861d62c32bec"
+DEFAULT_SIMLI_AVATAR_PARTICIPANT_IDENTITY = "avatar-simli"
+DEFAULT_LIVEAVATAR_PARTICIPANT_IDENTITY = "avatar-liveavatar"
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,7 @@ class ManagedAvatarTarget:
     provider: str
     label: str
     avatar_id: str
+    avatar_participant_identity: str
     metadata: dict[str, object]
 
 
@@ -58,11 +61,13 @@ def resolve_managed_avatar_metadata(
 
     if provider_id == "simli-b97a7777-live":
         face_id = _coalesce_env(resolved_env, "SIMLI_FACE_ID") or DEFAULT_SIMLI_FACE_ID
+        avatar_participant_identity = DEFAULT_SIMLI_AVATAR_PARTICIPANT_IDENTITY
         metadata = {
             "provider": "simli",
             "provider_id": provider_id,
             "label": "Simli",
             "face_id": face_id,
+            "avatar_participant_identity": avatar_participant_identity,
             "voice": voice,
             "instructions": instructions,
         }
@@ -71,6 +76,7 @@ def resolve_managed_avatar_metadata(
             provider="simli",
             label="Simli",
             avatar_id=face_id,
+            avatar_participant_identity=avatar_participant_identity,
             metadata=metadata,
         )
 
@@ -78,11 +84,13 @@ def resolve_managed_avatar_metadata(
         avatar_id = _coalesce_env(resolved_env, "LIVEAVATAR_AVATAR_ID", "HEYGEN_AVATAR_ID")
         if not avatar_id:
             avatar_id = "default"
+        avatar_participant_identity = DEFAULT_LIVEAVATAR_PARTICIPANT_IDENTITY
         metadata = {
             "provider": "liveavatar",
             "provider_id": provider_id,
             "label": "HeyGen LiveAvatar",
             "avatar_id": avatar_id,
+            "avatar_participant_identity": avatar_participant_identity,
             "voice": voice,
             "instructions": instructions,
             "is_sandbox": resolved_env.get("LIVEAVATAR_IS_SANDBOX", "0").strip().lower() in {"1", "true", "yes", "on"},
@@ -92,6 +100,7 @@ def resolve_managed_avatar_metadata(
             provider="liveavatar",
             label="HeyGen LiveAvatar",
             avatar_id=avatar_id,
+            avatar_participant_identity=avatar_participant_identity,
             metadata=metadata,
         )
 
@@ -288,6 +297,7 @@ async def create_avatar_room_session(
         "provider_id": provider_id,
         "provider": target.provider,
         "participant_identity": participant_identity,
+        "avatar_participant_identity": target.avatar_participant_identity,
         "room_name": room_name,
         "room_metadata": room_metadata_payload,
         "token": token,

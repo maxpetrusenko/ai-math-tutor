@@ -69,17 +69,24 @@ export function TutorSessionComposer({
       : managedSession?.connectionState === "connecting"
         ? "Connecting..."
         : "Start avatar";
-  const dockHint = isManagedAvatar
-    ? managedSession?.micUnavailable
-      ? "Mic unavailable. Reconnect mic permission, then hold to talk. Auto disconnect after 60s idle."
-      : managedSession?.hasVideoTrack && !managedSession.agentReady
-        ? "Avatar video is live. Waiting for the tutor connection before opening the mic."
-        : "Hold to talk. Send text anytime. Managed rooms auto disconnect after 60 seconds of inactivity."
-    : "Hold mic to talk. Cmd+Enter sends text. Esc interrupts.";
+  let dockHint = "Hold mic to talk. Cmd+Enter sends text. Esc interrupts.";
+  if (isManagedAvatar) {
+    if (managedSession?.micUnavailable) {
+      dockHint = "Mic unavailable. Reconnect mic permission, then hold to talk. Auto disconnect after 60s idle.";
+    } else if (managedSession?.hasVideoTrack && !managedSession.hasAudioTrack) {
+      dockHint = "Avatar video is live. Waiting for avatar audio before opening the mic.";
+    } else if (managedSession?.hasVideoTrack && !managedSession.agentReady) {
+      dockHint = "Avatar video is live. Waiting for the tutor connection before opening the mic.";
+    } else {
+      dockHint = "Hold to talk. Send text anytime. Managed rooms auto disconnect after 60 seconds of inactivity.";
+    }
+  }
   const managedStatus = managedSession?.roomName
     ? `Room ${managedSession.roomName}${
         managedSession.agentReady
-          ? " · tutor ready"
+          ? managedSession.hasAudioTrack
+            ? " · tutor ready"
+            : " · waiting for avatar audio"
           : managedSession.hasVideoTrack
             ? " · waiting for tutor"
             : " · waiting for video"

@@ -50,6 +50,20 @@ Run the app as usual:
 bash scripts/dev.sh
 ```
 
+## Voice and lipsync contract
+
+Managed avatars are fail-closed:
+
+- the session API returns an expected avatar participant identity, currently `avatar-simli` or `avatar-liveavatar`
+- the avatar worker passes that identity into the provider session
+- the worker waits for that participant to publish both audio and video before publishing `nerdy.avatar_agent.ready`
+- raw model-to-room audio is disabled with `RoomOutputOptions(audio_enabled=False)` while a managed avatar is active
+- the browser attaches only audio and video from the expected avatar participant
+
+If a provider fails to attach or is rate-limited, the user should see a retryable
+live-link error and should not hear the model voice disconnected from avatar
+lipsync.
+
 ## UI behavior
 
 - Select a managed avatar in `/avatar`
@@ -58,4 +72,4 @@ bash scripts/dev.sh
 - The avatar panel switches to a LiveKit room surface
 - Click `Start avatar`
 - Grant microphone access
-- Speak directly to the avatar through the room
+- Speak directly to the avatar through the room after the UI reaches `Live`
