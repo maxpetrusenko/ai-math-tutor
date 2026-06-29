@@ -57,7 +57,7 @@ python3 -m pytest -q
 Local env contract:
 
 ```bash
-python3 -m backend.runtime.env_contract --mode local
+python3 -m pytest tests/runtime/test_local_env.py
 ```
 
 Frontend:
@@ -72,19 +72,19 @@ pnpm build
 Hosted smoke after deploy:
 
 ```bash
-pnpm smoke:prod -- --frontend-url https://your-hosted-frontend --expect-firebase --expect-auth
+pnpm smoke:prod -- --frontend-url https://aitutor.maxpetrusenko.com --backend-url https://aitutor-session.maxpetrusenko.com/api/lessons
 ```
 
-Hosted staging gate before prod:
+Hosted deploy gate:
 
 ```bash
-pnpm deploy:stage --stage-project your-staging-firebase-project --stage-backend-env-file .env.deploy.staging --git-commit "$(git rev-parse HEAD)"
+gh workflow run fast-coolify-deploy.yml
 ```
 
-Promotion after staging smoke:
+Hosted smoke after deploy:
 
 ```bash
-pnpm promote:prod --stage-project your-staging-firebase-project --stage-backend-env-file .env.deploy.staging --prod-project ai-math-tutor-b39b3 --prod-backend-env-file .env.deploy.prod --git-commit "$(git rev-parse HEAD)"
+pnpm smoke:prod -- --frontend-url https://aitutor.maxpetrusenko.com --backend-url https://aitutor-session.maxpetrusenko.com/api/lessons
 ```
 
 Future browser smoke gate after Task 18:

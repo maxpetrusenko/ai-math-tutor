@@ -14,7 +14,6 @@ import {
   readPersistedLessonThread,
   type PersistedLessonArchiveEntry,
 } from "../../lib/lesson_thread_store";
-import { useFirebaseAuth } from "../../lib/firebase_auth";
 import { fetchLearningAnalytics } from "../../lib/lesson_thread_api";
 import type { LearningAnalytics } from "../../lib/learning_analytics";
 import { readSessionPreferences } from "../../lib/session_preferences";
@@ -43,7 +42,6 @@ function readDashboardLearningSnapshot() {
 }
 
 export default function DashboardPage() {
-  const { user } = useFirebaseAuth();
   const [learningSnapshot, setLearningSnapshot] = useState(() => readDashboardLearningSnapshot());
   const [learningAnalytics, setLearningAnalytics] = useState<LearningAnalytics | null>(null);
   const preferences = readSessionPreferences();
@@ -71,8 +69,6 @@ export default function DashboardPage() {
     activeThread: learningSnapshot.activeThread,
     analytics: learningAnalytics,
     archivedLessons: learningSnapshot.archivedLessons,
-    displayName: user?.displayName,
-    email: user?.email,
     preferences,
   });
   const activeLesson = learningSnapshot.activeThread?.lessonState ?? null;

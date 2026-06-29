@@ -10,7 +10,6 @@ import { readAvatarProviderPreference } from "../../lib/avatar_preference";
 import { DEFAULT_AVATAR_PROVIDER_ID } from "../../lib/avatar_manifest";
 import { resolveCompatibleRuntimeSelectionForAvatar } from "../../lib/avatar_runtime_compatibility";
 import { clearLessonHistory, exportLearnerSnapshot } from "../../lib/account_snapshot";
-import { useFirebaseAuth } from "../../lib/firebase_auth";
 import { applyRuntimeProviderChange, RUNTIME_OPTIONS } from "../../lib/runtime_options";
 import {
   readSessionPreferences,
@@ -19,7 +18,6 @@ import {
 } from "../../lib/session_preferences";
 
 export default function SettingsPage() {
-  const { signOutUser, user } = useFirebaseAuth();
   const [avatarProviderId] = useState(() => readAvatarProviderPreference() ?? DEFAULT_AVATAR_PROVIDER_ID);
   const [preferences, setPreferences] = useState(() => {
     const stored = readSessionPreferences();
@@ -246,26 +244,17 @@ export default function SettingsPage() {
         </SurfaceCard>
 
         <SurfaceCard>
-          <div className="section-title section-title--bottom-lg">Account</div>
+          <div className="section-title section-title--bottom-lg">Learner profile</div>
           <div className="info-list">
             <div className="info-list__row">
-              <div className="info-list__label">Signed in as</div>
-              <div className="info-list__value">{user?.email ?? "Guest mode"}</div>
+              <div className="info-list__label">Mode</div>
+              <div className="info-list__value">Local session</div>
             </div>
           </div>
           <div className="pill-row pill-row--top-lg">
             <Link className="secondary-button" href="/profile">
               Review profile
             </Link>
-            <button
-              className="secondary-button"
-              onClick={() => void signOutUser().then(() => {
-                window.location.href = "/";
-              })}
-              type="button"
-            >
-              Sign out
-            </button>
           </div>
         </SurfaceCard>
 

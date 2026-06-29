@@ -7,13 +7,6 @@ const archiveRemoteLessonThread = vi.fn();
 const clearRemoteActiveLessonThread = vi.fn();
 const clearRemoteArchivedLessonThreads = vi.fn();
 
-const fetchFirebaseLessonStore = vi.fn();
-const fetchFirebaseArchivedLessonThread = vi.fn();
-const saveFirebaseActiveLessonThread = vi.fn();
-const archiveFirebaseLessonThread = vi.fn();
-const clearFirebaseActiveLessonThread = vi.fn();
-const clearFirebaseArchivedLessonThreads = vi.fn();
-
 vi.mock("./lesson_thread_api", () => ({
   archiveRemoteLessonThread,
   clearRemoteActiveLessonThread,
@@ -21,15 +14,6 @@ vi.mock("./lesson_thread_api", () => ({
   fetchArchivedLessonThread,
   fetchLessonStore,
   saveActiveLessonThread,
-}));
-
-vi.mock("./firebase_lessons", () => ({
-  archiveFirebaseLessonThread,
-  clearFirebaseActiveLessonThread,
-  clearFirebaseArchivedLessonThreads,
-  fetchFirebaseArchivedLessonThread,
-  fetchFirebaseLessonStore,
-  saveFirebaseActiveLessonThread,
 }));
 
 beforeEach(() => {
@@ -40,16 +24,9 @@ beforeEach(() => {
   archiveRemoteLessonThread.mockReset();
   clearRemoteActiveLessonThread.mockReset();
   clearRemoteArchivedLessonThreads.mockReset();
-  fetchFirebaseLessonStore.mockReset();
-  fetchFirebaseArchivedLessonThread.mockReset();
-  saveFirebaseActiveLessonThread.mockReset();
-  archiveFirebaseLessonThread.mockReset();
-  clearFirebaseActiveLessonThread.mockReset();
-  clearFirebaseArchivedLessonThreads.mockReset();
 });
 
 test("hydrateLessonThreadStore synthesizes debug for raw remote active threads", async () => {
-  fetchFirebaseLessonStore.mockResolvedValue(null);
   fetchLessonStore.mockResolvedValue({
     activeThread: {
       avatarProviderId: "sage-svg-2d",
@@ -102,7 +79,6 @@ test("refreshArchivedLessonThread synthesizes debug for raw remote archived thre
     version: 1,
   })[0];
 
-  fetchFirebaseArchivedLessonThread.mockResolvedValue(null);
   fetchArchivedLessonThread.mockResolvedValue({
     avatarProviderId: "sage-svg-2d",
     conversation: [{ id: "1", transcript: "remote archived", tutorText: "remote reply" }],

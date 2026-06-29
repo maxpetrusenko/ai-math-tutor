@@ -19,7 +19,6 @@ import {
   type PersistedLessonThread,
 } from "../../lib/lesson_thread_store";
 import { PlaybackController, type PlaybackState } from "../../lib/playback_controller";
-import { useFirebaseAuth } from "../../lib/firebase_auth";
 import {
   DEFAULT_LLM_MODEL,
   DEFAULT_LLM_PROVIDER,
@@ -52,7 +51,6 @@ const DEFAULT_SUBJECT = "math";
 const DEFAULT_GRADE_BAND = "6-8";
 
 export function useTutorSessionController({ initialAvatarProviderId, transport }: TutorSessionProps) {
-  const { authReady, firebaseEnabled, user } = useFirebaseAuth();
   const [sessionTransport] = useState<SessionTransport>(() => transport ?? createConfiguredTransport());
   const [playbackController] = useState(() => new PlaybackController());
   const [audioCapture] = useState(() => new BrowserAudioCapture());
@@ -266,11 +264,6 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
       return;
     }
 
-    if (firebaseEnabled && authReady && !user) {
-      setConnectionState("sign in");
-      return;
-    }
-
     let cancelled = false;
 
     const connectTransport = async () => {
@@ -298,7 +291,7 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     return () => {
       cancelled = true;
     };
-  }, [authReady, firebaseEnabled, isManagedAvatar, lessonSessionId, sessionTransport, storageReady, user]);
+  }, [isManagedAvatar, lessonSessionId, sessionTransport, storageReady]);
 
   useEffect(() => playbackController.subscribe((snapshot) => setPlaybackState(snapshot.state)), [playbackController]);
   useEffect(() => {
@@ -309,10 +302,6 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
   }, [micActive]);
 
   useEffect(() => {
-    if (!authReady) {
-      return;
-    }
-
     let cancelled = false;
 
     const restoreThreadStore = async () => {
@@ -365,7 +354,7 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     return () => {
       cancelled = true;
     };
-  }, [authReady, requestedLessonId, requestedResumeLessonId, user?.uid]);
+  }, [requestedLessonId, requestedResumeLessonId]);
 
   useEffect(() => {
     if (!storageReady) {

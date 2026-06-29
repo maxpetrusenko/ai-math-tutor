@@ -7,7 +7,7 @@
 <p align="center">
   <strong>Open source realtime voice tutoring with pluggable STT, LLM, TTS, and avatar providers.</strong>
 
-  URL: ai-math-tutor--ai-math-tutor-b39b3.us-east4.hosted.app
+  URL: https://aitutor.maxpetrusenko.com
 </p>
 
 <p align="center">
@@ -117,8 +117,6 @@ bash scripts/dev.sh
 
 Open `http://127.0.0.1:3000`.
 `scripts/dev.sh` auto-loads `.env`, `.env.local`, and `frontend/.env.local` into the spawned processes.
-If the backend runs with `NERDY_REQUIRE_FIREBASE_AUTH=1`, local startup now mirrors that into `NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH=1` for the frontend socket client.
-If Firebase Google sign-in is enabled, add `127.0.0.1` to Firebase Console -> Authentication -> Settings -> Authorized domains. Newer Firebase projects do not auto-allow localhost-style dev hosts.
 
 ### Manual Split
 
@@ -139,54 +137,25 @@ pnpm dev --hostname 127.0.0.1 --port 3000
 
 ### Deploy
 
-Hosted deploys now auto-roll from `main`: GitHub Actions deploys staging first, then prod after staging smoke passes.
-App Hosting deploys from the checked-out repo source via `firebase deploy --only apphosting:ai-math-tutor`, run from [frontend/](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend) with its own [firebase.json](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/firebase.json), so no connected App Hosting GitHub backend is required.
+Hosted deploys run on maxpetrusenko.com through Coolify. GitHub Actions builds GHCR images for the backend, session service, and frontend, then asks Coolify to deploy the matching commit tag.
 
 Repo setup for Actions:
 
-- variable `GCP_WORKLOAD_IDENTITY_PROVIDER`
-- variable `GCP_SERVICE_ACCOUNT`
-- variable `STAGE_FIREBASE_PROJECT_ID`
-- variable `PROD_FIREBASE_PROJECT_ID`
-- secret `HOSTED_BACKEND_ENV_JSON`
+- variable or secret `COOLIFY_URL`
+- secret `COOLIFY_TOKEN`
 
-Manual fallback still exists and uses a separate staging Firebase and GCP project, then promotes the same git commit to prod after smoke passes.
-
-Stage only:
+Manual smoke:
 
 ```bash
-pnpm deploy:stage \
-  --stage-project your-staging-firebase-project \
-  --stage-backend-env-file .env.deploy.staging \
-  --git-commit "$(git rev-parse HEAD)"
-```
-
-Prod only:
-
-```bash
-pnpm deploy:prod \
-  --prod-project ai-math-tutor-b39b3 \
-  --prod-backend-env-file .env.deploy.prod \
-  --git-commit "$(git rev-parse HEAD)"
-```
-
-Full local chain:
-
-```bash
-pnpm promote:prod \
-  --stage-project your-staging-firebase-project \
-  --stage-backend-env-file .env.deploy.staging \
-  --prod-project ai-math-tutor-b39b3 \
-  --prod-backend-env-file .env.deploy.prod \
-  --git-commit "$(git rev-parse HEAD)"
+pnpm smoke:prod -- --frontend-url https://aitutor.maxpetrusenko.com --backend-url https://aitutor-session.maxpetrusenko.com/api/lessons
 ```
 
 Keep the backend deploy env in local ignored files:
 
-- `.env.deploy.staging`
-- `.env.deploy.prod`
+- `.env.local`
+- `frontend/.env.local`
 
-Full operator flow: [`docs/staging-rollout.md`](docs/staging-rollout.md)
+Full operator flow: [`docs/coolify-fast-deploy.md`](docs/coolify-fast-deploy.md)
 
 Managed LiveKit avatars: [`docs/livekit-managed-avatars.md`](docs/livekit-managed-avatars.md)
 
@@ -238,7 +207,6 @@ Frontend:
 
 ```bash
 NEXT_PUBLIC_SESSION_WS_URL=ws://127.0.0.1:8000/ws/session
-NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH=0
 ```
 
 If you only want the typed demo path, the frontend still runs without live mic credentials.

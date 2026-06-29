@@ -2,6 +2,12 @@ import { buildProfileViewModel } from "./profile_view_model";
 import type { LearningAnalytics } from "./learning_analytics";
 import { DEFAULT_SESSION_PREFERENCES } from "./session_preferences";
 
+function daysAgoIso(daysAgo: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - daysAgo);
+  return date.toISOString();
+}
+
 test("builds an honest learner profile model from preferences and lesson progress", () => {
   const model = buildProfileViewModel({
     activeThread: {
@@ -37,12 +43,12 @@ test("builds an honest learner profile model from preferences and lesson progres
       {
         title: "Linear Equations",
         turnCount: 2,
-        updatedAt: "2026-03-11T00:00:00Z",
+        updatedAt: daysAgoIso(1),
       },
       {
         title: "Geometry Basics",
         turnCount: 1,
-        updatedAt: "2026-03-10T00:00:00Z",
+        updatedAt: daysAgoIso(2),
       },
     ],
     archivedLessonCount: 2,

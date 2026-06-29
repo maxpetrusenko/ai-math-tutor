@@ -2,6 +2,12 @@ import { buildDashboardViewModel } from "./dashboard_view_model";
 import type { LearningAnalytics } from "./learning_analytics";
 import { DEFAULT_SESSION_PREFERENCES } from "./session_preferences";
 
+function daysAgoIso(daysAgo: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - daysAgo);
+  return date.toISOString();
+}
+
 test("builds the learner-specific dashboard payload", () => {
   const model = buildDashboardViewModel({
     displayName: "Alex Johnson",
@@ -85,7 +91,7 @@ test("uses active lesson progress and archived resume items when learning data e
         },
         title: "Linear Equations",
         turnCount: 2,
-        updatedAt: "2026-03-11T00:00:00Z",
+        updatedAt: daysAgoIso(1),
       },
     ],
     displayName: "Alex Johnson",

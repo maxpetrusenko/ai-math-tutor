@@ -7,14 +7,6 @@ import {
   saveActiveLessonThread,
 } from "./lesson_thread_api";
 import {
-  archiveFirebaseLessonThread,
-  clearFirebaseArchivedLessonThreads,
-  clearFirebaseActiveLessonThread,
-  fetchFirebaseArchivedLessonThread,
-  fetchFirebaseLessonStore,
-  saveFirebaseActiveLessonThread,
-} from "./firebase_lessons";
-import {
   DEFAULT_LLM_MODEL,
   DEFAULT_LLM_PROVIDER,
   DEFAULT_TTS_MODEL,
@@ -470,13 +462,6 @@ export function clearPersistedLessonThread() {
 }
 
 export async function hydrateLessonThreadStore() {
-  const firebaseStore = await fetchFirebaseLessonStore().catch(() => null);
-  if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
-    const normalizedStore = normalizeStore(firebaseStore);
-    writeStore(normalizedStore);
-    return normalizedStore;
-  }
-
   const remoteStore = await fetchLessonStore();
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
     const normalizedStore = normalizeStore(remoteStore);
@@ -489,13 +474,6 @@ export async function hydrateLessonThreadStore() {
 
 export async function persistActiveLessonThread(thread: PersistedLessonThread) {
   writePersistedLessonThread(thread);
-  const localStore = readStore();
-  const firebaseStore = await saveFirebaseActiveLessonThread(thread, localStore).catch(() => null);
-  if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
-    writeStore(normalizeStore(firebaseStore));
-    return;
-  }
-
   const remoteStore = await saveActiveLessonThread(thread);
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
     writeStore(normalizeStore(remoteStore));
@@ -507,13 +485,6 @@ export async function persistArchivedLessonThread(thread: PersistedLessonThread)
   const nextEntry = buildArchiveEntry(thread);
   store.archive = [nextEntry, ...store.archive].slice(0, MAX_ARCHIVED_THREADS);
   writeStore(store);
-
-  const firebaseStore = await archiveFirebaseLessonThread(nextEntry, store).catch(() => null);
-  if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
-    const normalizedStore = normalizeStore(firebaseStore);
-    writeStore(normalizedStore);
-    return normalizedStore.archive.map(({ thread: _thread, ...summary }) => summary);
-  }
 
   const remoteStore = await archiveRemoteLessonThread(nextEntry);
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
@@ -527,13 +498,6 @@ export async function persistArchivedLessonThread(thread: PersistedLessonThread)
 
 export async function clearPersistedLessonThreadRemote() {
   clearPersistedLessonThread();
-  const localStore = readStore();
-  const firebaseStore = await clearFirebaseActiveLessonThread(localStore).catch(() => null);
-  if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
-    writeStore(normalizeStore(firebaseStore));
-    return;
-  }
-
   const remoteStore = await clearRemoteActiveLessonThread();
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
     writeStore(normalizeStore(remoteStore));
@@ -544,13 +508,6 @@ export async function clearArchivedLessonThreadsRemote() {
   const store = readStore();
   store.archive = [];
   writeStore(store);
-
-  const firebaseStore = await clearFirebaseArchivedLessonThreads(store).catch(() => null);
-  if (firebaseStore && isPersistedLessonThreadStore(firebaseStore)) {
-    const normalizedStore = normalizeStore(firebaseStore);
-    writeStore(normalizedStore);
-    return normalizedStore.archive.map(({ thread: _thread, ...summary }) => summary);
-  }
 
   const remoteStore = await clearRemoteArchivedLessonThreads();
   if (remoteStore && isPersistedLessonThreadStore(remoteStore)) {
@@ -563,22 +520,6 @@ export async function clearArchivedLessonThreadsRemote() {
 }
 
 export async function refreshArchivedLessonThread(id: string) {
-  const firebaseThread = await fetchFirebaseArchivedLessonThread(id).catch(() => null);
-  if (firebaseThread) {
-    const normalizedThread = normalizeThread(firebaseThread);
-    const store = readStore();
-    const entryIndex = store.archive.findIndex((entry) => entry.id === id);
-    if (entryIndex >= 0) {
-      store.archive[entryIndex] = {
-        ...store.archive[entryIndex],
-        thread: normalizedThread,
-      };
-      writeStore(store);
-    }
-
-    return normalizedThread;
-  }
-
   const thread = await fetchArchivedLessonThread(id);
   if (!thread) {
     return readArchivedLessonThread(id);

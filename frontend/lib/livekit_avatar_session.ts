@@ -1,5 +1,3 @@
-import { getCurrentFirebaseIdToken } from "./firebase_auth";
-
 export type LiveKitAvatarBootstrapResponse = {
   participant_identity: string;
   provider: "simli" | "liveavatar";
@@ -109,7 +107,6 @@ export async function createLiveKitAvatarSession(
     throw new Error("Could not resolve the LiveKit avatar backend URL.");
   }
 
-  const idToken = await getCurrentFirebaseIdToken();
   let lastNetworkError: Error | null = null;
 
   for (const apiUrl of apiUrls) {
@@ -118,7 +115,6 @@ export async function createLiveKitAvatarSession(
         method: "POST",
         headers: {
           "content-type": "application/json",
-          ...(idToken ? { authorization: `Bearer ${idToken}` } : {}),
         },
         body: JSON.stringify({
           avatarProviderId,

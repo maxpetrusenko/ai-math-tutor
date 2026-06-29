@@ -1,8 +1,6 @@
 import { createSessionMetrics, snapshotSessionMetrics, toLatencyMetrics } from "./session_metrics";
 import { appendSessionActivityLog } from "./session_activity_log";
 import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/session/session_types";
-import { getCurrentFirebaseIdToken } from "./firebase_auth";
-import { getFirebaseAuthClient } from "./firebase_client";
 import type { PersistedLessonThread } from "./lesson_thread_store";
 
 const SESSION_SOCKET_LOG_PREFIX = "[session_socket]";
@@ -193,13 +191,6 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-function isFirebaseSocketAuthRequired() {
-  const value = typeof process !== "undefined"
-    ? process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH
-    : undefined;
-  return typeof value === "string" && ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
-}
-
 function combineAudioChunksForTranscription(audioChunks: NonNullable<TutorTurnRequest["audioChunks"]>) {
   if (audioChunks.length <= 1) {
     return audioChunks;
@@ -329,12 +320,7 @@ export function createSessionSocketTransport(): SessionTransport {
   const buildWsUrl = async () => {
     const url = new URL(baseWsUrl);
     url.searchParams.set("session_id", ensureCurrentSessionId());
-    const authRequired = isFirebaseSocketAuthRequired();
-    const idToken = authRequired ? await getCurrentFirebaseIdToken() : null;
-    if (authRequired && !idToken && getFirebaseAuthClient()) {
-      throw new Error("Firebase sign-in required");
-    }
-    return { authToken: idToken, url: url.toString() };
+    return { url: url.toString() };
   };
 
   const rejectPendingConnect = (error: Error) => {
@@ -520,7 +506,7 @@ export function createSessionSocketTransport(): SessionTransport {
 
     return new Promise<WebSocket>((resolve, reject) => {
       void buildWsUrl()
-        .then(({ authToken, url }) => {
+        .then(({ url }) => {
           const sessionId = ensureCurrentSessionId();
           const nextSocket = new WebSocket(url);
           let didOpen = false;
@@ -538,14 +524,6 @@ export function createSessionSocketTransport(): SessionTransport {
                 rejectPendingConnect(new Error("WebSocket session start timed out"));
               }, CONNECT_TIMEOUT_MS),
             };
-            if (authToken) {
-              void queueSocketPayload(nextSocket, {
-                type: "session.authenticate",
-                auth_token: authToken,
-              }).catch((error) => {
-                rejectPendingConnect(error instanceof Error ? error : new Error("WebSocket authentication failed"));
-              });
-            }
           };
 
           nextSocket.onmessage = handleMessage;

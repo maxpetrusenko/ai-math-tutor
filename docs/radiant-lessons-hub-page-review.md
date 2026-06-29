@@ -110,7 +110,7 @@ What exists now:
 
 - persisted `lessonState` in the lesson thread store
 - lesson title, program steps, current task, and next question
-- restore across local storage, Firebase lesson store, and backend lesson API persistence
+- restore across local storage and backend lesson API persistence
 - backend learning analytics summary at `/api/lessons/analytics`
 - tutor-led resume UX that points the learner to the next question instead of a blank start
 - dashboard continue-learning and quick-start cards sourced from active lesson and archived lesson threads
@@ -177,7 +177,7 @@ What does not exist yet:
 2. Finish session decomposition
    Split `TutorSession.tsx` further into composer, welcome state, history drawer, and avatar stage components.
 3. Complete account management
-   Add real password/data/export/delete flows and clearer sync state between local, Firebase, and backend storage.
+   Add real password/data/export/delete flows and clearer sync state between local and backend storage.
 4. Raise the premium finish
    Better iconography, richer motion, stronger illustration direction, and more intentional empty/loading states.
 5. Run a full accessibility audit

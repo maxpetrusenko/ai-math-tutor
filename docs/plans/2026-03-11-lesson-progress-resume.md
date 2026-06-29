@@ -58,7 +58,6 @@ git commit -m "feat: add persisted lesson progress state"
 **Files:**
 - Modify: `frontend/lib/lesson_thread_store.ts`
 - Modify: `frontend/lib/lesson_thread_api.ts` if type imports need updates only
-- Modify: `frontend/lib/firebase_lessons.ts` if type imports need updates only
 
 **Step 1: Write the failing test**
 

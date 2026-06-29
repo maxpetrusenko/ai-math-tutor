@@ -43,15 +43,6 @@ const {
   writeSessionPreferences: vi.fn((value) => value),
 }));
 
-vi.mock("../../lib/firebase_auth", () => ({
-  useFirebaseAuth: () => ({
-    signOutUser: vi.fn().mockResolvedValue(undefined),
-    user: {
-      email: "alex@example.com",
-    },
-  }),
-}));
-
 vi.mock("../../lib/session_preferences", () => ({
   readSessionPreferences: () => ({
     audioVolume: 0.8,

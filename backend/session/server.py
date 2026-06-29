@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import base64
 import json
 import logging
@@ -8,7 +7,7 @@ import os
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.livekit import create_avatar_room_session, is_managed_avatar_provider_id
@@ -17,11 +16,6 @@ from backend.llm.prompt_builder import build_tutor_messages
 from backend.llm.topic_shift import filter_history_for_latest_turn
 from backend.llm.provider_switch import ProviderSwitch
 from backend.providers import create_provider
-from backend.session.firebase_auth import (
-    firebase_auth_required,
-    verify_firebase_bearer_token,
-    verify_firebase_websocket_token,
-)
 from backend.session.learning_analytics import summarize_learning_analytics
 from backend.session.persistence import (
     archive_lesson_thread,
@@ -64,16 +58,8 @@ app.add_middleware(
     allow_methods=["*"],
 )
 
-WEBSOCKET_AUTH_TIMEOUT_SECONDS = 5
-
-
 def create_stt_provider() -> StreamingSTTProvider:
     return STTProviderFactory().create()
-
-
-def _auth_namespace(claims: dict[str, object] | None) -> str:
-    uid = str((claims or {}).get("uid") or "").strip()
-    return uid or "default"
 
 
 def _is_allowed_websocket_origin(origin: str | None) -> bool:
@@ -93,37 +79,14 @@ def _is_allowed_websocket_origin(origin: str | None) -> bool:
     return origin in allowed
 
 
-async def _authenticate_websocket(websocket: WebSocket) -> dict[str, object] | None:
-    if not firebase_auth_required():
-        return None
-
-    try:
-        message = await asyncio.wait_for(websocket.receive_json(), timeout=WEBSOCKET_AUTH_TIMEOUT_SECONDS)
-    except asyncio.TimeoutError as error:
-        raise HTTPException(status_code=401, detail="WebSocket authentication timed out") from error
-    except WebSocketDisconnect as error:
-        raise HTTPException(status_code=401, detail="WebSocket disconnected before authentication") from error
-
-    if not isinstance(message, dict) or str(message.get("type") or "") != "session.authenticate":
-        raise HTTPException(status_code=401, detail="WebSocket authentication message required")
-
-    auth_token = str(message.get("auth_token") or "").strip()
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing Firebase auth token")
-
-    return verify_firebase_websocket_token(auth_token)
-
-
 @app.get("/api/lessons")
-def get_lessons(authorization: str | None = Header(default=None)) -> dict[str, object]:
-    claims = verify_firebase_bearer_token(authorization)
-    return read_lesson_store(namespace=_auth_namespace(claims))
+def get_lessons() -> dict[str, object]:
+    return read_lesson_store(namespace="default")
 
 
 @app.get("/api/lessons/analytics")
-def get_lessons_analytics(authorization: str | None = Header(default=None)) -> dict[str, object]:
-    claims = verify_firebase_bearer_token(authorization)
-    lesson_store = read_lesson_store(namespace=_auth_namespace(claims))
+def get_lessons_analytics() -> dict[str, object]:
+    lesson_store = read_lesson_store(namespace="default")
     return summarize_learning_analytics(
         active_thread=lesson_store["activeThread"],
         archived_lessons=lesson_store["archive"],
@@ -138,9 +101,7 @@ def get_runtime_options() -> dict[str, object]:
 @app.post("/api/avatars/livekit/session")
 async def post_livekit_avatar_session(
     payload: dict[str, object] | None = None,
-    authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
-    verify_firebase_bearer_token(authorization)
     avatar_provider_id = str((payload or {}).get("avatarProviderId") or "").strip()
     participant_name = str((payload or {}).get("participantName") or "Student").strip() or "Student"
 
@@ -161,9 +122,7 @@ async def post_livekit_avatar_session(
 @app.post("/api/realtime/client-secret")
 def post_realtime_client_secret(
     payload: dict[str, object] | None = None,
-    authorization: str | None = Header(default=None),
 ) -> dict[str, object]:
-    verify_firebase_bearer_token(authorization)
     try:
         return create_realtime_client_secret(payload or {})
     except ValueError as error:
@@ -175,33 +134,28 @@ def post_realtime_client_secret(
 
 
 @app.put("/api/lessons/active")
-def put_active_lesson(thread: dict[str, object], authorization: str | None = Header(default=None)) -> dict[str, object]:
-    claims = verify_firebase_bearer_token(authorization)
-    return write_active_lesson_thread(thread, namespace=_auth_namespace(claims))  # type: ignore[arg-type]
+def put_active_lesson(thread: dict[str, object]) -> dict[str, object]:
+    return write_active_lesson_thread(thread, namespace="default")  # type: ignore[arg-type]
 
 
 @app.delete("/api/lessons/active")
-def delete_active_lesson(authorization: str | None = Header(default=None)) -> dict[str, object]:
-    claims = verify_firebase_bearer_token(authorization)
-    return clear_active_lesson_thread(namespace=_auth_namespace(claims))
+def delete_active_lesson() -> dict[str, object]:
+    return clear_active_lesson_thread(namespace="default")
 
 
 @app.post("/api/lessons/archive")
-def post_archived_lesson(entry: dict[str, object], authorization: str | None = Header(default=None)) -> dict[str, object]:
-    claims = verify_firebase_bearer_token(authorization)
-    return archive_lesson_thread(entry, namespace=_auth_namespace(claims))  # type: ignore[arg-type]
+def post_archived_lesson(entry: dict[str, object]) -> dict[str, object]:
+    return archive_lesson_thread(entry, namespace="default")  # type: ignore[arg-type]
 
 
 @app.delete("/api/lessons/archive")
-def delete_archived_lessons(authorization: str | None = Header(default=None)) -> dict[str, object]:
-    claims = verify_firebase_bearer_token(authorization)
-    return clear_archived_lesson_threads(namespace=_auth_namespace(claims))
+def delete_archived_lessons() -> dict[str, object]:
+    return clear_archived_lesson_threads(namespace="default")
 
 
 @app.get("/api/lessons/archive/{lesson_id}")
-def get_archived_lesson(lesson_id: str, authorization: str | None = Header(default=None)) -> dict[str, object]:
-    claims = verify_firebase_bearer_token(authorization)
-    thread = load_archived_lesson_thread(lesson_id, namespace=_auth_namespace(claims))
+def get_archived_lesson(lesson_id: str) -> dict[str, object]:
+    thread = load_archived_lesson_thread(lesson_id, namespace="default")
     if thread is None:
         raise HTTPException(status_code=404, detail="Lesson not found")
     return thread
@@ -217,13 +171,7 @@ async def session_websocket(websocket: WebSocket) -> None:
         return
 
     await websocket.accept()
-    try:
-        claims = await _authenticate_websocket(websocket)
-    except HTTPException as error:
-        await websocket.close(code=4401)
-        return
-
-    namespace = _auth_namespace(claims)
+    namespace = "default"
     session_id = websocket.query_params.get("session_id") or str(uuid4())
     logger.info("session websocket opened %s", _json_summary({"session_id": session_id}))
     controller = SessionController(session_id=session_id)

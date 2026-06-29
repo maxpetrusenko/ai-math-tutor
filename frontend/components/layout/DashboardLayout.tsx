@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
-import { useFirebaseAuth } from "../../lib/firebase_auth";
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
@@ -18,10 +17,8 @@ type DashboardLayoutProps = {
 export function DashboardLayout({ children, headerActions, headerContext }: DashboardLayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const { signOutUser, user } = useFirebaseAuth();
 
   const handleSignOut = async () => {
-    await signOutUser();
     window.location.href = "/";
   };
 
@@ -38,7 +35,6 @@ export function DashboardLayout({ children, headerActions, headerContext }: Dash
           }
         }}
         onSignOut={handleSignOut}
-        user={user ? { email: user.email ?? undefined, name: user.displayName ?? undefined } : undefined}
       />
       <Sidebar
         collapsed={sidebarCollapsed}

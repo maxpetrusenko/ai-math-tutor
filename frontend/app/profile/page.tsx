@@ -9,7 +9,6 @@ import { MetricCard } from "../../components/ui/MetricCard";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { SurfaceCard } from "../../components/ui/SurfaceCard";
 import { readAvatarProviderPreference } from "../../lib/avatar_preference";
-import { useFirebaseAuth } from "../../lib/firebase_auth";
 import { fetchLearningAnalytics } from "../../lib/lesson_thread_api";
 import {
   hydrateLessonThreadStore,
@@ -46,7 +45,6 @@ function readProfileLearningSnapshot() {
 }
 
 export default function ProfilePage() {
-  const { user } = useFirebaseAuth();
   const preferences = readSessionPreferences();
   const [learningSnapshot, setLearningSnapshot] = useState(() => readProfileLearningSnapshot());
   const [learningAnalytics, setLearningAnalytics] = useState<LearningAnalytics | null>(null);
@@ -75,8 +73,6 @@ export default function ProfilePage() {
     analytics: learningAnalytics,
     archivedLessons: learningSnapshot.archivedLessons,
     archivedLessonCount: learningSnapshot.archivedLessonCount,
-    displayName: user?.displayName,
-    email: user?.email,
     preferences,
   });
   const selectedTutor = resolveAvatarProvider(readAvatarProviderPreference() ?? undefined);

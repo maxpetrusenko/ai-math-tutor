@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from typing import Any
 from urllib import error, parse, request
 
@@ -34,11 +35,14 @@ def _derive_backend_lessons_url(runtime_status: dict[str, Any]) -> str | None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "--":
+        argv = argv[1:]
+
     parser = argparse.ArgumentParser(description="Smoke check a hosted Nerdy deploy.")
     parser.add_argument("--frontend-url", required=True)
     parser.add_argument("--backend-url")
     parser.add_argument("--expect-auth", action="store_true")
-    parser.add_argument("--expect-firebase", action="store_true")
     parser.add_argument("--expect-revision-contains")
     args = parser.parse_args(argv)
 
@@ -60,10 +64,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"smoke: revision {revision!r} did not include {args.expect_revision_contains!r}")
         return 1
 
-    if args.expect_firebase and not runtime_status.get("firebaseConfigReady"):
-        print("smoke: firebase config not ready")
-        return 1
-
     backend_url = args.backend_url or _derive_backend_lessons_url(runtime_status)
     if not backend_url:
         print("smoke: could not determine backend lessons url")
@@ -75,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.expect_auth and lessons_status != 401:
         print("smoke: expected backend auth gate (401)")
         return 1
-    if not args.expect_auth and lessons_status not in {200, 401}:
+    if not args.expect_auth and lessons_status != 200:
         print("smoke: unexpected backend status")
         return 1
 

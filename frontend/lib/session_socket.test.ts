@@ -1,20 +1,5 @@
 import { afterEach, vi } from "vitest";
 
-const ORIGINAL_PUBLIC_AUTH_REQUIREMENT = process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH;
-
-const { getCurrentFirebaseIdToken, getFirebaseAuthClient } = vi.hoisted(() => ({
-  getCurrentFirebaseIdToken: vi.fn<() => Promise<string | null>>(),
-  getFirebaseAuthClient: vi.fn<() => object | null>(),
-}));
-
-vi.mock("./firebase_auth", () => ({
-  getCurrentFirebaseIdToken,
-}));
-
-vi.mock("./firebase_client", () => ({
-  getFirebaseAuthClient,
-}));
-
 import { createSessionSocketTransport } from "./session_socket";
 
 
@@ -62,15 +47,6 @@ class FakeWebSocket {
 
 afterEach(() => {
   FakeWebSocket.instances = [];
-  getCurrentFirebaseIdToken.mockReset();
-  getCurrentFirebaseIdToken.mockResolvedValue(null);
-  getFirebaseAuthClient.mockReset();
-  getFirebaseAuthClient.mockReturnValue(null);
-  if (ORIGINAL_PUBLIC_AUTH_REQUIREMENT === undefined) {
-    delete process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH;
-  } else {
-    process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH = ORIGINAL_PUBLIC_AUTH_REQUIREMENT;
-  }
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -242,50 +218,17 @@ test("session transport returns failed when websocket connect errors", async () 
   await expect(createSessionSocketTransport().connect()).resolves.toBe("failed");
 });
 
-test("session transport refuses websocket connect before firebase auth is ready", async () => {
+test("session transport connects without auth frames", async () => {
   vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
-  process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH = "1";
-  getFirebaseAuthClient.mockReturnValue({ currentUser: null });
-  getCurrentFirebaseIdToken.mockResolvedValue(null);
-
-  await expect(createSessionSocketTransport().connect()).resolves.toBe("failed");
-  expect(FakeWebSocket.instances).toHaveLength(0);
-});
-
-test("session transport appends firebase auth token to websocket url when available", async () => {
-  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
-  process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH = "1";
-  getFirebaseAuthClient.mockReturnValue({ currentUser: { uid: "user-1" } });
-  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
 
   await expect(createSessionSocketTransport().connect()).resolves.toBe("connected");
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  expect(FakeWebSocket.instances[0]?.url).not.toContain("auth_token=");
-  expect(FakeWebSocket.instances[0]?.sent.map((payload) => JSON.parse(payload))).toContainEqual({
-    type: "session.authenticate",
-    auth_token: "firebase-id-token",
-  });
-});
-
-test("session transport skips firebase auth frames when backend auth is disabled", async () => {
-  vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
-  process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH = "0";
-  getFirebaseAuthClient.mockReturnValue({ currentUser: { uid: "user-1" } });
-  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
-
-  await expect(createSessionSocketTransport().connect()).resolves.toBe("connected");
-  await new Promise((resolve) => setTimeout(resolve, 0));
-
-  expect(FakeWebSocket.instances[0]?.sent.map((payload) => JSON.parse(payload))).not.toContainEqual({
-    type: "session.authenticate",
-    auth_token: "firebase-id-token",
-  });
+  expect(FakeWebSocket.instances[0]?.sent).toEqual([]);
 });
 
 test("session transport ignores legacy auth-message errors after connect", async () => {
   vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
-  process.env.NEXT_PUBLIC_REQUIRE_FIREBASE_AUTH = "0";
   const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   const transport = createSessionSocketTransport();
 

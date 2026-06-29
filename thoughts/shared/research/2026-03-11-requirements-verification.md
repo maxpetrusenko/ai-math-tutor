@@ -160,7 +160,7 @@ speech_end → stt_final → llm_first_token → tts_first_audio → first_visem
 **Session history** ([`backend/session/server.py`](https://github.com/maxpetrusenko/ai-math-tutor/blob/877d0c797b7fbdd658fae93f85c8d8dc634db076/backend/session/server.py), [`backend/session/persistence.py`](https://github.com/maxpetrusenko/ai-math-tutor/blob/877d0c797b7fbdd658fae93f85c8d8dc634db076/backend/session/persistence.py)):
 - Sessions stored as `SessionSnapshot` with history, student profile, grade band
 - Saved to `./.nerdy-data/session-store.json`
-- Namespaced by Firebase UID
+- Namespaced by lesson/session identity
 
 **Topic shift detection** ([`backend/llm/topic_shift.py`](https://github.com/maxpetrusenko/ai-math-tutor/blob/877d0c797b7fbdd658fae93f85c8d8dc634db076/backend/llm/topic_shift.py)):
 - `_looks_like_dependent_follow_up()`: Short responses ("yes", "4", "why") keep history

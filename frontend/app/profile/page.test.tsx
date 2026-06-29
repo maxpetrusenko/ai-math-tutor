@@ -1,15 +1,6 @@
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 
-vi.mock("../../lib/firebase_auth", () => ({
-  useFirebaseAuth: () => ({
-    user: {
-      displayName: "Alex Johnson",
-      email: "alex@example.com",
-    },
-  }),
-}));
-
 vi.mock("../../lib/session_preferences", () => ({
   readSessionPreferences: () => ({
     audioVolume: 0.8,

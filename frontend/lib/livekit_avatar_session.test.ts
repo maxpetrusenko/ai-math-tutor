@@ -1,11 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-const getCurrentFirebaseIdToken = vi.fn<() => Promise<string | null>>();
-
-vi.mock("./firebase_auth", () => ({
-  getCurrentFirebaseIdToken,
-}));
-
 const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
@@ -14,7 +8,6 @@ beforeEach(() => {
     ...ORIGINAL_ENV,
     NODE_ENV: "development",
   };
-  getCurrentFirebaseIdToken.mockResolvedValue("firebase-id-token");
 });
 
 afterEach(() => {
@@ -53,7 +46,6 @@ test("livekit avatar bootstrap uses same-origin https fallback in browser", asyn
   expect(fetchMock).toHaveBeenCalledWith("https://ai-math-tutor.example.com/api/avatars/livekit/session", {
     method: "POST",
     headers: {
-      authorization: "Bearer firebase-id-token",
       "content-type": "application/json",
     },
     body: JSON.stringify({

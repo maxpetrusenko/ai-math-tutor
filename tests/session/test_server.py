@@ -1,7 +1,7 @@
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -262,6 +262,7 @@ def test_lesson_history_api_persists_active_and_archived_threads() -> None:
 
 def test_lessons_analytics_endpoint_summarizes_saved_history() -> None:
     client = TestClient(app)
+    yesterday = datetime.now(UTC) - timedelta(days=1)
     active_thread = {
         "avatarProviderId": "human-css-2d",
         "conversation": [
@@ -301,7 +302,7 @@ def test_lessons_analytics_endpoint_summarizes_saved_history() -> None:
         "thread": active_thread,
         "title": "Linear Equations",
         "turnCount": 3,
-        "updatedAt": "2026-03-11T00:00:00.000Z",
+        "updatedAt": yesterday.isoformat().replace("+00:00", "Z"),
     }
 
     client.put("/api/lessons/active", json=active_thread)
@@ -432,53 +433,6 @@ def test_lessons_api_accepts_local_dev_origin_preflight() -> None:
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3012"
 
 
-def test_lessons_api_requires_bearer_token_when_firebase_auth_enabled(monkeypatch) -> None:
-    monkeypatch.setenv("NERDY_REQUIRE_FIREBASE_AUTH", "1")
-    client = TestClient(app)
-
-    response = client.get("/api/lessons")
-
-    assert response.status_code == 401
-    assert response.json() == {"detail": "Missing Authorization bearer token"}
-
-
-def test_lessons_api_scopes_fallback_store_per_firebase_uid(monkeypatch) -> None:
-    def fake_verify_bearer_token(authorization: str | None) -> dict[str, str]:
-        if not authorization:
-            raise HTTPException(status_code=401, detail="Missing Authorization bearer token")
-        return {"uid": authorization.removeprefix("Bearer ").strip()}
-
-    monkeypatch.setenv("NERDY_REQUIRE_FIREBASE_AUTH", "1")
-    monkeypatch.setattr("backend.session.server.verify_firebase_bearer_token", fake_verify_bearer_token)
-    client = TestClient(app)
-    active_thread = {
-        "avatarProviderId": "human-css-2d",
-        "conversation": [{"id": "1", "transcript": "What is x?", "tutorText": "Start with the variable."}],
-        "gradeBand": "6-8",
-        "llmModel": "gemini-3-flash-preview",
-        "llmProvider": "gemini",
-        "preference": "slow down",
-        "sessionId": "lesson-123",
-        "studentPrompt": "What is x?",
-        "subject": "math",
-        "transcript": "What is x?",
-        "ttsModel": "sonic-2",
-        "ttsProvider": "cartesia",
-        "tutorText": "Start with the variable.",
-        "version": 1,
-    }
-
-    user_a_put = client.put("/api/lessons/active", json=active_thread, headers={"Authorization": "Bearer user-a"})
-    user_a_list = client.get("/api/lessons", headers={"Authorization": "Bearer user-a"})
-    user_b_list = client.get("/api/lessons", headers={"Authorization": "Bearer user-b"})
-
-    assert user_a_put.status_code == 200
-    assert user_a_list.status_code == 200
-    assert user_b_list.status_code == 200
-    assert user_a_list.json()["activeThread"]["sessionId"] == "lesson-123"
-    assert user_b_list.json()["activeThread"] is None
-
-
 def test_session_websocket_rejects_missing_origin() -> None:
     client = TestClient(app)
 
@@ -490,7 +444,7 @@ def test_session_websocket_rejects_missing_origin() -> None:
 
 
 def test_session_websocket_rejects_disallowed_origin(monkeypatch) -> None:
-    monkeypatch.setenv("NERDY_ALLOWED_ORIGINS", "https://ai-math-tutor--ai-math-tutor-b39b3.us-east4.hosted.app")
+    monkeypatch.setenv("NERDY_ALLOWED_ORIGINS", "https://aitutor.maxpetrusenko.com")
     client = TestClient(app)
 
     with pytest.raises(WebSocketDisconnect) as error:
@@ -498,36 +452,3 @@ def test_session_websocket_rejects_disallowed_origin(monkeypatch) -> None:
             pass
 
     assert error.value.code == 4403
-
-
-def test_session_websocket_authenticates_with_first_message_when_firebase_auth_enabled(monkeypatch) -> None:
-    monkeypatch.setenv("NERDY_REQUIRE_FIREBASE_AUTH", "1")
-    monkeypatch.setattr(
-        "backend.session.server.verify_firebase_websocket_token",
-        lambda token: {"uid": "user-1"} if token == "firebase-id-token" else (_ for _ in ()).throw(
-            HTTPException(status_code=401, detail="Invalid Firebase auth token")
-        ),
-    )
-    client = TestClient(app)
-
-    with _session_ws(client) as websocket:
-        websocket.send_json({"type": "session.authenticate", "auth_token": "firebase-id-token"})
-        started = websocket.receive_json()
-
-    assert started == {
-        "type": "session.started",
-        "session_id": started["session_id"],
-        "state": "idle",
-    }
-
-
-def test_session_websocket_rejects_non_auth_first_message_when_firebase_auth_enabled(monkeypatch) -> None:
-    monkeypatch.setenv("NERDY_REQUIRE_FIREBASE_AUTH", "1")
-    client = TestClient(app)
-
-    with pytest.raises(WebSocketDisconnect) as error:
-        with _session_ws(client) as websocket:
-            websocket.send_json({"type": "speech.end", "ts_ms": 1000, "text": "hello"})
-            websocket.receive_json()
-
-    assert error.value.code == 4401

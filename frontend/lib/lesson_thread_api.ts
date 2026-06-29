@@ -1,7 +1,5 @@
 import type { PersistedLessonArchiveEntry, PersistedLessonThreadStore, PersistedLessonThread } from "./lesson_thread_store";
 import type { LearningAnalytics } from "./learning_analytics";
-import { getCurrentFirebaseIdToken } from "./firebase_auth";
-import { getFirebaseAuthClient } from "./firebase_client";
 
 function resolveLessonApiUrl() {
   if (typeof process !== "undefined" && process.env.NODE_ENV === "test") {
@@ -35,14 +33,9 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T | nul
   }
 
   try {
-    const idToken = await getCurrentFirebaseIdToken();
-    if (!idToken && getFirebaseAuthClient()) {
-      return null;
-    }
     const response = await fetch(path ? `${baseUrl}${path}` : baseUrl, {
       credentials: "include",
       headers: {
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         "Content-Type": "application/json",
       },
       ...init,

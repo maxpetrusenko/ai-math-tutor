@@ -3,6 +3,11 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "jsdom",
+    environmentOptions: {
+      jsdom: {
+        url: "http://127.0.0.1:3000/session",
+      },
+    },
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     exclude: ["e2e/**", "node_modules/**", "dist/**"],

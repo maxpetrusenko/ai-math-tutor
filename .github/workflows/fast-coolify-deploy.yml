@@ -1,0 +1,192 @@
+name: Fast Coolify Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ai-math-tutor-production
+  cancel-in-progress: false
+
+env:
+  DOCKER_TAG: sha-${{ github.sha }}
+  IMAGE_NAMESPACE: ghcr.io/maxpetrusenko
+
+jobs:
+  gates:
+    name: Gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install backend deps
+        run: python3 -m pip install -e '.[dev]'
+
+      - name: Install frontend deps
+        run: pnpm install --frozen-lockfile --dir frontend
+
+      - name: Frontend tests
+        run: pnpm test
+
+      - name: Frontend typecheck
+        run: pnpm typecheck
+
+      - name: Frontend build
+        run: pnpm build
+
+      - name: Backend tests
+        run: python3 -m pytest
+
+  build-images:
+    name: Build ${{ matrix.app }} image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs:
+      - gates
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: backend
+            image: ai-math-tutor-backend
+            dockerfile: backend/Dockerfile
+            context: .
+          - app: session
+            image: ai-math-tutor-session
+            dockerfile: backend/Dockerfile
+            context: .
+          - app: frontend
+            image: ai-math-tutor-frontend
+            dockerfile: frontend/Dockerfile
+            context: frontend
+          - app: web
+            image: ai-math-tutor-web
+            dockerfile: frontend/Dockerfile
+            context: frontend
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:${{ env.DOCKER_TAG }}
+            ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:latest
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+
+  deploy:
+    name: Deploy ${{ matrix.app }} to Coolify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - build-images
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: backend
+            uuid: jbglbhx2tegm7olw37rmy9zm
+            image: ai-math-tutor-backend
+            port: "8080"
+            health: /api/runtime-options
+          - app: session
+            uuid: q47hwdffry6w02uc0ykr8rmy
+            image: ai-math-tutor-session
+            port: "8080"
+            health: /api/runtime-options
+          - app: frontend
+            uuid: nz1pemtpromq4ujwpu83zphm
+            image: ai-math-tutor-frontend
+            port: "3000"
+            health: /api/runtime/status
+          - app: web
+            uuid: ecedjb8684h04h01m508baih
+            image: ai-math-tutor-web
+            port: "3000"
+            health: /api/runtime/status
+
+    steps:
+      - name: Point Coolify at image tag and deploy
+        env:
+          COOLIFY_API_URL: ${{ secrets.COOLIFY_API_URL }}
+          COOLIFY_URL: ${{ vars.COOLIFY_URL || secrets.COOLIFY_URL }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          COOLIFY_UUID: ${{ matrix.uuid }}
+          COOLIFY_IMAGE: ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
+          COOLIFY_PORT: ${{ matrix.port }}
+          COOLIFY_HEALTH_PATH: ${{ matrix.health }}
+        run: |
+          set -euo pipefail
+
+          api_url="${COOLIFY_API_URL:-${COOLIFY_URL:-}}"
+          test -n "${api_url:-}"
+          test -n "${COOLIFY_TOKEN:-}"
+          test -n "${COOLIFY_UUID:-}"
+
+          api_url="${api_url%/}"
+          case "${api_url}" in
+            */api/v1) ;;
+            *) api_url="${api_url}/api/v1" ;;
+          esac
+
+          curl --fail-with-body --no-progress-meter --show-error \
+            --request PATCH "${api_url}/applications/${COOLIFY_UUID}" \
+            --header "Authorization: Bearer ${COOLIFY_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data "$(jq -n \
+              --arg image "${COOLIFY_IMAGE}" \
+              --arg tag "${DOCKER_TAG}" \
+              --arg port "${COOLIFY_PORT}" \
+              --arg health "${COOLIFY_HEALTH_PATH}" \
+              '{
+                build_pack: "dockerimage",
+                docker_registry_image_name: $image,
+                docker_registry_image_tag: $tag,
+                ports_exposes: $port,
+                health_check_enabled: true,
+                health_check_path: $health
+              }')"
+
+          curl --fail-with-body --no-progress-meter --show-error \
+            --request POST "${api_url}/deploy?uuid=${COOLIFY_UUID}&force=false" \
+            --header "Authorization: Bearer ${COOLIFY_TOKEN}"

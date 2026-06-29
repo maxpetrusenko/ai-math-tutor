@@ -35,7 +35,7 @@ For this pass, "learning data" means learner-linked lesson progress data that su
 
 - local persisted store
 - existing remote lesson API if configured
-- existing Firebase lesson store if authenticated
+- existing remote lesson API if configured
 
 This is enough to say we have learning data for lesson resume and progress state, even if it is not yet full reporting analytics.
 
@@ -150,4 +150,4 @@ Add focused tests for:
 - learner opens a lesson and immediately sees what the lesson is and what the current task is
 - tutor leads with a direct question for the task
 - learner can leave and come back and still see where they stopped
-- persisted lesson data survives the current local/Firebase/API storage paths
+- persisted lesson data survives the current local/API storage paths
