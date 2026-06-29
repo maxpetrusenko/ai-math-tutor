@@ -13,7 +13,7 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-ARG NEXT_PUBLIC_SESSION_WS_URL
+ARG NEXT_PUBLIC_SESSION_WS_URL=wss://aitutor-session.maxpetrusenko.com/ws/session
 
 ENV NEXT_PUBLIC_SESSION_WS_URL=$NEXT_PUBLIC_SESSION_WS_URL
 
