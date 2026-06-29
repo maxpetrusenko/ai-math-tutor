@@ -34,6 +34,16 @@ python3 -m pip install -e '.[dev]'
 python3 -m backend.livekit.avatar_agent start
 ```
 
+## Hosted worker
+
+Hosted managed avatars require a separate long-running worker container. The
+session API only creates the LiveKit room and dispatches `nerdy-avatar-agent`; it
+does not publish avatar media itself.
+
+Build and deploy `ghcr.io/maxpetrusenko/ai-math-tutor-avatar-worker` from
+`backend/Dockerfile.worker`. Health checks should stay disabled because this
+process is a LiveKit agent worker, not an HTTP server.
+
 Run the app as usual:
 
 ```bash

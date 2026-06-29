@@ -1,0 +1,24 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_PROGRESS_BAR=off \
+    PIP_RETRIES=10
+
+WORKDIR /app
+
+COPY pyproject.toml README.md /app/
+COPY backend /app/backend
+COPY eval /app/eval
+
+RUN for attempt in 1 2 3 4 5; do \
+        pip install --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" . \
+            && rm -rf /root/.cache/pip \
+            && exit 0; \
+        sleep "$((attempt * 15))"; \
+    done; \
+    exit 1
+
+CMD ["python3", "-m", "backend.livekit.avatar_agent", "start"]

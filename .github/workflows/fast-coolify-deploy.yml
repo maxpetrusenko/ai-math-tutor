@@ -78,6 +78,10 @@ jobs:
             image: ai-math-tutor-session
             dockerfile: backend/Dockerfile
             context: .
+          - app: avatar-worker
+            image: ai-math-tutor-avatar-worker
+            dockerfile: backend/Dockerfile.worker
+            context: .
           - app: frontend
             image: ai-math-tutor-frontend
             dockerfile: frontend/Dockerfile

@@ -23,9 +23,11 @@ All images are pushed under `ghcr.io/maxpetrusenko/` with tag `sha-${{ github.sh
 
 - `ghcr.io/maxpetrusenko/ai-math-tutor-backend`
 - `ghcr.io/maxpetrusenko/ai-math-tutor-session`
+- `ghcr.io/maxpetrusenko/ai-math-tutor-avatar-worker`
 - `ghcr.io/maxpetrusenko/ai-math-tutor-frontend`
 
 Backend and session both build from `backend/Dockerfile`.
+The LiveKit avatar worker builds from `backend/Dockerfile.worker`.
 Frontend builds from `frontend/Dockerfile`.
 
 ## Coolify Apps
@@ -36,6 +38,7 @@ Covered by the workflow:
 | --- | --- | --- | --- | --- |
 | `ai-math-tutor-backend` | `jbglbhx2tegm7olw37rmy9zm` | `backend/Dockerfile` | `8080` | `/api/runtime-options` |
 | `ai-math-tutor-session` | `q47hwdffry6w02uc0ykr8rmy` | `backend/Dockerfile` | `8080` | `/api/runtime-options` |
+| `ai-math-tutor-avatar-worker` | `yw36ciy2dqqcq9ituuwzdsru` | `backend/Dockerfile.worker` | `8080` | disabled |
 | `ai-math-tutor-frontend` | `nz1pemtpromq4ujwpu83zphm` | `frontend/Dockerfile` | `3000` | `/api/runtime/status` |
 
 Blocked:
