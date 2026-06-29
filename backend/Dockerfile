@@ -14,9 +14,15 @@ COPY eval /app/eval
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip install --no-cache-dir --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" --upgrade pip \
-    && pip install --no-cache-dir --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" .
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" --upgrade pip
+
+RUN for attempt in 1 2 3 4 5; do \
+        pip install --no-cache-dir --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" . && exit 0; \
+        sleep "$((attempt * 15))"; \
+    done; \
+    exit 1
 
 EXPOSE 8080
 
