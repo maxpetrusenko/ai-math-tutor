@@ -5,11 +5,15 @@ import { ManagedAvatarSession, type ManagedAvatarSessionHandle, type ManagedAvat
 
 const {
   createLiveKitAvatarSession,
+  emitAgentReady,
+  emitAgentReadyOnConnect,
   emitTrackOnConnect,
   emitDisconnect,
   setMicrophoneEnabled,
 } = vi.hoisted(() => ({
   createLiveKitAvatarSession: vi.fn(),
+  emitAgentReady: vi.fn(),
+  emitAgentReadyOnConnect: vi.fn(),
   emitTrackOnConnect: vi.fn(),
   emitDisconnect: vi.fn(),
   setMicrophoneEnabled: vi.fn(),
@@ -21,31 +25,48 @@ vi.mock("../lib/livekit_avatar_session", () => ({
 
 vi.mock("livekit-client", () => {
   let activeRoom: Room | null = null;
+  function emitReady(room: Room) {
+    room.handlers.get("dataReceived")?.(
+      new TextEncoder().encode(JSON.stringify({ type: "nerdy.avatar_agent.ready" })),
+      { identity: "nerdy-avatar-agent" },
+      "reliable",
+      "nerdy.avatar_agent",
+    );
+  }
+
+  emitAgentReady.mockImplementation(() => {
+    if (activeRoom) {
+      emitReady(activeRoom);
+    }
+  });
+
   emitDisconnect.mockImplementation(() => {
     activeRoom?.handlers.get("disconnected")?.();
   });
 
   class Room {
-    handlers = new Map<string, (track?: unknown) => void>();
+    handlers = new Map<string, (...args: unknown[]) => void>();
     remoteParticipants = new Map();
     localParticipant = {
       setMicrophoneEnabled,
     };
 
-    on(event: string, handler: (track?: unknown) => void) {
+    on(event: string, handler: (...args: unknown[]) => void) {
       this.handlers.set(event, handler);
     }
 
     async connect() {
       activeRoom = this;
-      if (!emitTrackOnConnect()) {
-        return;
+      if (emitTrackOnConnect()) {
+        const videoElement = document.createElement("video");
+        this.handlers.get("trackSubscribed")?.({
+          kind: "video",
+          attach: () => videoElement,
+        });
       }
-      const videoElement = document.createElement("video");
-      this.handlers.get("trackSubscribed")?.({
-        kind: "video",
-        attach: () => videoElement,
-      });
+      if (emitAgentReadyOnConnect()) {
+        emitReady(this);
+      }
     }
 
     disconnect() {
@@ -57,6 +78,7 @@ vi.mock("livekit-client", () => {
     Room,
     RoomEvent: {
       Disconnected: "disconnected",
+      DataReceived: "dataReceived",
       TrackSubscribed: "trackSubscribed",
     },
     Track: {
@@ -82,6 +104,8 @@ beforeEach(() => {
       url: "wss://example.livekit.cloud",
     });
   emitTrackOnConnect.mockReturnValue(true);
+  emitAgentReadyOnConnect.mockReturnValue(true);
+  emitAgentReady.mockClear();
   emitDisconnect.mockClear();
   setMicrophoneEnabled.mockRejectedValue(new Error("Not supported"));
   vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
@@ -172,6 +196,49 @@ test("lets the user manually open and pause the mic without dropping the room", 
   await waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledWith(false, undefined));
 });
 
+test("keeps mic disabled after video attaches until the agent publishes ready", async () => {
+  setMicrophoneEnabled.mockResolvedValue(undefined);
+  emitAgentReadyOnConnect.mockReturnValue(false);
+
+  renderManagedHarness();
+
+  fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
+
+  await waitFor(() => expect(screen.getAllByText("Video live").length).toBeGreaterThan(0));
+  await waitFor(() => expect(document.querySelector(".managed-avatar-session__video-frame video")).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "Toggle mic" }));
+  expect(setMicrophoneEnabled).not.toHaveBeenCalled();
+
+  act(() => {
+    emitAgentReady();
+  });
+
+  await waitFor(() => expect(screen.getAllByText("Live").length).toBeGreaterThan(0));
+  fireEvent.click(screen.getByRole("button", { name: "Toggle mic" }));
+  await waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledWith(true, expect.any(Object)));
+});
+
+test("ignores push to talk until the agent publishes ready", async () => {
+  setMicrophoneEnabled.mockResolvedValue(undefined);
+  emitAgentReadyOnConnect.mockReturnValue(false);
+
+  renderManagedHarness();
+
+  fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
+  await waitFor(() => expect(screen.getAllByText("Video live").length).toBeGreaterThan(0));
+
+  fireEvent.mouseDown(screen.getByRole("button", { name: "Hold to talk" }));
+  expect(setMicrophoneEnabled).not.toHaveBeenCalled();
+
+  act(() => {
+    emitAgentReady();
+  });
+
+  await waitFor(() => expect(screen.getAllByText("Live").length).toBeGreaterThan(0));
+  fireEvent.mouseDown(screen.getByRole("button", { name: "Hold to talk" }));
+  await waitFor(() => expect(setMicrophoneEnabled).toHaveBeenCalledWith(true, expect.any(Object)));
+});
+
 test("primes the mic for managed session joins, then returns to muted after video attaches", async () => {
   setMicrophoneEnabled.mockResolvedValue(undefined);
 
@@ -212,7 +279,7 @@ test("surfaces a provider hint when the room connects but no remote video arrive
   fireEvent.click(screen.getByRole("button", { name: "Start avatar" }));
 
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(12000);
+    await vi.advanceTimersByTimeAsync(25000);
   });
 
   expect(screen.getByRole("alert")).toHaveTextContent("Simli did not publish video in time.");

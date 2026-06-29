@@ -142,6 +142,9 @@ def test_create_avatar_room_session_loads_local_env_when_explicit_env_missing(mo
         def to_jwt(self) -> str:
             return "fake-jwt"
 
+    created_rooms: list[dict[str, object]] = []
+    created_dispatches: list[dict[str, object]] = []
+
     class FakeLiveKitAPI:
         def __init__(self, *, url: str, api_key: str, api_secret: str) -> None:
             self.url = url
@@ -156,10 +159,12 @@ def test_create_avatar_room_session_loads_local_env_when_explicit_env_missing(mo
         async def __aexit__(self, exc_type, exc, tb) -> None:
             return None
 
-        async def create_room(self, _request: object) -> None:
+        async def create_room(self, request: object) -> None:
+            created_rooms.append(request)  # type: ignore[arg-type]
             return None
 
-        async def create_dispatch(self, _request: object) -> None:
+        async def create_dispatch(self, request: object) -> None:
+            created_dispatches.append(request)  # type: ignore[arg-type]
             return None
 
     fake_api_module = types.SimpleNamespace(
@@ -177,6 +182,9 @@ def test_create_avatar_room_session_loads_local_env_when_explicit_env_missing(mo
     assert result["provider"] == "simli"
     assert result["token"] == "fake-jwt"
     assert result["url"] == "wss://example.livekit.cloud"
+    assert result["room_metadata"]["student_identity"] == result["participant_identity"]
+    assert created_rooms[0]["metadata"] == created_dispatches[0]["metadata"]
+    assert "student_identity" in created_rooms[0]["metadata"]
 
 
 def test_avatar_agent_loads_local_env_at_import(monkeypatch) -> None:

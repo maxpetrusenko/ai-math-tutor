@@ -133,21 +133,31 @@ jobs:
             image: ai-math-tutor-backend
             port: "8080"
             health: /api/runtime-options
+            health_enabled: "true"
           - app: session
             uuid: q47hwdffry6w02uc0ykr8rmy
             image: ai-math-tutor-session
             port: "8080"
             health: /api/runtime-options
+            health_enabled: "true"
           - app: frontend
             uuid: nz1pemtpromq4ujwpu83zphm
             image: ai-math-tutor-frontend
             port: "3000"
             health: /api/runtime/status
+            health_enabled: "true"
           - app: web
             uuid: ecedjb8684h04h01m508baih
             image: ai-math-tutor-web
             port: "3000"
             health: /api/runtime/status
+            health_enabled: "true"
+          - app: avatar-worker
+            uuid: yw36ciy2dqqcq9ituuwzdsru
+            image: ai-math-tutor-avatar-worker
+            port: "8080"
+            health: ""
+            health_enabled: "false"
 
     steps:
       - name: Point Coolify at image tag and deploy
@@ -159,6 +169,7 @@ jobs:
           COOLIFY_IMAGE: ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
           COOLIFY_PORT: ${{ matrix.port }}
           COOLIFY_HEALTH_PATH: ${{ matrix.health }}
+          COOLIFY_HEALTH_ENABLED: ${{ matrix.health_enabled }}
         run: |
           set -euo pipefail
 
@@ -179,15 +190,16 @@ jobs:
             --header "Content-Type: application/json" \
             --data "$(jq -n \
               --arg image "${COOLIFY_IMAGE}" \
-              --arg tag "${DOCKER_TAG}" \
-              --arg port "${COOLIFY_PORT}" \
-              --arg health "${COOLIFY_HEALTH_PATH}" \
+            --arg tag "${DOCKER_TAG}" \
+            --arg port "${COOLIFY_PORT}" \
+            --arg health "${COOLIFY_HEALTH_PATH}" \
+            --argjson health_enabled "${COOLIFY_HEALTH_ENABLED}" \
               '{
                 build_pack: "dockerimage",
                 docker_registry_image_name: $image,
                 docker_registry_image_tag: $tag,
                 ports_exposes: $port,
-                health_check_enabled: true,
+                health_check_enabled: $health_enabled,
                 health_check_path: $health
               }')"
 

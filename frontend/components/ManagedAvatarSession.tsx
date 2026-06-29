@@ -23,13 +23,16 @@ type ManagedAvatarSessionProps = {
 type ConnectionState = "idle" | "connecting" | "connected" | "error";
 
 const MANAGED_IDLE_TIMEOUT_MS = 60_000;
-const REMOTE_VIDEO_TIMEOUT_MS = 12_000;
+const REMOTE_VIDEO_TIMEOUT_MS = 25_000;
+const AGENT_READY_TOPIC = "nerdy.avatar_agent";
+const AGENT_READY_TYPE = "nerdy.avatar_agent.ready";
 
 export type ManagedAvatarSessionSnapshot = {
   canLeave: boolean;
   canStart: boolean;
   canToggleMic: boolean;
   connectionState: ConnectionState;
+  agentReady: boolean;
   hasVideoTrack: boolean;
   micBusy: boolean;
   micEnabled: boolean;
@@ -46,12 +49,12 @@ export type ManagedAvatarSessionHandle = {
   toggleMicrophone: () => Promise<void>;
 };
 
-function statusLabel(connectionState: ConnectionState) {
+function statusLabel(connectionState: ConnectionState, agentReady: boolean) {
   switch (connectionState) {
     case "connecting":
       return "Connecting";
     case "connected":
-      return "Live";
+      return agentReady ? "Live" : "Video live";
     case "error":
       return "Retry";
     default:
@@ -100,12 +103,12 @@ function remoteVideoTimeoutMessage(avatar: ManagedAvatar) {
   return "The avatar did not publish video in time.; Retry in a moment.";
 }
 
-function placeholderLine(connectionState: ConnectionState, description?: string, roomName?: string) {
+function placeholderLine(connectionState: ConnectionState, agentReady: boolean, description?: string, roomName?: string) {
   if (connectionState === "connecting") {
-    return roomName ? "Room live. Waiting for avatar video." : "Bringing the stage online.";
+    return roomName ? "Room live. Waiting for avatar video and tutor." : "Bringing the stage online.";
   }
   if (connectionState === "connected") {
-    return "Video live.";
+    return agentReady ? "Tutor ready." : "Video live. Waiting for tutor.";
   }
   if (connectionState === "error") {
     return "Live link paused. Start avatar again.";
@@ -123,6 +126,7 @@ export const ManagedAvatarSession = forwardRef<ManagedAvatarSessionHandle, Manag
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
   const [error, setError] = useState("");
   const [roomName, setRoomName] = useState("");
+  const [agentReady, setAgentReady] = useState(false);
   const [hasVideoTrack, setHasVideoTrack] = useState(false);
   const [micEnabled, setMicEnabled] = useState(false);
   const [micUnavailable, setMicUnavailable] = useState(false);
@@ -180,6 +184,7 @@ export const ManagedAvatarSession = forwardRef<ManagedAvatarSessionHandle, Manag
     pushToTalkRef.current = false;
     setConnectionState(nextConnectionState);
     setRoomName("");
+    setAgentReady(false);
     setHasVideoTrack(false);
     setMicEnabled(false);
     setMicUnavailable(false);
@@ -270,6 +275,34 @@ export const ManagedAvatarSession = forwardRef<ManagedAvatarSessionHandle, Manag
     }
   }
 
+  function handleRoomData(payload: Uint8Array, participant?: { identity?: string }, _kind?: unknown, topic?: string) {
+    if (topic && topic !== AGENT_READY_TOPIC) {
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(new TextDecoder().decode(payload));
+    } catch {
+      return;
+    }
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "type" in parsed &&
+      parsed.type === AGENT_READY_TYPE
+    ) {
+      setAgentReady(true);
+      markActivity();
+      appendManagedAvatarLog("agent.ready", "managed avatar agent ready", {
+        avatarId: avatar.id,
+        participant: participant?.identity ?? "unknown",
+        roomName,
+      });
+    }
+  }
+
   async function startSession() {
     if (roomRef.current) {
       await disconnectRoom();
@@ -288,6 +321,8 @@ export const ManagedAvatarSession = forwardRef<ManagedAvatarSessionHandle, Manag
       room.on(RoomEvent.TrackSubscribed, (track) => {
         attachTrack(track);
       });
+
+      room.on(RoomEvent.DataReceived, handleRoomData);
 
       room.on(RoomEvent.Disconnected, () => {
         clearRemoteVideoTimeout();
@@ -372,7 +407,7 @@ export const ManagedAvatarSession = forwardRef<ManagedAvatarSessionHandle, Manag
   }
 
   function handlePushToTalkStart() {
-    const canUseMicControls = connectionState === "connected" && !isPreview;
+    const canUseMicControls = connectionState === "connected" && agentReady && !isPreview;
     if (!canUseMicControls || micEnabled || micBusy || pushToTalkRef.current) {
       return;
     }
@@ -415,12 +450,13 @@ export const ManagedAvatarSession = forwardRef<ManagedAvatarSessionHandle, Manag
     void startSession();
   }, [autoStart, connectionState, avatar.id]);
 
-  const canUseMicControls = connectionState === "connected" && !isPreview;
+  const canUseMicControls = connectionState === "connected" && agentReady && !isPreview;
   const snapshot: ManagedAvatarSessionSnapshot = {
     canLeave: connectionState !== "connecting" && connectionState !== "idle",
     canStart: connectionState !== "connecting",
     canToggleMic: canUseMicControls && !micBusy,
     connectionState,
+    agentReady,
     hasVideoTrack,
     micBusy,
     micEnabled,
@@ -434,6 +470,7 @@ export const ManagedAvatarSession = forwardRef<ManagedAvatarSessionHandle, Manag
       canStart: snapshot.canStart,
       canToggleMic: snapshot.canToggleMic,
       connectionState: snapshot.connectionState,
+      agentReady: snapshot.agentReady,
       hasVideoTrack: snapshot.hasVideoTrack,
       micBusy: snapshot.micBusy,
       micEnabled: snapshot.micEnabled,
@@ -446,6 +483,7 @@ export const ManagedAvatarSession = forwardRef<ManagedAvatarSessionHandle, Manag
     snapshot.canStart,
     snapshot.canToggleMic,
     snapshot.connectionState,
+    snapshot.agentReady,
     snapshot.hasVideoTrack,
     snapshot.micBusy,
     snapshot.micEnabled,
@@ -477,7 +515,7 @@ export const ManagedAvatarSession = forwardRef<ManagedAvatarSessionHandle, Manag
 
   const errorItems = splitErrorDetails(error);
   const showPlaceholder = !hasVideoTrack;
-  const currentStatusLabel = statusLabel(connectionState);
+  const currentStatusLabel = statusLabel(connectionState, agentReady);
 
   return (
     <div
@@ -497,7 +535,7 @@ export const ManagedAvatarSession = forwardRef<ManagedAvatarSessionHandle, Manag
             <div className="managed-avatar-session__placeholder">
               <div className="managed-avatar-session__placeholder-copy">
                 <h3>{avatar.label}</h3>
-                <p>{placeholderLine(connectionState, avatar.description, roomName)}</p>
+                <p>{placeholderLine(connectionState, agentReady, avatar.description, roomName)}</p>
               </div>
             </div>
           ) : null}

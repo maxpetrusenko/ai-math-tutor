@@ -234,8 +234,12 @@ async def create_avatar_room_session(
     elif target.provider == "liveavatar":
         await _validate_liveavatar_target(target, resolved_env)
     room_name = _build_room_name(target.provider)
-    room_metadata = json.dumps(target.metadata)
     participant_identity = f"web-{uuid4().hex[:12]}"
+    room_metadata_payload = {
+        **target.metadata,
+        "student_identity": participant_identity,
+    }
+    room_metadata = json.dumps(room_metadata_payload)
     livekit_url = resolved_env["LIVEKIT_URL"].strip()
 
     async with api.LiveKitAPI(
@@ -285,7 +289,7 @@ async def create_avatar_room_session(
         "provider": target.provider,
         "participant_identity": participant_identity,
         "room_name": room_name,
-        "room_metadata": target.metadata,
+        "room_metadata": room_metadata_payload,
         "token": token,
         "url": _client_livekit_url(livekit_url),
     }

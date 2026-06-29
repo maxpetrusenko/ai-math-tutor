@@ -72,10 +72,18 @@ export function TutorSessionComposer({
   const dockHint = isManagedAvatar
     ? managedSession?.micUnavailable
       ? "Mic unavailable. Reconnect mic permission, then hold to talk. Auto disconnect after 60s idle."
-      : "Hold to talk. Send text anytime. Managed rooms auto disconnect after 60 seconds of inactivity."
+      : managedSession?.hasVideoTrack && !managedSession.agentReady
+        ? "Avatar video is live. Waiting for the tutor connection before opening the mic."
+        : "Hold to talk. Send text anytime. Managed rooms auto disconnect after 60 seconds of inactivity."
     : "Hold mic to talk. Cmd+Enter sends text. Esc interrupts.";
   const managedStatus = managedSession?.roomName
-    ? `Room ${managedSession.roomName}${managedSession.hasVideoTrack ? "" : " · waiting for video"}`
+    ? `Room ${managedSession.roomName}${
+        managedSession.agentReady
+          ? " · tutor ready"
+          : managedSession.hasVideoTrack
+            ? " · waiting for tutor"
+            : " · waiting for video"
+      }`
     : managedSession?.micEnabled
       ? "Mic open"
       : managedSession?.connectionState === "connected"
@@ -83,7 +91,7 @@ export function TutorSessionComposer({
         : "Ready";
   const dockMicActive = isManagedAvatar ? Boolean(managedSession?.micEnabled) : micActive;
   const micButtonDisabled = isManagedAvatar
-    ? !managedSession || !managedSession.hasVideoTrack || managedSession.micBusy
+    ? !managedSession || !managedSession.canToggleMic
     : !runtimeReady || !micSupported || micInputBlocked;
 
   return (
