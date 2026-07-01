@@ -121,8 +121,12 @@ jobs:
     name: Deploy ${{ matrix.app }} to Coolify
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip deploy]') }}
     needs:
       - build-images
+    env:
+      COOLIFY_SSH_PRIVATE_KEY: ${{ secrets.COOLIFY_SSH_PRIVATE_KEY }}
+      COOLIFY_SSH_KNOWN_HOSTS: ${{ secrets.COOLIFY_SSH_KNOWN_HOSTS }}
 
     strategy:
       fail-fast: false
@@ -151,13 +155,16 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v4
 
+      - name: Skip deploy when SSH secret is absent
+        if: ${{ env.COOLIFY_SSH_PRIVATE_KEY == '' }}
+        run: echo "::warning::COOLIFY_SSH_PRIVATE_KEY is not configured; gates and image builds passed, deploy skipped."
+
       - name: Point Coolify at image tag and deploy
+        if: ${{ env.COOLIFY_SSH_PRIVATE_KEY != '' }}
         env:
           COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN || secrets.COOLIFY_TOKEN }}
           COOLIFY_SSH_HOST: ${{ secrets.COOLIFY_SSH_HOST || '173.249.52.27' }}
           COOLIFY_SSH_USER: ${{ secrets.COOLIFY_SSH_USER || 'root' }}
-          COOLIFY_SSH_PRIVATE_KEY: ${{ secrets.COOLIFY_SSH_PRIVATE_KEY }}
-          COOLIFY_SSH_KNOWN_HOSTS: ${{ secrets.COOLIFY_SSH_KNOWN_HOSTS }}
           COOLIFY_UUID: ${{ matrix.uuid }}
           COOLIFY_IMAGE: ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
           COOLIFY_PORT: ${{ matrix.port }}
