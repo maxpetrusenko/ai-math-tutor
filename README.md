@@ -47,7 +47,18 @@ Runtime benchmark snapshot from [`docs/planning/benchmark-report-v1.md`](docs/pl
 | `speech_end -> tts_first_audio` | `363.6 ms` | `658.97 ms` | pass under `500 ms` p50 and `900 ms` p95 |
 | `speech_end -> first_viseme` | `363.6 ms` | `658.97 ms` | pass with playback-start proxy |
 
+## Closure Lane Status
+
+- Lane E `live benchmark closure`: done
+- Lane F `pedagogy + demo + acceptance`: done
+- Lane G `cost + licensing`: done
+- Lane H `UI polish`: done
+
 ## Architecture
+
+![AI Math Tutor realtime workflow](docs/assets/ai-math-tutor-workflow-poster.png)
+
+[Watch the 8-second workflow video](docs/assets/ai-math-tutor-workflow.mp4)
 
 ![Realtime voice architecture](docs/assets/realtime-voice-architecture.svg)
 
