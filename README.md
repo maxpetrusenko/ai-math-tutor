@@ -1,122 +1,117 @@
-<p align="center">
-  <img src="docs/assets/readme-card.png" alt="AI Math Tutor project snapshot" width="100%">
-</p>
+# AI Math Tutor
 
-<h1 align="center">AI Math Tutor</h1>
+Open source realtime voice tutoring with a visible avatar, interruption-safe playback, and swappable STT, LLM, TTS, and avatar providers.
 
-<p align="center">
-  <strong>Open source realtime voice tutoring with pluggable STT, LLM, TTS, and avatar providers.</strong>
+Live app: <https://aitutor.maxpetrusenko.com>
 
-  URL: https://aitutor.maxpetrusenko.com
-</p>
+![AI Math Tutor live lesson UI](docs/assets/readme-card.png)
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Next.js-15-0b1730?style=flat-square" alt="Next.js 15">
-  <img src="https://img.shields.io/badge/React-19-0b1730?style=flat-square" alt="React 19">
-  <img src="https://img.shields.io/badge/FastAPI-session_server-0b1730?style=flat-square" alt="FastAPI">
-  <img src="https://img.shields.io/badge/Realtime-benchmark_first-0b1730?style=flat-square" alt="Benchmark first">
-  <img src="https://img.shields.io/badge/Providers-STT%20%7C%20LLM%20%7C%20TTS%20%7C%20Avatar-0b1730?style=flat-square" alt="Provider registry">
-</p>
+Internal package and some deploy labels still use the original codename, `nerdy`.
 
-Repository codename and Python package remain `nerdy` for now. GitHub-facing name: `AI Math Tutor`.
+## Why This Repo Exists
 
----
-
-## Snapshot
-
-This repo is aimed at builders who want a working realtime tutoring spine, not a dead-end demo.
-
-| Scope | Result |
-| --- | --- |
-| Core loop | browser mic/text -> STT -> LLM -> TTS -> avatar |
-| Provider model | env-driven STT, LLM, TTS, and avatar selection |
-| Backend verification | `174` passing `pytest` tests in current tree |
-| Browser path | session UI, interruption, history continuity, avatar switching, visible lip sync |
-| Benchmark harness | `90` synthetic local runs, `30` per prompt |
-| Timing snapshot | `speech_end -> tts_first_audio` p50 `363.6 ms`, p95 `658.97 ms` |
-| STT snapshot | `speech_end -> stt_final` p95 `112.23 ms` |
-
-High-signal results:
-
-- provider swaps now happen behind stable registry-backed session contracts
-- browser mic sends `audio.chunk.bytes_b64`
-- default demo tutor is `2D SVG`; alternate `2D` and lazy `3D Three.js` presets are available on demand
-- eval, docs, smoke tests, and benchmark reports all live in the repo
-
-Benchmark numbers and live-vendor evidence are tracked in [`docs/planning/benchmark-report-v1.md`](docs/planning/benchmark-report-v1.md). The live stack is wired end to end and still misses the latency target explicitly.
-
-## Closure Lanes
-
-Current lane state as of 2026-03-12:
-
-- Lane A `avatar selector`: done
-- Lane B `local avatar assets`: done
-- Lane C `lesson session + text turns`: done
-- Lane D `offline smoke matrix`: done
-- Lane E `live benchmark closure`: done
-- Lane F `pedagogy + demo + acceptance`: done
-- Lane G `cost + licensing`: done
-- Lane H `UI polish`: done
-
-Lane F note: engineering is complete; final recording remains a manual packaging step.
-
----
-
-## What Is AI Math Tutor?
-
-AI Math Tutor is a low-latency tutoring stack for voice-first learning sessions. It is built around short spoken turns, Socratic prompting, interruption-safe playback, and provider swaps that do not require rewriting the session server.
-
-Instead of locking the app to one speech model or one avatar vendor, the project keeps the session protocol stable and lets providers change underneath it.
-
----
-
-## How It Works
+Most AI tutor demos stop at chat. This repo proves the harder loop:
 
 ```text
-Browser mic / text
+student speech or text
   -> FastAPI WebSocket session
-  -> STT provider session
-  -> LLM provider switch
-  -> TTS provider context
-  -> browser audio player
-  -> 2D CSS, 2D SVG, or 3D Three.js avatar
+  -> streaming STT
+  -> tutor LLM policy
+  -> streamed TTS
+  -> browser playback
+  -> 2D, SVG, Three.js, or managed avatar
 ```
 
-### Current Runtime
+The session contract stays stable while providers change underneath it. That makes the repo useful as a realtime tutoring spine, not just a one-provider demo.
 
-| Layer | Current choice | Notes |
+## Current Proof
+
+| Surface | Evidence |
+| --- | --- |
+| Live URL | `https://aitutor.maxpetrusenko.com` |
+| Realtime path | browser mic or text into FastAPI WebSocket session |
+| Speech input | `audio.chunk.bytes_b64` browser chunks, Deepgram provider path |
+| Tutor brain | runtime provider switch for Gemini, MiniMax, OpenAI, Anthropic |
+| Speech output | Cartesia and MiniMax TTS behind one streamed context contract |
+| Avatar | 2D CSS, 2D SVG, lazy Three.js, plus managed LiveKit avatar notes |
+| Interruption | `Escape` cancels active playback and returns the tutor to the next turn |
+| Lesson memory | active and archived thread state, history drawer, new lesson flow |
+| Evals | math, science, and English fixtures score 4+ / 5 across tutoring dimensions |
+| Benchmarks | runtime hard latency gate passes on the shipped fast path |
+
+Runtime benchmark snapshot from [`docs/planning/benchmark-report-v1.md`](docs/planning/benchmark-report-v1.md):
+
+| Stage | p50 | p95 | Gate |
+| --- | ---: | ---: | --- |
+| `speech_end -> stt_final` | `67.8 ms` | `112.23 ms` | pass under `350 ms` p95 |
+| `speech_end -> tts_first_audio` | `363.6 ms` | `658.97 ms` | pass under `500 ms` p50 and `900 ms` p95 |
+| `speech_end -> first_viseme` | `363.6 ms` | `658.97 ms` | pass with playback-start proxy |
+
+## Architecture
+
+![Realtime voice architecture](docs/assets/realtime-voice-architecture.svg)
+
+### Runtime Layers
+
+| Layer | Current implementation | Contract |
 | --- | --- | --- |
-| Frontend | `Next.js 15` + `React 19` + `TypeScript` | shell, tutor UI, avatar UI, latency UI |
-| Backend | `FastAPI` + `uvicorn` | websocket session authority |
-| STT | `Deepgram` | default provider |
-| LLM | `Gemini`, `MiniMax`, `OpenAI`, or `Anthropic` | runtime switch, LangChain-backed for Gemini/OpenAI/Anthropic |
-| TTS | `Cartesia` or `MiniMax` | streamed speech path |
-| Avatar | `2D CSS`, `2D SVG`, or lazy-loaded `Three.js` | default baseline plus character-rich and richer branches |
-| Tests | `pytest`, `vitest`, `playwright` | backend, frontend, browser smoke |
+| Frontend | Next.js 15, React 19, TypeScript | session UI, mic capture, transcript, playback, avatar shell |
+| Backend | FastAPI, uvicorn, WebSocket | session state, turn boundary, provider orchestration |
+| STT | Deepgram by default | `open_session`, `push_audio`, `finalize`, `close` |
+| LLM | Gemini, MiniMax, OpenAI, Anthropic | streamed tutor response through `ProviderSwitch` |
+| TTS | Cartesia, MiniMax | streamed phrase context, flush, cancel |
+| Avatar | 2D CSS, 2D SVG, Three.js, managed LiveKit notes | visible `idle`, `listening`, `thinking`, `speaking`, `fading` states |
+| Observability | latency tracker, JSONL AI call log, optional LangSmith | stage timing, failures, prompt/output inspection |
 
----
+Design rules are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/STACK.md`](docs/STACK.md).
 
-## Getting Started
+## Demo Path
 
-### Prereqs
+Use the hosted app or run locally, then follow [`docs/script-demo.md`](docs/script-demo.md).
 
-- `python` `3.11+`
-- `pnpm`
+Reliable demo prompts:
 
-### Quickstart
+```text
+Fractions still confuse me.
+I think one slice out of four is one fourth.
+Can you give me one more hint?
+```
+
+The reviewer-visible flow:
+
+1. Open `/session`.
+2. Send a typed or spoken turn.
+3. Watch tutor response, audio playback, latency cards, and avatar state.
+4. Continue with a follow-up turn to prove lesson continuity.
+5. Open `History` to prove state preservation.
+6. Press `Escape` during speech to prove interruption.
+7. Open `/avatar` and switch between 2D and 3D tutor modes.
+
+Operator notes: [`docs/demo-operator-notes.md`](docs/demo-operator-notes.md)
+
+## Quickstart
+
+Prereqs:
+
+- Python 3.11+
+- Node 20+
+- pnpm 8+
 
 ```bash
 python3 -m pip install -e '.[dev]'
-cd frontend
-pnpm install
-cd ..
+pnpm install --frozen-lockfile --dir frontend
 cp .env.example .env
 cp frontend/.env.example frontend/.env.local
 bash scripts/dev.sh
 ```
 
-Open `http://127.0.0.1:3000`.
-`scripts/dev.sh` auto-loads `.env`, `.env.local`, and `frontend/.env.local` into the spawned processes.
+Open:
+
+- local app: `http://127.0.0.1:3000/session`
+- local avatar switcher: `http://127.0.0.1:3000/avatar`
+- backend: `http://127.0.0.1:8000`
+
+`scripts/dev.sh` loads `.env`, `.env.local`, and `frontend/.env.local`.
 
 ### Manual Split
 
@@ -130,77 +125,32 @@ uvicorn backend.session.server:app --reload --host 127.0.0.1 --port 8000
 Frontend:
 
 ```bash
-cd frontend
-pnpm install
-pnpm dev --hostname 127.0.0.1 --port 3000
+pnpm install --frozen-lockfile --dir frontend
+pnpm --dir frontend dev --hostname 127.0.0.1 --port 3000
 ```
 
-### Deploy
+## Environment
 
-Hosted deploys run on maxpetrusenko.com through Coolify. GitHub Actions builds GHCR images for the backend, session service, and frontend, then asks Coolify to deploy the matching commit tag.
-
-Repo setup for Actions:
-
-- variable or secret `COOLIFY_URL`
-- secret `COOLIFY_TOKEN`
-
-Manual smoke:
+Minimum useful local `.env` shape:
 
 ```bash
-pnpm smoke:prod -- --frontend-url https://aitutor.maxpetrusenko.com --backend-url https://aitutor-session.maxpetrusenko.com/api/lessons
-```
-
-Keep the backend deploy env in local ignored files:
-
-- `.env.local`
-- `frontend/.env.local`
-
-Full operator flow: [`docs/coolify-fast-deploy.md`](docs/coolify-fast-deploy.md)
-
-Managed LiveKit avatars: [`docs/livekit-managed-avatars.md`](docs/livekit-managed-avatars.md)
-
-### Environment
-
-Backend:
-
-```bash
-NERDY_AI_LOG_PATH=.nerdy-data/ai-calls.jsonl
-NERDY_ENABLE_LANGSMITH=0
 NERDY_STT_PROVIDER=deepgram
 NERDY_LLM_PROVIDER=minimax
 NERDY_LLM_FALLBACK_PROVIDER=gemini
 NERDY_RUNTIME_LLM_PROVIDER=gemini
 NERDY_RUNTIME_LLM_FALLBACK_PROVIDER=minimax
-GOOGLE_AI_API_KEY=
-LANGSMITH_API_KEY=
-LANGCHAIN_API_KEY=
-MINIMAX_API_KEY=
 NERDY_TTS_PROVIDER=cartesia
-CARTESIA_API_KEY=
 NERDY_AVATAR_PROVIDER=threejs
-LIVEKIT_URL=
-LIVEKIT_API_KEY=
-LIVEKIT_API_SECRET=
-SIMLI_API_KEY=
-SIMLI_FACE_ID=
-LIVEAVATAR_API_KEY=
-LIVEAVATAR_AVATAR_ID=
-HEYGEN_API_KEY=
-HEYGEN_AVATAR_ID=
-NERDY_LIVEKIT_OPENAI_VOICE=alloy
-NERDY_LIVEKIT_AGENT_INSTRUCTIONS=Talk to me like a clear, encouraging tutor.
+NERDY_AI_LOG_PATH=.nerdy-data/ai-calls.jsonl
+NERDY_ENABLE_LANGSMITH=0
+
 DEEPGRAM_API_KEY=
+MINIMAX_API_KEY=
+GOOGLE_AI_API_KEY=
+CARTESIA_API_KEY=
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
-LANGSMITH_PROJECT=nerdy
-LANGCHAIN_PROJECT=nerdy
-LANGCHAIN_TRACING_V2=false
-```
-
-Managed avatar worker:
-
-```bash
-python3 -m backend.livekit.avatar_agent start
+LANGSMITH_API_KEY=
 ```
 
 Frontend:
@@ -209,123 +159,114 @@ Frontend:
 NEXT_PUBLIC_SESSION_WS_URL=ws://127.0.0.1:8000/ws/session
 ```
 
-If you only want the typed demo path, the frontend still runs without live mic credentials.
+Typed fixture/demo paths work without live mic credentials. Live STT, LLM, and TTS calls need provider keys.
 
-To refresh local AI keys from Doppler into `.env.local`:
+Refresh local AI keys from Doppler when needed:
 
 ```bash
 python3 scripts/pull_doppler_env.py --project api_keys --config dev
 ```
 
-The script writes only the requested keys and reports any missing ones. In this repo, `load_local_env()` now allows `.env.local` to override `.env`, while still respecting already-exported shell variables.
+## Evals And Benchmarks
 
-Every provider call now writes a structured JSONL record to `NERDY_AI_LOG_PATH` so prompt input, model output, latency, and failures can be inspected after a run.
-Every LLM call is now wrapped in a LangSmith trace span. Tracing enables if either `NERDY_ENABLE_LANGSMITH=1` or `LANGCHAIN_TRACING_V2=true`, plus `LANGSMITH_API_KEY` or `LANGCHAIN_API_KEY`.
-`LANGCHAIN_PROJECT` is accepted as an alias for `LANGSMITH_PROJECT`.
-Runtime websocket defaults now allow `gemini`, `minimax`, `openai`, and `anthropic` for `llm_provider`.
-
----
-
-## Provider Swaps
-
-This is one of the main reasons to use the repo.
-
-1. Add a wrapper in `backend/providers/<kind>/`
-2. Register it in the provider registry/config path
-3. Switch env vars without changing session semantics
-
-That keeps the realtime loop stable while you change vendors.
-
----
-
-## What You See In The App
-
-- connection pill for the live session
-- text prompt plus browser mic capture
-- `Send`, `Hold to talk`, `History`, `New`, `Escape` interruption
-- latency cards and transcript panels
-- tutor reply and conversation history
-- avatar mode switch between `2D` and `3D`
-
-The current UI now carries explicit lesson controls, readable history, and demo-ready layout defaults across desktop and mobile.
-
----
-
-## Repository Structure
-
-```text
-backend/
-  llm/                prompt policy and provider switch
-  providers/          registry-backed STT, LLM, TTS, avatar wrappers
-  session/            FastAPI WebSocket session server
-  monitoring/         latency tracking
-  benchmarks/         canned prompts and latency runner
-frontend/
-  app/                Next.js app shell
-  components/         tutor UI, avatars, mic, playback, latency cards
-  lib/                socket, metrics, avatar timing/runtime drivers
-  e2e/                Playwright smoke flows
-eval/                 Socratic checks and fixtures
-docs/                 architecture, stack, demo, trace, checklist
-tests/                backend and docs verification
-```
-
----
-
-## Verification
-
-Backend:
+Backend unit and docs tests:
 
 ```bash
 python3 -m pytest -q
+```
+
+Frontend gate:
+
+```bash
+pnpm --dir frontend test
+pnpm --dir frontend typecheck
+pnpm --dir frontend build
+```
+
+Pedagogy eval:
+
+```bash
 python3 -m eval.langchain_golden_eval --provider draft
 ```
 
-Frontend:
+Latency benchmarks:
 
 ```bash
-cd frontend
-pnpm verify
-pnpm e2e
+python -m backend.benchmarks.run_latency_benchmark --mode fixture --runs-per-prompt 30
+python -m backend.benchmarks.run_latency_benchmark --mode runtime --runs-per-prompt 5
+python -m backend.benchmarks.run_latency_benchmark --mode live --runs-per-prompt 1
 ```
 
-`pnpm verify` runs:
+Reference docs:
 
-```bash
-pnpm test
-pnpm build
-pnpm typecheck
-```
-
-See also:
-
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- [`docs/STACK.md`](docs/STACK.md)
+- [`docs/eval-summary.md`](docs/eval-summary.md)
+- [`docs/EVAL.md`](docs/EVAL.md)
+- [`docs/planning/benchmark-report-v1.md`](docs/planning/benchmark-report-v1.md)
 - [`docs/requirements-trace.md`](docs/requirements-trace.md)
-- [`docs/script-demo.md`](docs/script-demo.md)
-- [`docs/post.md`](docs/post.md)
-- [`docs/progress.md`](docs/progress.md)
 
----
+## Deployment
 
-## Roadmap
+Hosted deploys run through Coolify on `maxpetrusenko.com`. GitHub Actions builds GHCR images for the backend, session service, and frontend, then asks Coolify to deploy the matching commit tag.
 
-- reviewer-facing latency closure for `first_viseme` and `audio_done`
-- deeper browser mic smoke coverage
-- richer session context and personalization
-- stronger live-provider benchmark evidence
-- richer live voice rehearsal evidence
+Required Actions config:
 
----
+- `COOLIFY_URL`
+- `COOLIFY_TOKEN`
+
+Hosted smoke:
+
+```bash
+pnpm smoke:prod -- --frontend-url https://aitutor.maxpetrusenko.com --backend-url https://aitutor-session.maxpetrusenko.com/api/lessons
+```
+
+Deployment runbook: [`docs/coolify-fast-deploy.md`](docs/coolify-fast-deploy.md)
+
+Managed avatar notes: [`docs/livekit-managed-avatars.md`](docs/livekit-managed-avatars.md)
+
+## Failure Modes
+
+| Failure | What happens | Recovery |
+| --- | --- | --- |
+| Missing STT key | mic path cannot open live transcription | add `DEEPGRAM_API_KEY` or use typed fixture path |
+| Missing TTS key | tutor text can stream but speech output cannot start | add `CARTESIA_API_KEY` or switch TTS provider |
+| LLM provider outage | primary provider can fail or slow the turn | use fallback provider env and inspect AI call JSONL |
+| Public-provider latency tail | live vendor bakeoff can miss hard latency gates | use runtime fast path as acceptance lane, keep bakeoff as comparison |
+| Stale lesson state | session may feel noisy after repeated demos | press `Escape`, then `New` |
+| Avatar branch load issue | 3D path may be heavier than default 2D path | switch back to 2D SVG or CSS avatar |
+
+Known benchmark caveats:
+
+- runtime benchmark uses paced prerecorded audio fixtures, not a browser-recorded live mic session
+- `first_viseme` and `audio_done` use bounded proxy measurements in benchmark paths
+- public Deepgram + Gemini + Cartesia comparison misses the hard latency target and is not the acceptance lane
+
+## Repository Map
+
+```text
+backend/
+  benchmarks/        latency runner and canned prompts
+  llm/               tutor policy and provider switch
+  monitoring/        stage timing and AI call logging
+  providers/         STT, LLM, TTS, avatar wrappers
+  session/           FastAPI WebSocket session server
+frontend/
+  app/               Next.js app routes
+  components/        tutor UI, avatars, mic, playback, latency cards
+  e2e/               Playwright smoke flows
+  lib/               socket, metrics, avatar timing, local state
+eval/                Socratic fixtures and scoring helpers
+docs/                architecture, demo, deployment, eval, benchmark proof
+tests/               backend and docs verification
+```
 
 ## Contributing
 
-High-signal areas:
+High-signal lanes:
 
-- new provider adapters
-- latency instrumentation
-- avatar quality and sync
-- pedagogy and eval depth
-- browser smoke reliability
+- new provider adapters that keep the session contract stable
+- lower latency stage instrumentation
+- stronger browser mic and playback smoke coverage
+- better tutor eval fixtures and human-review rubrics
+- avatar quality, sync, and fallback behavior
 
-If you change behavior or an interface, update docs in the same change.
+If behavior, APIs, env vars, or verification commands change, update the docs in the same patch.

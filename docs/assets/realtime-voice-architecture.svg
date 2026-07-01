@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="940" viewBox="0 0 1600 940" role="img" aria-labelledby="title desc">
+  <title id="title">AI Math Tutor realtime voice architecture</title>
+  <desc id="desc">A diagram showing browser audio flowing through speech recognition, tutor reasoning, speech synthesis, playback, and avatar rendering.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7f4ec"/>
+      <stop offset="0.52" stop-color="#eaf2ef"/>
+      <stop offset="1" stop-color="#f7efe5"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1d5f72"/>
+      <stop offset="1" stop-color="#e06f3c"/>
+    </linearGradient>
+    <filter id="shadow" x="-12%" y="-18%" width="124%" height="140%">
+      <feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#1a2a2f" flood-opacity="0.14"/>
+    </filter>
+    <style>
+      text { font-family: "IBM Plex Sans", "Aptos", "Helvetica Neue", sans-serif; fill: #173036; }
+      .eyebrow { font-size: 25px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; fill: #5d6c6d; }
+      .title { font-size: 66px; font-weight: 760; letter-spacing: 0; }
+      .sub { font-size: 30px; font-weight: 520; fill: #435557; }
+      .card-title { font-size: 29px; font-weight: 760; letter-spacing: 0; }
+      .card-copy { font-size: 22px; font-weight: 520; fill: #536569; }
+      .metric { font-size: 28px; font-weight: 780; fill: #173036; }
+      .metric-small { font-size: 20px; font-weight: 620; fill: #536569; }
+      .light { fill: #ffffff; }
+      .light-muted { fill: #f7f4ec; }
+      .line { stroke: #315d63; stroke-width: 5; stroke-linecap: round; fill: none; }
+      .dash { stroke: #d87a45; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 12 14; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="940" rx="0" fill="url(#bg)"/>
+  <circle cx="1360" cy="130" r="190" fill="#f0b15f" opacity="0.14"/>
+  <circle cx="175" cy="760" r="230" fill="#1d5f72" opacity="0.10"/>
+
+  <text x="96" y="116" class="eyebrow">Realtime voice AI tutoring stack</text>
+  <text x="96" y="190" class="title">Student speech to avatar reply</text>
+  <text x="96" y="238" class="sub">Stable WebSocket session contract with swappable STT, LLM, TTS, and avatar providers.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="86" y="302" width="252" height="178" rx="24" fill="#ffffff" stroke="#d8dfdc" stroke-width="2"/>
+    <rect x="116" y="332" width="64" height="64" rx="18" fill="#e9f4f2"/>
+    <path d="M148 348 v32 m-18 -12 c10 18 26 18 36 0" stroke="#1d5f72" stroke-width="7" stroke-linecap="round" fill="none"/>
+    <text x="116" y="424" class="card-title">Browser</text>
+    <text x="116" y="454" class="card-copy">mic, text, history</text>
+
+    <rect x="420" y="302" width="252" height="178" rx="24" fill="#ffffff" stroke="#d8dfdc" stroke-width="2"/>
+    <rect x="450" y="332" width="64" height="64" rx="18" fill="#f1eee6"/>
+    <path d="M468 364 h28 m-14 -14 v28" stroke="#b76036" stroke-width="7" stroke-linecap="round"/>
+    <text x="450" y="424" class="card-title">Session server</text>
+    <text x="450" y="454" class="card-copy">turn boundary owner</text>
+
+    <rect x="754" y="302" width="252" height="178" rx="24" fill="#ffffff" stroke="#d8dfdc" stroke-width="2"/>
+    <rect x="784" y="332" width="64" height="64" rx="18" fill="#eaf2ef"/>
+    <path d="M798 378 c17 -32 39 -32 56 0" stroke="#1d5f72" stroke-width="7" stroke-linecap="round" fill="none"/>
+    <text x="784" y="424" class="card-title">STT</text>
+    <text x="784" y="454" class="card-copy">Deepgram streaming</text>
+
+    <rect x="1088" y="302" width="252" height="178" rx="24" fill="#ffffff" stroke="#d8dfdc" stroke-width="2"/>
+    <rect x="1118" y="332" width="64" height="64" rx="18" fill="#f8ede3"/>
+    <path d="M1134 360 h32 m-32 18 h22" stroke="#d87a45" stroke-width="7" stroke-linecap="round"/>
+    <text x="1118" y="424" class="card-title">Tutor brain</text>
+    <text x="1118" y="454" class="card-copy">Gemini, MiniMax, OpenAI</text>
+  </g>
+
+  <path class="line" d="M338 390 H420"/>
+  <path class="line" d="M672 390 H754"/>
+  <path class="line" d="M1006 390 H1088"/>
+  <path d="M404 374 l18 16 -18 16" stroke="#315d63" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M738 374 l18 16 -18 16" stroke="#315d63" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M1072 374 l18 16 -18 16" stroke="#315d63" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <g filter="url(#shadow)">
+    <rect x="248" y="610" width="300" height="178" rx="24" fill="#ffffff" stroke="#d8dfdc" stroke-width="2"/>
+    <rect x="278" y="640" width="64" height="64" rx="18" fill="#f8ede3"/>
+    <path d="M292 672 h36 m-18 -18 v36" stroke="#d87a45" stroke-width="7" stroke-linecap="round"/>
+    <text x="278" y="732" class="card-title">TTS stream</text>
+    <text x="278" y="762" class="card-copy">Cartesia or MiniMax</text>
+
+    <rect x="650" y="610" width="300" height="178" rx="24" fill="#ffffff" stroke="#d8dfdc" stroke-width="2"/>
+    <rect x="680" y="640" width="64" height="64" rx="18" fill="#e9f4f2"/>
+    <path d="M692 674 c12 -18 28 -18 40 0 m-50 18 h60" stroke="#1d5f72" stroke-width="7" stroke-linecap="round" fill="none"/>
+    <text x="680" y="732" class="card-title">Playback</text>
+    <text x="680" y="762" class="card-copy">interrupt-safe audio</text>
+
+    <rect x="1052" y="610" width="300" height="178" rx="24" fill="#ffffff" stroke="#d8dfdc" stroke-width="2"/>
+    <rect x="1082" y="640" width="64" height="64" rx="18" fill="#f1eee6"/>
+    <circle cx="1114" cy="664" r="13" fill="#b76036"/>
+    <path d="M1094 695 c13 -20 27 -20 40 0" stroke="#b76036" stroke-width="7" stroke-linecap="round" fill="none"/>
+    <text x="1082" y="732" class="card-title">Avatar</text>
+    <text x="1082" y="762" class="card-copy">2D SVG, CSS, Three.js</text>
+  </g>
+
+  <path class="line" d="M1214 480 C1214 558 398 532 398 610"/>
+  <path d="M382 594 l16 18 16 -18" stroke="#315d63" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path class="line" d="M548 700 H650"/>
+  <path d="M634 684 l18 16 -18 16" stroke="#315d63" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path class="line" d="M950 700 H1052"/>
+  <path d="M1036 684 l18 16 -18 16" stroke="#315d63" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <path class="dash" d="M800 610 C800 552 548 540 548 480"/>
+  <text x="610" y="552" class="metric-small">latency events feed benchmark report</text>
+
+  <rect x="96" y="822" width="1408" height="64" rx="22" fill="#173036"/>
+  <text x="130" y="862" class="metric light">Runtime gate:</text>
+  <text x="330" y="862" class="metric-small light-muted">speech_end -> tts_first_audio p50 363.6 ms, p95 658.97 ms. STT final p95 112.23 ms.</text>
+</svg>
