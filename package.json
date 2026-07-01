@@ -5,7 +5,7 @@
 		"node": ">=20"
 	},
 	"scripts": {
-		"build": "pnpm install --frozen-lockfile --dir frontend && pnpm --dir frontend build",
+		"build": "pnpm install --frozen-lockfile --dir frontend && pnpm --dir frontend build && python3 scripts/check_frontend_bundle_budget.py",
 		"start": "pnpm --dir frontend start",
 		"dev": "pnpm --dir frontend dev",
 		"smoke:prod": "python3 scripts/smoke_hosted.py",
