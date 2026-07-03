@@ -33,3 +33,11 @@ test("enables standalone packaging for production builds", async () => {
 
   expect(config.output).toBe("standalone");
 });
+
+test("hides the Next.js powered-by response header in production", async () => {
+  env.NODE_ENV = "production";
+
+  const { default: config } = await import("./next.config");
+
+  expect(config.poweredByHeader).toBe(false);
+});
