@@ -8,7 +8,7 @@ import os
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.livekit import create_avatar_room_session, is_managed_avatar_provider_id
@@ -94,7 +94,8 @@ def _is_allowed_websocket_origin(origin: str | None) -> bool:
 
 
 @app.get("/healthz")
-def get_healthz() -> dict[str, str]:
+def get_healthz(response: Response) -> dict[str, str]:
+    response.headers["Cache-Control"] = "no-store"
     return {"service": "session", "status": "ok"}
 
 
