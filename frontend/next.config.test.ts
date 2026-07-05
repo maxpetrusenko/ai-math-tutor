@@ -33,3 +33,32 @@ test("enables standalone packaging for production builds", async () => {
 
   expect(config.output).toBe("standalone");
 });
+
+test("prevents CDN caching for app HTML routes", async () => {
+  const { default: config } = await import("./next.config");
+
+  const headers = await config.headers?.();
+
+  expect(headers).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        source: "/",
+        headers: expect.arrayContaining([
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, no-store, max-age=0, must-revalidate",
+          },
+        ]),
+      }),
+      expect.objectContaining({
+        source: "/lessons",
+        headers: expect.arrayContaining([
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, no-store, max-age=0, must-revalidate",
+          },
+        ]),
+      }),
+    ])
+  );
+});
