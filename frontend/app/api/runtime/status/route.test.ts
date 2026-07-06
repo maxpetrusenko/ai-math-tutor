@@ -38,3 +38,19 @@ test("runtime status route reports missing session target cleanly", async () => 
     sessionWsUrl: null,
   });
 });
+
+test("runtime status route falls back to Docker-provided frontend metadata", async () => {
+  process.env.NERDY_FRONTEND_REVISION = "sha-abc123";
+  process.env.NERDY_FRONTEND_SERVICE = "ai-math-tutor-web";
+  process.env.NEXT_PUBLIC_SESSION_WS_URL = "wss://aitutor-session.maxpetrusenko.com/ws/session";
+
+  const { GET } = await import("./route");
+  const response = await GET();
+
+  expect(response.status).toBe(200);
+  await expect(response.json()).resolves.toEqual({
+    revision: "sha-abc123",
+    service: "ai-math-tutor-web",
+    sessionWsUrl: "wss://aitutor-session.maxpetrusenko.com/ws/session",
+  });
+});

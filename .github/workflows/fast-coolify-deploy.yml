@@ -114,6 +114,9 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:${{ env.DOCKER_TAG }}
             ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:latest
+          build-args: |
+            NERDY_FRONTEND_REVISION=${{ env.DOCKER_TAG }}
+            NERDY_FRONTEND_SERVICE=${{ matrix.image }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
 
