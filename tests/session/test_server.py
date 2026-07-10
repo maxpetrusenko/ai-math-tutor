@@ -20,6 +20,13 @@ def _session_ws(client: TestClient, path: str = "/ws/session", **kwargs):
     return client.websocket_connect(path, headers=headers, **kwargs)
 
 
+def test_api_docs_are_not_public_by_default() -> None:
+    client = TestClient(app)
+
+    assert client.get("/docs").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
 def test_session_websocket_streams_state_and_tutor_events() -> None:
     client = TestClient(app)
 
