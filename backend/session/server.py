@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from backend.livekit import create_avatar_room_session, is_managed_avatar_provider_id
 from backend.llm.draft_policy import build_draft_tutor_reply
@@ -43,6 +44,7 @@ from backend.turn_taking.controller import SessionController
 
 app = FastAPI(title="Nerdy Live Tutor Backend")
 logger = logging.getLogger(__name__)
+app.add_middleware(GZipMiddleware, minimum_size=512)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
