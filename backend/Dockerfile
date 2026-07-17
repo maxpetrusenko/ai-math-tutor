@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -18,9 +19,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN for attempt in 1 2 3 4 5; do \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    for attempt in 1 2 3 4 5; do \
         pip install --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" . \
-            && rm -rf /root/.cache/pip \
             && exit 0; \
         sleep "$((attempt * 15))"; \
     done; \
