@@ -9,6 +9,7 @@ import time
 from livekit import rtc
 from livekit.agents import Agent, AgentSession, AutoSubscribe, JobContext, RoomInputOptions, RoomOutputOptions, WorkerOptions, WorkerType, cli
 from livekit.plugins import liveavatar, openai, simli
+from backend.livekit.avatar_bootstrap import serialize_simli_face_id
 from backend.runtime.local_env import load_local_env
 from openai.types import realtime as openai_realtime
 
@@ -56,6 +57,21 @@ def _room_metadata(ctx: JobContext) -> dict[str, object]:
     return parsed if isinstance(parsed, dict) else {}
 
 
+class _OptionalEmotionSimliConfig(simli.SimliConfig):
+    def create_json(self) -> dict[str, object]:
+        result = super().create_json()
+        result["faceId"] = serialize_simli_face_id(self.face_id, self.emotion_id)
+        return result
+
+
+def _build_simli_config(*, api_key: str, face_id: str, emotion_id: str | None) -> simli.SimliConfig:
+    return _OptionalEmotionSimliConfig(
+        api_key=api_key,
+        face_id=face_id,
+        emotion_id=(emotion_id or "").strip(),
+    )
+
+
 def _resolve_avatar_session(metadata: dict[str, object]):
     provider = str(metadata.get("provider") or "").strip().lower()
     avatar_participant_identity = str(metadata.get("avatar_participant_identity") or "").strip()
@@ -65,10 +81,12 @@ def _resolve_avatar_session(metadata: dict[str, object]):
         api_key = os.getenv("SIMLI_API_KEY", "").strip()
         if not api_key or not face_id:
             raise ValueError("Simli sessions require SIMLI_API_KEY and a face_id.")
+        emotion_id = str(metadata.get("emotion_id") or "").strip()
         return simli.AvatarSession(
-            simli_config=simli.SimliConfig(
+            simli_config=_build_simli_config(
                 api_key=api_key,
                 face_id=face_id,
+                emotion_id=emotion_id,
             ),
             **({"avatar_participant_identity": avatar_participant_identity} if avatar_participant_identity else {}),
         )
