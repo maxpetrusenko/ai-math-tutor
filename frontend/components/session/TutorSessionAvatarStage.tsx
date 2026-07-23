@@ -2,10 +2,11 @@ import React from "react";
 
 import { AvatarProvider } from "../AvatarProvider";
 import { ManagedAvatarSession, type ManagedAvatarSessionHandle, type ManagedAvatarSessionSnapshot } from "../ManagedAvatarSession";
-import type { AvatarConfig, AvatarVisualState, WordTimestamp } from "../../lib/avatar_contract";
+import type { AvatarConfig, AvatarSpeechCue, AvatarVisualState, WordTimestamp } from "../../lib/avatar_contract";
 import type { LessonState } from "../../lib/lesson_catalog";
 
 type TutorSessionAvatarStageProps = {
+  audioEnergy?: number;
   avatarConfig: AvatarConfig | undefined;
   avatarId: string;
   avatarNowMs: number;
@@ -22,11 +23,13 @@ type TutorSessionAvatarStageProps = {
     label: string;
     description?: string;
   } & Record<string, unknown>;
+  speechCue: AvatarSpeechCue | null;
   timestamps: WordTimestamp[];
   tutorText: string;
 };
 
 export function TutorSessionAvatarStage({
+  audioEnergy,
   avatarConfig,
   avatarId,
   avatarNowMs,
@@ -38,6 +41,7 @@ export function TutorSessionAvatarStage({
   managedSessionRef,
   onManagedSessionStateChange,
   selectedAvatar,
+  speechCue,
   timestamps,
   tutorText,
 }: TutorSessionAvatarStageProps) {
@@ -63,12 +67,14 @@ export function TutorSessionAvatarStage({
           />
         ) : (
           <AvatarProvider
+            audioEnergy={audioEnergy}
             avatarId={avatarId}
             config={avatarConfig}
             controls={null}
             energy={energy}
             historyToggle={null}
             nowMs={avatarNowMs}
+            speechCue={speechCue}
             state={avatarState}
             subtitle={tutorText}
             timestamps={timestamps}

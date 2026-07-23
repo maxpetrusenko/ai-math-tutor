@@ -2,6 +2,7 @@ import asyncio
 
 from backend.monitoring.latency_tracker import LatencyTracker
 from backend.providers.stt.deepgram import DeepgramProvider
+from backend.providers.avatar.talkinghead import TalkingHeadAvatarProvider
 from backend.providers.tts.cartesia import CartesiaProvider
 from backend.providers.tts.minimax import MiniMaxTTSProvider
 
@@ -46,3 +47,20 @@ def test_minimax_tts_provider_exposes_context_and_cancel() -> None:
     assert start_event["type"] == "tts.context.started"
     assert start_event["provider"] == "minimax"
     assert cancel_event == {"type": "tts.cancel", "provider": "minimax"}
+
+
+def test_talkinghead_provider_exposes_the_licensed_local_model() -> None:
+    provider = TalkingHeadAvatarProvider()
+
+    assert provider.get_initial_config() == {
+        "provider": "talkinghead",
+        "type": "3d",
+        "assetRef": "nerdy-tutor",
+        "model_url": "/avatars/nerdy-tutor.glb?v=7a05c998",
+        "features": {
+            "lip_sync": True,
+            "eye_tracking": True,
+            "head_rotation": True,
+            "idle_animation": True,
+        },
+    }

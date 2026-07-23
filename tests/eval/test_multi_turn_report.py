@@ -9,11 +9,7 @@ def test_multi_turn_report_covers_all_locked_subjects() -> None:
     for summary in summaries:
         assert summary.demo_locked is True
         assert summary.transport_mode == "fixture"
-        assert summary.avatar_preset in {
-            "human-css-2d",
-            "robot-css-2d",
-            "human-threejs-3d",
-        }
+        assert summary.avatar_preset == "nerdy-talkinghead-3d"
         assert summary.scores["Socratic quality"] >= 3
         assert summary.scores["Follow-up continuity"] >= 4
         assert summary.scores["Grade fit"] >= 4

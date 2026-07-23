@@ -7,5 +7,5 @@ test("demo turn streams tutor reply", async ({ page }) => {
   await page.getByRole("button", { name: "Send" }).click();
 
   await expect(page.getByTestId("avatar-subtitle").getByText(/Let us anchor the fraction idea first/i)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Toggle history" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open session history" })).toBeVisible();
 });

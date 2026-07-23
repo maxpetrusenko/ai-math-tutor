@@ -2,6 +2,7 @@ import type { AvatarConfig } from "../lib/avatar_contract";
 import {
   DEFAULT_AVATAR_ID,
   listAvatarManifest,
+  listSelectableAvatarManifest,
   resolveAvatarManifestEntry,
   type AvatarManifestEntry,
   type AvatarMode,
@@ -15,6 +16,10 @@ export function listAvatarProviders(): AvatarProviderOption[] {
   return listAvatarManifest();
 }
 
+export function listSelectableAvatarProviders(): AvatarProviderOption[] {
+  return listSelectableAvatarManifest();
+}
+
 export function listAvatarProvidersForMode(mode: AvatarRenderMode): AvatarProviderOption[] {
   return listAvatarManifest(mode);
 }
@@ -23,7 +28,7 @@ export function resolveAvatarMode(providerId: string = DEFAULT_AVATAR_PROVIDER_I
   return resolveAvatarProvider(providerId).mode;
 }
 
-export function resolveDefaultAvatarProviderId(mode: AvatarRenderMode = "2d"): string {
+export function resolveDefaultAvatarProviderId(mode: AvatarRenderMode = "local"): string {
   const defaultProvider = resolveAvatarManifestEntry();
   if (defaultProvider.mode === mode) {
     return defaultProvider.id;

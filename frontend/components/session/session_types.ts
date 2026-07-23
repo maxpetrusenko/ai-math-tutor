@@ -1,10 +1,12 @@
 import type { CapturedAudioChunk } from "../../lib/audio_capture";
-import type { AvatarVisualState, WordTimestamp } from "../../lib/avatar_contract";
+import type { AudioEnergySample, AvatarVisualState, WordTimestamp } from "../../lib/avatar_contract";
 import type { PersistedLessonThread } from "../../lib/lesson_thread_store";
 import type { LatencyMetrics } from "../LatencyMonitor";
 import type { SessionMetricSnapshot } from "../../lib/session_metrics";
+import type { AvatarVoiceConfig } from "../../lib/avatar_voice";
 
 export type TutorTurnRequest = {
+  avatarProviderId?: string;
   studentText: string;
   subject: string;
   gradeBand: string;
@@ -21,6 +23,7 @@ export type TutorTurnRequest = {
   audioChunks?: CapturedAudioChunk[];
   ttsModel?: string;
   ttsProvider?: string;
+  voiceConfig?: AvatarVoiceConfig;
 };
 
 export type TutorTurnResult = {
@@ -31,6 +34,7 @@ export type TutorTurnResult = {
   latency: LatencyMetrics;
   metricEvents?: SessionMetricSnapshot;
   timestamps: WordTimestamp[];
+  audioEnergySamples?: AudioEnergySample[];
   audioSegments?: Array<{
     text: string;
     audioBase64?: string;

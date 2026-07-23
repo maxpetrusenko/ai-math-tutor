@@ -12,8 +12,29 @@ import {
 import { appendSessionActivityLog, resetSessionActivityLogForTests } from "../lib/session_activity_log";
 import { writeSessionPreferences } from "../lib/session_preferences";
 
-vi.mock("./Avatar3D", () => ({
-  Avatar3D: () => <div>Avatar (3D)</div>,
+const { talkingAvatarRenderSpy } = vi.hoisted(() => ({
+  talkingAvatarRenderSpy: vi.fn(),
+}));
+
+vi.mock("./TalkingHeadAvatar", () => ({
+  TalkingHeadAvatar: ({ frame, speechCue }: {
+    frame: { activeWord?: string; mouthOpen: number; state: string };
+    speechCue?: { id: string; words: string[] } | null;
+  }) => {
+    talkingAvatarRenderSpy(frame, speechCue);
+    return (
+      <div
+        data-active-word={frame.activeWord ?? ""}
+        data-avatar-state={frame.state}
+        data-mouth-open={frame.mouthOpen}
+        data-viseme-cue-id={speechCue?.id ?? ""}
+        data-viseme-words={speechCue?.words.join(" ") ?? ""}
+        data-testid="talking-avatar-frame"
+      >
+        Talking avatar
+      </div>
+    );
+  },
 }));
 
 function resetSessionState() {
@@ -24,6 +45,7 @@ function resetSessionState() {
 }
 
 beforeEach(() => {
+  talkingAvatarRenderSpy.mockClear();
   resetSessionState();
   resetSessionActivityLogForTests();
 });
@@ -32,7 +54,19 @@ afterEach(() => {
   resetSessionState();
   resetSessionActivityLogForTests();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
+
+function createPendingAudio() {
+  return {
+    onended: null as (() => void) | null,
+    onerror: null as (() => void) | null,
+    onplaying: null as (() => void) | null,
+    pause: vi.fn(),
+    play: vi.fn(() => new Promise<void>(() => undefined)),
+    volume: 1,
+  };
+}
 
 function createConnectedTransport(overrides: Partial<SessionTransport> = {}) {
   return {
@@ -69,6 +103,191 @@ async function renderSession(
   await waitFor(() => expect(screen.getByText("Open Session")).toBeInTheDocument());
   await waitFor(() => expect(screen.getByRole("button", { name: "Open session history" })).toBeInTheDocument());
 }
+
+test("keeps the avatar idle until provider audio actually starts", async () => {
+  const audio = createPendingAudio();
+  let animationFrameCallback: FrameRequestCallback | null = null;
+  vi.stubGlobal("Audio", vi.fn(() => audio));
+  vi.stubGlobal("speechSynthesis", { speak: vi.fn(), cancel: vi.fn() });
+  vi.spyOn(performance, "now").mockReturnValue(1_000);
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    animationFrameCallback = callback;
+    return 1;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+
+  await renderSession(createConnectedTransport({
+    async runTurn(request) {
+      return {
+        transcript: String(request.studentText),
+        tutorText: "Delayed audio",
+        state: "speaking",
+        latency: {
+          speechEndToSttFinalMs: 10,
+          sttFinalToLlmFirstTokenMs: 20,
+          llmFirstTokenToTtsFirstAudioMs: 30,
+        },
+        timestamps: [{ word: "Delayed", startMs: 0, endMs: 180 }],
+        audioSegments: [{
+          text: "Delayed audio",
+          audioBase64: "YQ==",
+          audioMimeType: "audio/wav",
+          durationMs: 300,
+        }],
+      };
+    },
+  }));
+
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "wait for playback" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  await waitFor(() => expect(audio.play).toHaveBeenCalledTimes(1));
+  expect(screen.getByTestId("talking-avatar-frame")).toHaveAttribute("data-avatar-state", "idle");
+
+  await act(async () => {
+    audio.onplaying?.();
+    await Promise.resolve();
+  });
+
+  expect(screen.getByTestId("talking-avatar-frame")).toHaveAttribute("data-avatar-state", "speaking");
+  expect(screen.getByTestId("talking-avatar-frame")).toHaveAttribute("data-active-word", "Delayed");
+
+  const rendersAtPlaybackStart = talkingAvatarRenderSpy.mock.calls.length;
+  await act(async () => {
+    animationFrameCallback?.(1_010);
+    await Promise.resolve();
+  });
+  expect(talkingAvatarRenderSpy).toHaveBeenCalledTimes(rendersAtPlaybackStart);
+
+  await act(async () => {
+    animationFrameCallback?.(1_040);
+    await Promise.resolve();
+  });
+  expect(talkingAvatarRenderSpy.mock.calls.length).toBeGreaterThan(rendersAtPlaybackStart);
+});
+
+test("continues the avatar timeline at the cumulative offset for queued audio segments", async () => {
+  const firstAudio = createPendingAudio();
+  const secondAudio = createPendingAudio();
+  vi.stubGlobal("Audio", vi.fn()
+    .mockImplementationOnce(() => firstAudio)
+    .mockImplementationOnce(() => secondAudio));
+  vi.stubGlobal("speechSynthesis", { speak: vi.fn(), cancel: vi.fn() });
+
+  await renderSession(createConnectedTransport({
+    async runTurn(request) {
+      return {
+        transcript: String(request.studentText),
+        tutorText: "First then second",
+        state: "speaking",
+        latency: {
+          speechEndToSttFinalMs: 10,
+          sttFinalToLlmFirstTokenMs: 20,
+          llmFirstTokenToTtsFirstAudioMs: 30,
+        },
+        timestamps: [
+          { word: "First", startMs: 0, endMs: 180 },
+          { word: "second", startMs: 300, endMs: 480 },
+        ],
+        audioSegments: [
+          { text: "First", audioBase64: "YQ==", audioMimeType: "audio/wav", durationMs: 300 },
+          { text: "second", audioBase64: "Yg==", audioMimeType: "audio/wav", durationMs: 300 },
+        ],
+      };
+    },
+  }));
+
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "play both segments" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(firstAudio.play).toHaveBeenCalledTimes(1));
+
+  await act(async () => {
+    firstAudio.onplaying?.();
+    await Promise.resolve();
+  });
+  expect(screen.getByTestId("talking-avatar-frame")).toHaveAttribute("data-active-word", "First");
+  expect(screen.getByTestId("talking-avatar-frame")).toHaveAttribute("data-viseme-words", "First");
+
+  await act(async () => {
+    firstAudio.onended?.();
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(secondAudio.play).toHaveBeenCalledTimes(1));
+  expect(screen.getByTestId("talking-avatar-frame")).not.toHaveAttribute("data-avatar-state", "speaking");
+
+  await act(async () => {
+    secondAudio.onplaying?.();
+    await Promise.resolve();
+  });
+  expect(screen.getByTestId("talking-avatar-frame")).toHaveAttribute("data-avatar-state", "speaking");
+  expect(screen.getByTestId("talking-avatar-frame")).toHaveAttribute("data-active-word", "second");
+  expect(screen.getByTestId("talking-avatar-frame")).toHaveAttribute("data-viseme-words", "second");
+});
+
+test("text-only tutor audio waits for browser speech completion between segments", async () => {
+  const utterances: Array<{ text: string; onend?: () => void; onerror?: () => void }> = [];
+  const speak = vi.fn((utterance: { text: string; onend?: () => void; onerror?: () => void }) => {
+    utterances.push(utterance);
+  });
+  vi.stubGlobal("speechSynthesis", { speak, cancel: vi.fn() });
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class SpeechSynthesisUtterance {
+      text: string;
+      onend?: () => void;
+      onerror?: () => void;
+
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+  );
+
+  await renderSession(createConnectedTransport({
+    async runTurn(request) {
+      return {
+        transcript: String(request.studentText),
+        tutorText: "First phrase. Second phrase.",
+        state: "speaking",
+        latency: {
+          speechEndToSttFinalMs: 10,
+          sttFinalToLlmFirstTokenMs: 20,
+          llmFirstTokenToTtsFirstAudioMs: 30,
+        },
+        timestamps: [
+          { word: "First", startMs: 0, endMs: 10 },
+          { word: "Second", startMs: 10, endMs: 20 },
+        ],
+        audioSegments: [
+          { text: "First phrase.", durationMs: 10 },
+          { text: "Second phrase.", durationMs: 10 },
+        ],
+      };
+    },
+  }));
+
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "use browser speech" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  await waitFor(() => expect(speak).toHaveBeenCalledTimes(1));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+  expect(speak).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    utterances[0]?.onend?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(speak).toHaveBeenCalledTimes(2);
+  expect(utterances[1]?.text).toBe("Second phrase.");
+});
 
 test("renders a clean session shell and sends turns with stored defaults", async () => {
   const requests: Array<Record<string, unknown>> = [];
@@ -118,7 +337,7 @@ test("renders a clean session shell and sends turns with stored defaults", async
     llmModel: "gemini-3-flash-preview",
     llmProvider: "gemini",
     studentProfile: {
-      avatarLabel: "Sage",
+      avatarLabel: "Nerdy Tutor",
       avatarPersona: expect.any(String),
       preference: "Use slower examples",
     },
@@ -314,12 +533,12 @@ test("mic transcription receives the stored runtime selection for socket combos"
   });
 });
 
-test("applies backend avatar provider config to the active avatar view", async () => {
+test("applies backend TalkingHead config to the active avatar view", async () => {
   await renderSession(createConnectedTransport({
     async runTurn(request) {
       return {
         transcript: String(request.studentText),
-        tutorText: "Let us try a 3D avatar.",
+        tutorText: "Let us try the local tutor.",
         state: "speaking",
         latency: {
           speechEndToSttFinalMs: 10,
@@ -328,21 +547,21 @@ test("applies backend avatar provider config to the active avatar view", async (
         },
         timestamps: [{ word: "avatar", startMs: 0, endMs: 100 }],
         avatarConfig: {
-          assetRef: "human",
-          provider: "threejs",
+          assetRef: "nerdy-tutor",
+          provider: "talkinghead",
           type: "3d",
-          model_url: "/avatars/human.glb",
+          model_url: "/avatars/nerdy-tutor.glb?v=7a05c998",
         },
       };
     },
   }));
 
   fireEvent.change(screen.getByLabelText("Student prompt"), {
-    target: { value: "show me the 3d tutor" },
+    target: { value: "show me the local tutor" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
-  await waitFor(() => expect(screen.getByTestId("avatar-surface-3d")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByTestId("avatar-surface-talkinghead")).toBeInTheDocument());
 });
 
 test("session uses the avatar selected from the avatar menu", async () => {
@@ -350,11 +569,11 @@ test("session uses the avatar selected from the avatar menu", async () => {
 
   await renderSession();
 
-  await waitFor(() => expect(screen.getByTestId("avatar-surface-3d")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByTestId("avatar-surface-talkinghead")).toBeInTheDocument());
   expect(screen.queryByText("Ready for a new lesson?")).not.toBeInTheDocument();
 });
 
-test("managed avatar selections keep live room mode and restore the composer flow", async () => {
+test("stale managed avatar preferences migrate to the local tutor", async () => {
   const requests: Array<Record<string, unknown>> = [];
   window.localStorage.setItem("nerdy_avatar_provider_preference", "simli-b97a7777-live");
   writeSessionPreferences({
@@ -381,7 +600,8 @@ test("managed avatar selections keep live room mode and restore the composer flo
     },
   }));
 
-  await waitFor(() => expect(screen.getByTestId("managed-avatar-session")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByTestId("avatar-surface-talkinghead")).toBeInTheDocument());
+  expect(screen.queryByTestId("managed-avatar-session")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Student prompt")).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText("Student prompt"), {
@@ -391,10 +611,12 @@ test("managed avatar selections keep live room mode and restore the composer flo
 
   await waitFor(() => expect(screen.getAllByText("Tutor reply").length).toBeGreaterThan(0));
   expect(requests[0]).toMatchObject({
-    llmProvider: "openai-realtime",
-    llmModel: "gpt-realtime-mini",
-    ttsProvider: "openai-realtime",
-    ttsModel: "gpt-realtime-mini",
+    avatarProviderId: "nerdy-talkinghead-3d",
+    llmProvider: "gemini",
+    llmModel: "gemini-3-flash-preview",
+    ttsProvider: "cartesia",
+    ttsModel: "sonic-2",
+    voiceConfig: { voice_id: "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4" },
   });
 
   fireEvent.click(screen.getByRole("button", { name: "Open session history" }));
@@ -424,7 +646,7 @@ test("persisted lessons do not override the globally selected avatar", async () 
 
   await renderSession();
 
-  await waitFor(() => expect(screen.getByTestId("avatar-surface-2d")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByTestId("avatar-surface-talkinghead")).toBeInTheDocument());
   expect(screen.getAllByText("Session").length).toBeGreaterThan(0);
   expect(screen.queryByText("connected")).not.toBeInTheDocument();
 });

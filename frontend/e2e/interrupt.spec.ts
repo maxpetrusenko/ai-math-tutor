@@ -7,14 +7,14 @@ test("interrupt returns the session to idle", async ({ page }) => {
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByTestId("avatar-subtitle").getByText(/Let us anchor the fraction idea first/i)).toBeVisible();
 
-  const mouth = page.getByTestId("avatar-mouth");
+  const avatar = page.getByTestId("talking-head");
   await expect
-    .poll(async () => Number((await mouth.getAttribute("data-open")) ?? "0"))
+    .poll(async () => Number((await avatar.getAttribute("data-mouth-open")) ?? "0"))
     .toBeGreaterThan(0.2);
 
   await page.keyboard.press("Escape");
 
   await expect
-    .poll(async () => Number((await mouth.getAttribute("data-open")) ?? "0"))
+    .poll(async () => Number((await avatar.getAttribute("data-mouth-open")) ?? "0"))
     .toBeLessThanOrEqual(0.12);
 });

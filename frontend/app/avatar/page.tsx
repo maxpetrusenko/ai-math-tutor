@@ -1,17 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import { AvatarProvider } from "../../components/AvatarProvider";
-import { DashboardLayout } from "../../components/layout";
-import { OptionPillRow } from "../../components/ui/OptionPillRow";
+import { DashboardLayout } from "../../components/layout/DashboardLayout";
 import { PageHeader } from "../../components/ui/PageHeader";
 import {
-  listAvatarProvidersForMode,
+  listSelectableAvatarProviders,
   resolveAvatarProvider,
-  resolveAvatarMode,
-  resolveDefaultAvatarProviderId,
-  type AvatarRenderMode,
 } from "../../components/avatar_registry";
 import { readAvatarProviderPreference, writeAvatarProviderPreference } from "../../lib/avatar_preference";
 
@@ -38,11 +34,10 @@ export default function AvatarPage() {
   });
   const [hoveredAvatarId, setHoveredAvatarId] = useState<string | null>(null);
   const [previewNowMs, setPreviewNowMs] = useState(0);
-  const [selectedMode, setSelectedMode] = useState<AvatarRenderMode>(() => resolveAvatarMode(selectedAvatarId));
-  const avatarOptions = useMemo(() => listAvatarProvidersForMode(selectedMode), [selectedMode]);
+  const avatarOptions = listSelectableAvatarProviders();
   const safeSelectedAvatarId = avatarOptions.some((avatar) => avatar.id === selectedAvatarId)
     ? selectedAvatarId
-    : resolveDefaultAvatarProviderId(selectedMode);
+    : avatarOptions[0]?.id;
 
   useEffect(() => {
     const startedAt = performance.now();
@@ -58,34 +53,14 @@ export default function AvatarPage() {
     writeAvatarProviderPreference(avatarId);
   };
 
-  const handleModeChange = (mode: string) => {
-    const nextMode = mode as AvatarRenderMode;
-    setSelectedMode(nextMode);
-    const nextId = resolveDefaultAvatarProviderId(nextMode);
-    setSelectedAvatarId(nextId);
-    setHoveredAvatarId(null);
-    writeAvatarProviderPreference(nextId);
-  };
-
-  const isPreviewTalking = (avatarId: string) => safeSelectedAvatarId === avatarId || hoveredAvatarId === avatarId;
+  const isPreviewTalking = (avatarId: string) => hoveredAvatarId === avatarId;
 
   return (
     <DashboardLayout>
       <div className="page-shell">
         <PageHeader
-          subtitle="Pick the teaching personality and render style for your tutor."
+          subtitle="Choose a dependable self-hosted tutor."
           title="Choose Your Tutor"
-        />
-
-        <OptionPillRow
-          activeValue={selectedMode}
-          ariaLabel="Avatar render mode"
-          onSelect={handleModeChange}
-          options={[
-            { label: "2D tutors", value: "2d" },
-            { label: "3D tutors", value: "3d" },
-            { label: "Live avatars", value: "live" },
-          ]}
         />
 
         <div className="avatar-gallery">
@@ -103,13 +78,21 @@ export default function AvatarPage() {
               onMouseLeave={() => setHoveredAvatarId((current) => (current === avatar.id ? null : current))}
               type="button"
             >
-              <div className="avatar-option__preview avatar-option__preview--padded">
+              <div
+                className={`avatar-option__preview avatar-option__preview--padded ${
+                  avatar.kind === "local" ? "avatar-option__preview--local" : ""
+                }`}
+              >
                 <AvatarProvider
                   avatarId={avatar.id}
                   energy={isPreviewTalking(avatar.id) ? 0.72 : 0.18}
                   nowMs={isPreviewTalking(avatar.id) ? previewNowMs : 0}
                   state={isPreviewTalking(avatar.id) ? "speaking" : "idle"}
-                  subtitle={isPreviewTalking(avatar.id) ? PREVIEW_GREETING : ""}
+                  subtitle={
+                    safeSelectedAvatarId === avatar.id || isPreviewTalking(avatar.id)
+                      ? PREVIEW_GREETING
+                      : ""
+                  }
                   timestamps={PREVIEW_TIMESTAMPS}
                   variant="gallery"
                 />

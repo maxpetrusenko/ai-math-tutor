@@ -25,7 +25,20 @@ export type WordTimestamp = {
   endMs: number;
 };
 
+export type AudioEnergySample = {
+  atMs: number;
+  value: number;
+};
+
+export type AvatarSpeechCue = {
+  id: string;
+  words: string[];
+  wtimes: number[];
+  wdurations: number[];
+};
+
 export type AvatarSignal = {
+  audioEnergy?: number;
   energy: number;
   nowMs: number;
   state: AvatarVisualState;

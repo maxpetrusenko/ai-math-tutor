@@ -14,6 +14,7 @@ type TutorSessionComposerProps = {
   micInputBlocked: boolean;
   micSupported: boolean;
   onInputChange: (value: string) => void;
+  onInterrupt: () => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
   onKeyUp: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
   onMicBlur: (event: React.FocusEvent<HTMLButtonElement>) => void;
@@ -44,6 +45,7 @@ export function TutorSessionComposer({
   micInputBlocked,
   micSupported,
   onInputChange,
+  onInterrupt,
   onKeyDown,
   onKeyUp,
   onMicBlur,
@@ -100,6 +102,9 @@ export function TutorSessionComposer({
   const micButtonDisabled = isManagedAvatar
     ? !managedSession || !managedSession.canToggleMic
     : !runtimeReady || !micSupported || micInputBlocked;
+  const mobileDockHint = isManagedAvatar
+    ? dockHint
+    : "Hold the mic to talk. You can stop the tutor whenever you need a pause.";
 
   return (
     <section className="session-panel session-panel--prompt">
@@ -163,6 +168,16 @@ export function TutorSessionComposer({
               </svg>
             </button>
 
+            {!isManagedAvatar && micInputBlocked ? (
+              <button
+                className="secondary-button session-composer__interrupt"
+                onClick={onInterrupt}
+                type="button"
+              >
+                Stop speaking
+              </button>
+            ) : null}
+
             {isManagedAvatar ? (
               <div className="session-composer__actions">
                 <button
@@ -205,7 +220,8 @@ export function TutorSessionComposer({
 
         {error ? <p className="composer-stage__error" role="alert">{error}</p> : null}
         <p className="composer-stage__hint">
-          {dockHint}
+          <span className="composer-stage__hint-desktop">{dockHint}</span>
+          <span className="composer-stage__hint-mobile">{mobileDockHint}</span>
         </p>
       </div>
     </section>

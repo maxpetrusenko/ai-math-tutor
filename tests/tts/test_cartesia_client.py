@@ -1,12 +1,14 @@
 import base64
 from io import BytesIO
 import wave
+import pytest
 
 from backend.monitoring.latency_tracker import LatencyTracker
 from backend.tts.cartesia_client import CartesiaClient
 
 
-def test_cartesia_client_marks_first_audio_and_returns_timestamps() -> None:
+def test_cartesia_client_marks_first_audio_and_returns_timestamps(monkeypatch) -> None:
+    monkeypatch.setenv("NERDY_DISABLE_LIVE_TTS", "1")
     tracker = LatencyTracker()
     client = CartesiaClient()
     start_event = client.start_context(turn_id="turn-1", voice_config={"voice_id": "calm"})
@@ -95,6 +97,20 @@ def test_cartesia_client_uses_live_bytes_api_when_key_present(monkeypatch) -> No
     assert tracker.events[0].ts_ms == 1180.0
     assert tracker.events[0].metadata["mode"] == "live"
     assert captured_timeout == [4.0]
+
+
+def test_cartesia_live_failure_does_not_switch_to_browser_voice(monkeypatch) -> None:
+    tracker = LatencyTracker()
+    client = CartesiaClient()
+    monkeypatch.setenv("CARTESIA_API_KEY", "cartesia-test")
+    monkeypatch.setattr("backend.tts.cartesia_client.load_local_env", lambda: [])
+    monkeypatch.setattr(
+        "backend.tts.cartesia_client.request.urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError("provider timed out")),
+    )
+
+    with pytest.raises(TimeoutError, match="provider timed out"):
+        client.send_phrase("Keep one voice.", tracker=tracker, first_audio_ts_ms=1000)
 
 
 def _build_wav(*, duration_ms: int) -> bytes:

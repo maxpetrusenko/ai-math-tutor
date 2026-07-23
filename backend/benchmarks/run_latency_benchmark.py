@@ -160,12 +160,15 @@ def build_benchmark_outcome(
     summary = aggregate_stage_metrics(trackers)
     time_to_first_audio = summary.get("speech_end->tts_first_audio")
     speech_to_stt_final = summary.get("speech_end->stt_final")
+    audio_to_first_viseme = summary.get("tts_first_audio->first_viseme")
     required_event_coverage = summarize_required_event_coverage(raw_event_logs)
     pass_fail = {
         "time_to_first_audio_p50_pass": _metric_pass(time_to_first_audio, "p50_ms", 500),
         "time_to_first_audio_p95_pass": _metric_pass(time_to_first_audio, "p95_ms", 900),
         "speech_end_to_stt_final_p95_pass": _metric_pass(speech_to_stt_final, "p95_ms", 350),
+        "audio_to_first_viseme_p95_pass": _metric_pass(audio_to_first_viseme, "p95_ms", 80),
         "required_event_set_pass": not bool(required_event_coverage["missing_runs"]),
+        "event_order_pass": not bool(required_event_coverage["non_monotonic_runs"]),
     }
 
     return BenchmarkOutcome(
@@ -181,6 +184,7 @@ def build_benchmark_outcome(
 def summarize_required_event_coverage(raw_event_logs: list[dict[str, object]]) -> dict[str, object]:
     missing_event_counts = {event_name: 0 for event_name in REQUIRED_EVENT_NAMES}
     missing_runs: list[dict[str, object]] = []
+    non_monotonic_runs: list[dict[str, object]] = []
 
     for run in raw_event_logs:
         event_names = {
@@ -199,6 +203,30 @@ def summarize_required_event_coverage(raw_event_logs: list[dict[str, object]]) -
                     "missing_events": missing_events,
                 }
             )
+        ordered_events = [
+            event
+            for event_name in REQUIRED_EVENT_NAMES
+            for event in run["events"]
+            if isinstance(event, dict) and event.get("name") == event_name
+        ]
+        order_violations = [
+            {
+                "previous_event": str(previous["name"]),
+                "previous_ts_ms": float(previous["ts_ms"]),
+                "event": str(current["name"]),
+                "ts_ms": float(current["ts_ms"]),
+            }
+            for previous, current in zip(ordered_events, ordered_events[1:])
+            if float(current["ts_ms"]) < float(previous["ts_ms"])
+        ]
+        if order_violations:
+            non_monotonic_runs.append(
+                {
+                    "prompt_id": run["prompt_id"],
+                    "iteration": run["iteration"],
+                    "violations": order_violations,
+                }
+            )
 
     return {
         "required_events": list(REQUIRED_EVENT_NAMES),
@@ -206,6 +234,7 @@ def summarize_required_event_coverage(raw_event_logs: list[dict[str, object]]) -
         "total_runs": len(raw_event_logs),
         "missing_event_counts": missing_event_counts,
         "missing_runs": missing_runs,
+        "non_monotonic_runs": non_monotonic_runs,
     }
 
 
@@ -239,7 +268,7 @@ def _fixture_pipeline(prompt_id: str, iteration: int) -> LatencyTracker:
     tracker.mark("stt_final", 110 + prompt_offset + (iteration % 3) * 10)
     tracker.mark("llm_first_token", 185 + prompt_offset + (iteration % 2) * 15)
     tracker.mark("tts_first_audio", 430 + prompt_offset + (iteration % 4) * 20)
-    tracker.mark("first_viseme", 470 + prompt_offset + (iteration % 3) * 15)
+    tracker.mark("first_viseme", 465 + prompt_offset + (iteration % 4) * 20)
     tracker.mark("audio_done", 1180 + prompt_offset + (iteration % 5) * 30)
     return tracker
 

@@ -12,6 +12,7 @@ import {
   DEFAULT_TTS_MODEL,
   DEFAULT_TTS_PROVIDER,
 } from "./runtime_options";
+import { migrateAvatarProviderId } from "./avatar_manifest";
 import type { LessonState } from "./lesson_catalog";
 import type { SessionActivityLogEntry } from "./session_activity_log";
 
@@ -272,7 +273,7 @@ function normalizeConversation(
 
 function normalizeThread(thread: Partial<PersistedLessonThread>): PersistedLessonThread {
   return {
-    avatarProviderId: typeof thread.avatarProviderId === "string" ? thread.avatarProviderId : "sage-svg-2d",
+    avatarProviderId: migrateAvatarProviderId(thread.avatarProviderId),
     conversation: normalizeConversation(thread),
     gradeBand: typeof thread.gradeBand === "string" ? thread.gradeBand : "6-8",
     lessonState: normalizeLessonState(thread.lessonState),

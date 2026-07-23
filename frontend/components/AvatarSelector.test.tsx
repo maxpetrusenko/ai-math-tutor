@@ -2,36 +2,24 @@ import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { AvatarSelector } from "./AvatarSelector";
-import { resolveAvatarProvider } from "./avatar_registry";
 
-test("avatar selector filters avatar options by render mode", () => {
-  const selectedAvatar = resolveAvatarProvider("sage-svg-2d");
+test("avatar selector exposes only dependable local tutors", () => {
   const onAvatarChange = vi.fn();
-  const onModeChange = vi.fn();
 
   render(
     <AvatarSelector
       onAvatarChange={onAvatarChange}
-      onModeChange={onModeChange}
-      selectedAvatarId="sage-svg-2d"
-      selectedMode={selectedAvatar.mode}
+      selectedAvatarId="nerdy-talkinghead-3d"
     />
   );
 
-  expect(screen.getByLabelText("Render mode")).toHaveValue("2d");
-  expect(screen.getByLabelText("Avatar")).toHaveValue("sage-svg-2d");
-  expect(screen.getByRole("option", { name: "Sage" })).toBeInTheDocument();
-  expect(screen.queryByRole("option", { name: "Human 3D" })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Render mode")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Avatar")).toHaveValue("nerdy-talkinghead-3d");
+  expect(screen.getByRole("option", { name: "Nerdy Tutor" })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "Simli Tutor" })).not.toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText("Render mode"), {
-    target: { value: "3d" },
+  fireEvent.change(screen.getByLabelText("Avatar"), {
+    target: { value: "nerdy-talkinghead-3d" },
   });
-
-  expect(onModeChange).toHaveBeenCalledWith("3d");
-
-  fireEvent.change(screen.getByLabelText("Render mode"), {
-    target: { value: "live" },
-  });
-
-  expect(onModeChange).toHaveBeenCalledWith("live");
+  expect(onAvatarChange).toHaveBeenCalledWith("nerdy-talkinghead-3d");
 });

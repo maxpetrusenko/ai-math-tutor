@@ -7,13 +7,13 @@ STT_PROVIDER = os.getenv("NERDY_STT_PROVIDER", "deepgram")
 LLM_PROVIDER = os.getenv("NERDY_LLM_PROVIDER", "minimax")
 LLM_FALLBACK_PROVIDER = os.getenv("NERDY_LLM_FALLBACK_PROVIDER", "gemini")
 TTS_PROVIDER = os.getenv("NERDY_TTS_PROVIDER", "cartesia")
-AVATAR_PROVIDER = os.getenv("NERDY_AVATAR_PROVIDER", "threejs")
+AVATAR_PROVIDER = os.getenv("NERDY_AVATAR_PROVIDER", "talkinghead")
 
 # Available providers
 STT_PROVIDERS = ["deepgram", "elevenlabs", "google"]
 LLM_PROVIDERS = ["minimax", "gemini", "openai", "anthropic"]
 TTS_PROVIDERS = ["cartesia", "elevenlabs", "google", "azure"]
-AVATAR_PROVIDERS = ["css", "threejs", "readyplayer"]
+AVATAR_PROVIDERS = ["talkinghead"]
 
 # Auto-register providers on import
 from backend.providers.registry import auto_register_providers

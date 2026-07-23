@@ -299,13 +299,35 @@ def _coerce_session_snapshot(value: object) -> SessionSnapshot:
     }
 
 
+_DEFAULT_AVATAR_PROVIDER_ID = "nerdy-talkinghead-3d"
+_LEGACY_LOCAL_AVATAR_IDS = {
+    "sage-svg-2d",
+    "albert-svg-2d",
+    "nova-svg-2d",
+    "dex-svg-2d",
+    "banana-css-2d",
+    "apple-css-2d",
+    "human-css-2d",
+    "robot-css-2d",
+    "human-threejs-3d",
+    "robot-threejs-3d",
+    "wizard-school-inspired-threejs-3d",
+    "yellow-sidekick-inspired-threejs-3d",
+}
+
+
+def _coerce_avatar_provider_id(value: object) -> str:
+    provider_id = str(value or _DEFAULT_AVATAR_PROVIDER_ID)
+    return _DEFAULT_AVATAR_PROVIDER_ID if provider_id in _LEGACY_LOCAL_AVATAR_IDS else provider_id
+
+
 def _coerce_lesson_thread(value: object) -> PersistedLessonThread | None:
     if not isinstance(value, dict):
         return None
 
     conversation = value.get("conversation", [])
     return {
-        "avatarProviderId": str(value.get("avatarProviderId") or "sage-svg-2d"),
+        "avatarProviderId": _coerce_avatar_provider_id(value.get("avatarProviderId")),
         "conversation": [
             turn
             for item in conversation

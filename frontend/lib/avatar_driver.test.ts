@@ -25,3 +25,16 @@ test("driver keeps listening provider-neutral", () => {
   expect(frame.mouthOpen).toBe(0.12);
   expect(frame.caption).toContain("Listening");
 });
+
+test("driver uses real audio energy to continuously open and close the mouth", () => {
+  const base = {
+    state: "speaking" as const,
+    energy: 0.8,
+    nowMs: 90,
+    timestamps: [{ word: "idea", startMs: 0, endMs: 180 }],
+  };
+
+  expect(buildAvatarFrame({ ...base, audioEnergy: 0 }).mouthOpen).toBeCloseTo(0.02);
+  expect(buildAvatarFrame({ ...base, audioEnergy: 0.5 }).mouthOpen).toBeCloseTo(0.46);
+  expect(buildAvatarFrame({ ...base, audioEnergy: 1 }).mouthOpen).toBeCloseTo(0.9);
+});

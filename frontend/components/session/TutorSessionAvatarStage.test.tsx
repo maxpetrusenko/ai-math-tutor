@@ -33,6 +33,7 @@ test("managed session stage autostarts the avatar and keeps the mic muted on loa
         label: "Simli Tutor",
         description: "Realtime face",
       }}
+      speechCue={null}
       timestamps={[]}
       tutorText=""
     />

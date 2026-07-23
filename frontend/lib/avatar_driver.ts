@@ -21,7 +21,11 @@ export function buildAvatarFrame(signal: AvatarSignal): AvatarFrame {
                 ? `Speaking: ${activeWord}`
                 : "Guiding out loud."
               : "Ready for the next turn.",
-    mouthOpen: speakingLike ? Math.max(getMouthOpenAmount(signal.timestamps, signal.nowMs), signal.energy * 0.42) : 0.12,
+    mouthOpen: speakingLike
+      ? signal.audioEnergy === undefined
+        ? Math.max(getMouthOpenAmount(signal.timestamps, signal.nowMs), signal.energy * 0.42)
+        : Math.min(1, 0.02 + signal.audioEnergy * 0.88)
+      : 0.12,
     state: signal.state,
   };
 }

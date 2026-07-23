@@ -79,7 +79,7 @@ def build_multi_turn_eval_report() -> str:
             "## Locked Demo Notes",
             "",
             "- Transport mode stays `fixture` for repeatable rehearsal and browser smoke.",
-            "- Demo-safe presets stay inside the frozen set: `human-css-2d`, `robot-css-2d`, `human-threejs-3d`.",
+            "- The frozen demo-safe avatar is the self-hosted `nerdy-talkinghead-3d` preset.",
             "- All three fixtures maintain a diagnose -> guide/practice -> verify/reflect lesson arc.",
             "",
             "## Score Dimensions",

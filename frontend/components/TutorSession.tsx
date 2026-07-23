@@ -3,7 +3,7 @@
 import React from "react";
 
 import { AudioPlayer } from "./AudioPlayer";
-import { DashboardLayout } from "./layout";
+import { DashboardLayout } from "./layout/DashboardLayout";
 import type { ManagedAvatarSessionHandle, ManagedAvatarSessionSnapshot } from "./ManagedAvatarSession";
 import { TutorSessionComposer } from "./session/TutorSessionComposer";
 import { TutorSessionAvatarStage } from "./session/TutorSessionAvatarStage";
@@ -133,6 +133,7 @@ export function TutorSession(props: TutorSessionProps) {
             avatarId={controller.avatarProviderId}
             avatarNowMs={controller.avatarNowMs}
             avatarState={controller.avatarState}
+            audioEnergy={controller.avatarAudioEnergy}
             energy={controller.playbackState === "speaking" ? 0.8 : controller.avatarState === "fading" ? 0.3 : 0.2}
             isManagedAvatar={controller.isManagedAvatar}
             lessonQuestion={controller.lessonQuestion}
@@ -140,6 +141,7 @@ export function TutorSession(props: TutorSessionProps) {
             managedSessionRef={managedSessionRef}
             onManagedSessionStateChange={setManagedSession}
             selectedAvatar={controller.selectedAvatar}
+            speechCue={controller.avatarSpeechCue}
             timestamps={controller.timestamps}
             tutorText={controller.tutorText}
           />
@@ -172,6 +174,7 @@ export function TutorSession(props: TutorSessionProps) {
               managedSessionRef.current?.markActivity();
               void managedSessionRef.current?.start();
             }}
+            onInterrupt={() => void controller.interruptTurn()}
             onMicBlur={controller.handleMicPressEnd}
             onMicMouseDown={controller.handleMicMouseDown}
             onMicMouseUp={controller.handleMicMouseUp}

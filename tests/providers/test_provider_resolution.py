@@ -1,4 +1,5 @@
 from backend.providers import create_provider
+from backend.providers.avatar.talkinghead import TalkingHeadAvatarProvider
 from backend.providers.llm.anthropic import AnthropicProvider
 from backend.providers.llm.gemini import GeminiProvider
 from backend.providers.llm.minimax import MiniMaxProvider
@@ -60,3 +61,11 @@ def test_create_provider_resolves_anthropic_llm(monkeypatch) -> None:
     provider = create_provider("llm")
 
     assert isinstance(provider, AnthropicProvider)
+
+
+def test_create_provider_uses_talkinghead_as_the_default_avatar(monkeypatch) -> None:
+    monkeypatch.delenv("NERDY_AVATAR_PROVIDER", raising=False)
+
+    provider = create_provider("avatar")
+
+    assert isinstance(provider, TalkingHeadAvatarProvider)

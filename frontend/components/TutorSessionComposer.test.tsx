@@ -6,8 +6,8 @@ import { TutorSession } from "./TutorSession";
 import { BrowserAudioCapture } from "../lib/audio_capture";
 import { clearPersistedLessonThread, writePersistedLessonThread } from "../lib/lesson_thread_store";
 
-vi.mock("./Avatar3D", () => ({
-  Avatar3D: () => <div>Avatar (3D)</div>,
+vi.mock("./TalkingHeadAvatar", () => ({
+  TalkingHeadAvatar: () => <div>Talking avatar</div>,
 }));
 
 afterEach(() => {
@@ -58,6 +58,39 @@ test("send text turn clears the composer after a successful turn", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Send" }));
 
   await waitFor(() => expect(screen.getByLabelText("Student prompt")).toHaveValue(""));
+});
+
+test("local sessions expose a visible stop control while a turn is active", async () => {
+  const interrupt = vi.fn().mockResolvedValue(undefined);
+
+  render(
+    <TutorSession
+      transport={{
+        async connect() {
+          return "connected";
+        },
+        async runTurn() {
+          return new Promise(() => {});
+        },
+        interrupt,
+        async reset() {
+          return;
+        },
+      }}
+    />
+  );
+
+  await waitForSessionComposerReady();
+  expect(screen.queryByRole("button", { name: "Stop speaking" })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Student prompt"), {
+    target: { value: "pause this explanation" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  const stopButton = await screen.findByRole("button", { name: "Stop speaking" });
+  fireEvent.click(stopButton);
+
+  await waitFor(() => expect(interrupt).toHaveBeenCalledTimes(1));
 });
 
 test("student prompt starts empty for a fresh lesson", async () => {

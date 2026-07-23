@@ -1,0 +1,20 @@
+diff --git a/modules/talkinghead.mjs b/modules/talkinghead.mjs
+index 441ddff6b01d05093a244441f77c60ffead695e8..5e1440f80e1c38a591d66924394259328954f500 100755
+--- a/modules/talkinghead.mjs
++++ b/modules/talkinghead.mjs
+@@ -26,6 +26,7 @@ import * as THREE from 'three';
+ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
++import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+ import Stats from 'three/addons/libs/stats.module.js';
+@@ -1202,6 +1203,7 @@ class TalkingHead {
+       dracoLoader.setDecoderPath( this.dracoDecoderPath );
+       loader.setDRACOLoader( dracoLoader );
+     }
++    loader.setMeshoptDecoder(MeshoptDecoder);
+ 
+     let gltf = await loader.loadAsync( avatar.url, onprogress );
+ 

@@ -196,7 +196,7 @@ test("provider audio does not auto-complete from the fallback text timer", async
   vi.useRealTimers();
 });
 
-test("audio player speaks the second queued item after the first completes", async () => {
+test("deferred browser speech waits for the utterance to end before advancing", async () => {
   vi.useFakeTimers();
   const speak = vi.fn();
   const cancel = vi.fn();
@@ -216,8 +216,8 @@ test("audio player speaks the second queued item after the first completes", asy
   render(<AudioPlayer controller={controller} />);
 
   await act(async () => {
-    controller.enqueue({ id: "a", text: "first", durationMs: 10 });
-    controller.enqueue({ id: "b", text: "second", durationMs: 10 });
+    controller.enqueue({ id: "a", text: "first", durationMs: 10, deferCompletion: true });
+    controller.enqueue({ id: "b", text: "second", durationMs: 10, deferCompletion: true });
   });
 
   await act(async () => {
@@ -227,11 +227,24 @@ test("audio player speaks the second queued item after the first completes", asy
   expect(speak.mock.calls[0]?.[0]?.text).toBe("first");
 
   await act(async () => {
-    vi.advanceTimersByTime(11);
+    vi.advanceTimersByTime(100);
+    await Promise.resolve();
+  });
+  expect(speak).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    speak.mock.calls[0]?.[0]?.onend?.();
+    vi.runOnlyPendingTimers();
     await Promise.resolve();
   });
   expect(speak).toHaveBeenCalledTimes(2);
   expect(speak.mock.calls[1]?.[0]?.text).toBe("second");
+
+  await act(async () => {
+    speak.mock.calls[1]?.[0]?.onend?.();
+    await Promise.resolve();
+  });
+  expect(screen.getByText("idle")).toBeInTheDocument();
 
   await act(async () => {
     controller.interrupt();

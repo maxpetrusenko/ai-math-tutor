@@ -1,9 +1,20 @@
 import type { AvatarConfig } from "./avatar_contract";
 
-export type AvatarMode = "2d" | "3d" | "live";
+export type AvatarMode = "local" | "live";
 export type AvatarStatus = "ready" | "fallback";
 export type AvatarRenderMode = AvatarMode;
 export type AvatarKind = "local" | "managed";
+export type AvatarVoicePresentation =
+  | "adult-masculine"
+  | "adult-feminine"
+  | "child-masculine"
+  | "child-feminine";
+
+export type AvatarVoiceProfile = {
+  presentation: AvatarVoicePresentation;
+  cartesiaVoiceId: string;
+  openAIRealtimeVoice: string;
+};
 
 export type AvatarManifestEntry = {
   id: string;
@@ -19,165 +30,59 @@ export type AvatarManifestEntry = {
   previewGreeting?: string;
   previewPosterUrl?: string;
   previewVideoUrl?: string;
+  voiceProfile?: AvatarVoiceProfile;
 };
 
-export const DEFAULT_AVATAR_ID = "sage-svg-2d";
+export const DEFAULT_AVATAR_ID = "nerdy-talkinghead-3d";
 export const DEFAULT_AVATAR_PROVIDER_ID = DEFAULT_AVATAR_ID;
+
+export const LEGACY_LOCAL_AVATAR_IDS = [
+  "sage-svg-2d",
+  "albert-svg-2d",
+  "nova-svg-2d",
+  "dex-svg-2d",
+  "banana-css-2d",
+  "apple-css-2d",
+  "human-css-2d",
+  "robot-css-2d",
+  "human-threejs-3d",
+  "robot-threejs-3d",
+  "wizard-school-inspired-threejs-3d",
+  "yellow-sidekick-inspired-threejs-3d",
+] as const;
+
+const LEGACY_AVATAR_ID_MAP = new Map<string, string>(
+  LEGACY_LOCAL_AVATAR_IDS.map((id) => [id, DEFAULT_AVATAR_ID])
+);
 
 export const AVATAR_MANIFEST: AvatarManifestEntry[] = [
   {
-    id: "sage-svg-2d",
-    label: "Sage",
+    id: DEFAULT_AVATAR_ID,
+    label: "Nerdy Tutor",
     kind: "local",
-    mode: "2d",
-    assetRef: "sage",
-    status: "ready",
-    config: { provider: "svg", type: "2d", assetRef: "sage" },
-    bestFor: "calm explanations",
-    description: "Warm mentor who explains it clearly.",
-    persona: "Patient guide",
-  },
-  {
-    id: "albert-svg-2d",
-    label: "Albert",
-    kind: "local",
-    mode: "2d",
-    assetRef: "albert",
-    status: "ready",
-    config: { provider: "svg", type: "2d", assetRef: "albert" },
-    bestFor: "step-by-step learning",
-    description: "Classic mentor who breaks it down step by step.",
-    persona: "Classic teacher",
-  },
-  {
-    id: "nova-svg-2d",
-    label: "Nova",
-    kind: "local",
-    mode: "2d",
-    assetRef: "nova",
-    status: "ready",
-    config: { provider: "svg", type: "2d", assetRef: "nova" },
-    bestFor: "confidence boosts",
-    description: "Friendly robot helper for hints and encouragement.",
-    persona: "Robot coach",
-  },
-  {
-    id: "dex-svg-2d",
-    label: "Dex",
-    kind: "local",
-    mode: "2d",
-    assetRef: "dex",
-    status: "ready",
-    config: { provider: "svg", type: "2d", assetRef: "dex" },
-    bestFor: "puzzle mode",
-    description: "Playful challenger for puzzle mode.",
-    persona: "Fast challenger",
-  },
-  {
-    id: "banana-css-2d",
-    label: "Banana",
-    kind: "local",
-    mode: "2d",
-    assetRef: "banana",
-    status: "ready",
-    config: { provider: "css", type: "2d", assetRef: "banana" },
-    bestFor: "younger learners",
-    description: "Bright and playful for warm-up practice.",
-    persona: "Cartoon helper",
-  },
-  {
-    id: "apple-css-2d",
-    label: "Apple",
-    kind: "local",
-    mode: "2d",
-    assetRef: "apple",
-    status: "ready",
-    config: { provider: "css", type: "2d", assetRef: "apple" },
-    bestFor: "gentle coaching",
-    description: "Friendly and simple for quick review sessions.",
-    persona: "Friendly coach",
-  },
-  {
-    id: "human-css-2d",
-    label: "Human",
-    kind: "local",
-    mode: "2d",
-    assetRef: "human",
-    status: "ready",
-    config: { provider: "css", type: "2d", assetRef: "human" },
-    bestFor: "classic classroom feel",
-    description: "A grounded tutor style for focused study.",
-    persona: "Human mentor",
-  },
-  {
-    id: "robot-css-2d",
-    label: "Robot",
-    kind: "local",
-    mode: "2d",
-    assetRef: "robot",
-    status: "ready",
-    config: { provider: "css", type: "2d", assetRef: "robot" },
-    bestFor: "fast drills",
-    description: "Sharp and energetic for repetition practice.",
-    persona: "Robot drill coach",
-  },
-  {
-    id: "human-threejs-3d",
-    label: "Human 3D",
-    kind: "local",
-    mode: "3d",
-    assetRef: "human",
-    status: "ready",
-    config: { provider: "threejs", type: "3d", assetRef: "human", model_url: "/avatars/human.glb" },
-    bestFor: "immersive tutoring",
-    description: "Full-scene tutor for the most lifelike sessions.",
-    persona: "Studio mentor",
-  },
-  {
-    id: "robot-threejs-3d",
-    label: "Robot 3D",
-    kind: "local",
-    mode: "3d",
-    assetRef: "robot",
-    status: "ready",
-    config: { provider: "threejs", type: "3d", assetRef: "robot", model_url: "/avatars/robot.glb" },
-    bestFor: "animated demos",
-    description: "Tech-forward style with stronger stage presence.",
-    persona: "Animated robot",
-  },
-  {
-    id: "wizard-school-inspired-threejs-3d",
-    label: "Wizard School Inspired",
-    kind: "local",
-    mode: "3d",
-    assetRef: "wizard-school-inspired",
+    mode: "local",
+    assetRef: "nerdy-tutor",
     status: "ready",
     config: {
-      provider: "threejs",
+      provider: "talkinghead",
       type: "3d",
-      assetRef: "wizard-school-inspired",
-      model_url: "/avatars/wizard-school-inspired.glb",
+      assetRef: "nerdy-tutor",
+      model_url: "/avatars/nerdy-tutor.glb?v=7a05c998",
+      features: {
+        lip_sync: true,
+        eye_tracking: true,
+        head_rotation: true,
+        idle_animation: true,
+      },
     },
-    bestFor: "story-led learning",
-    description: "Best when the tutor session should feel imaginative.",
-    persona: "Magic guide",
-  },
-  {
-    id: "yellow-sidekick-inspired-threejs-3d",
-    label: "Yellow Sidekick Inspired",
-    kind: "local",
-    mode: "3d",
-    assetRef: "yellow-sidekick-inspired",
-    status: "ready",
-    config: {
-      provider: "threejs",
-      type: "3d",
-      assetRef: "yellow-sidekick-inspired",
-      model_url: "/avatars/yellow-sidekick-inspired.glb",
+    bestFor: "expressive local tutoring",
+    description: "A self-hosted young woman tutor with phoneme-aware realtime lip sync.",
+    persona: "Patient young woman guide",
+    voiceProfile: {
+      presentation: "adult-feminine",
+      cartesiaVoiceId: "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4",
+      openAIRealtimeVoice: "marin",
     },
-    bestFor: "energy and delight",
-    description: "A playful sidekick for learners who like motion and character.",
-    persona: "Comic helper",
   },
   {
     id: "simli-b97a7777-live",
@@ -224,6 +129,24 @@ export function listAvatarManifest(mode?: AvatarMode): AvatarManifestEntry[] {
   return mode ? AVATAR_MANIFEST.filter((entry) => entry.mode === mode) : AVATAR_MANIFEST;
 }
 
+export function listSelectableAvatarManifest(): AvatarManifestEntry[] {
+  return AVATAR_MANIFEST.filter((entry) => entry.kind === "local");
+}
+
+export function isSelectableAvatarId(id: string): boolean {
+  const migratedId = migrateAvatarProviderId(id);
+  return listSelectableAvatarManifest().some((entry) => entry.id === migratedId);
+}
+
+export function migrateAvatarProviderId(id?: string | null): string {
+  if (!id) {
+    return DEFAULT_AVATAR_ID;
+  }
+  return LEGACY_AVATAR_ID_MAP.get(id) ?? id;
+}
+
 export function resolveAvatarManifestEntry(id: string = DEFAULT_AVATAR_ID): AvatarManifestEntry {
-  return AVATAR_MANIFEST.find((entry) => entry.id === id) ?? AVATAR_MANIFEST.find((entry) => entry.id === DEFAULT_AVATAR_ID)!;
+  const migratedId = migrateAvatarProviderId(id);
+  return AVATAR_MANIFEST.find((entry) => entry.id === migratedId)
+    ?? AVATAR_MANIFEST.find((entry) => entry.id === DEFAULT_AVATAR_ID)!;
 }

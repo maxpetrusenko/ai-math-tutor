@@ -15,7 +15,7 @@ from backend.monitoring.latency_tracker import LatencyTracker
 CARTESIA_BYTES_URL = "https://api.cartesia.ai/tts/bytes"
 CARTESIA_VERSION = "2025-04-16"
 DEFAULT_CARTESIA_MODEL = "sonic-2"
-DEFAULT_CARTESIA_VOICE_ID = "694f9389-aac1-45b6-b726-9d9369183238"
+DEFAULT_CARTESIA_VOICE_ID = "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4"
 DEFAULT_CARTESIA_LANGUAGE = "en"
 DEFAULT_CARTESIA_SAMPLE_RATE = 22050
 DEFAULT_CARTESIA_LIVE_TIMEOUT_SECONDS = 4.0
@@ -78,7 +78,8 @@ class CartesiaClient:
                     response_summarizer=_summarize_tts_event,
                 )
             except Exception:
-                pass
+                logger.exception("Cartesia live synthesis failed; refusing to switch voice providers mid-turn")
+                raise
 
         return run_logged_ai_call(
             logger=logger,

@@ -6,21 +6,9 @@ type AvatarPersona = {
 };
 
 const PERSONAS: Record<string, AvatarPersona> = {
-  "sage-svg-2d": {
-    label: "Sage",
+  "nerdy-talkinghead-3d": {
+    label: "Nerdy Tutor",
     prompt: "Sound warm, patient, and confidence-building. Explain clearly, slow down for uncertainty, and make it feel safe to be wrong.",
-  },
-  "albert-svg-2d": {
-    label: "Albert",
-    prompt: "Sound precise, academic, and step-by-step. Break ideas into clean reasoning moves and reinforce how the student got there.",
-  },
-  "nova-svg-2d": {
-    label: "Nova",
-    prompt: "Sound playful, upbeat, and supportive. Favor hints, quick checks, and encouraging nudges over long explanations.",
-  },
-  "dex-svg-2d": {
-    label: "Dex",
-    prompt: "Sound energetic, clever, and challenge-oriented without being mean. Turn progress into small missions and invite the student to prove the next step.",
   },
 };
 

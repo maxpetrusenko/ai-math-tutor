@@ -1,13 +1,14 @@
 "use client";
 
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { LessonConversationTurn } from "../LessonThreadPanels";
 import type { LatencyMetrics } from "../LatencyMonitor";
 import { resolveAvatarMode, resolveAvatarProvider } from "../avatar_registry";
 import { BrowserAudioCapture } from "../../lib/audio_capture";
-import type { AvatarVisualState, WordTimestamp } from "../../lib/avatar_contract";
+import type { AudioEnergySample, AvatarSpeechCue, AvatarVisualState, WordTimestamp } from "../../lib/avatar_contract";
+import { sampleAudioEnergy } from "../../lib/audio_energy";
 import { resolveCompatibleRuntimeSelectionForAvatar } from "../../lib/avatar_runtime_compatibility";
 import {
   generateLessonSessionId,
@@ -49,6 +50,12 @@ import {
 const DEFAULT_STUDENT_PROMPT = "";
 const DEFAULT_SUBJECT = "math";
 const DEFAULT_GRADE_BAND = "6-8";
+const AVATAR_FRAME_INTERVAL_MS = 1000 / 30;
+
+type AvatarPlaybackClock = {
+  baseMs: number;
+  startedAtMs: number;
+};
 
 export function useTutorSessionController({ initialAvatarProviderId, transport }: TutorSessionProps) {
   const [sessionTransport] = useState<SessionTransport>(() => transport ?? createConfiguredTransport());
@@ -73,7 +80,10 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
   const [latency, setLatency] = useState<LatencyMetrics | null>(null);
   const [lessonState, setLessonState] = useState<LessonState | null>(null);
   const [timestamps, setTimestamps] = useState<WordTimestamp[]>([]);
+  const [audioEnergySamples, setAudioEnergySamples] = useState<AudioEnergySample[]>([]);
+  const [avatarSpeechCue, setAvatarSpeechCue] = useState<AvatarSpeechCue | null>(null);
   const [avatarNowMs, setAvatarNowMs] = useState(0);
+  const [avatarPlaybackClock, setAvatarPlaybackClock] = useState<AvatarPlaybackClock | null>(null);
   const [error, setError] = useState("");
   const [lessonSessionId, setLessonSessionId] = useState(() => normalizeLessonSessionId(generateLessonSessionId()));
   const [micActive, setMicActive] = useState(false);
@@ -100,12 +110,15 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     return resumeLessonId?.trim() ? resumeLessonId : null;
   });
 
-  const metricsRef = useRef(createSessionMetrics());
+  const metricsRef = useRef<ReturnType<typeof createSessionMetrics>>(null!);
+  if (metricsRef.current === null) {
+    metricsRef.current = createSessionMetrics();
+  }
   const promptInputRef = useRef<HTMLInputElement>(null);
   const runtimeReady = storageReady;
   const micInputBlocked = sessionState === "thinking" || sessionState === "listening" || playbackState === "speaking";
   const pendingRestoreThreadRef = useRef<PersistedLessonThread | null>(null);
-  const previousPlaybackStateRef = useRef<PlaybackState>("idle");
+  const previousAvatarPlaybackActiveRef = useRef(false);
   const activeTurnIdRef = useRef(0);
   const micHoldRef = useRef(false);
   const micStartingRef = useRef(false);
@@ -114,12 +127,12 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
   const isManagedAvatar = selectedAvatar.kind === "managed";
   const avatarConfig = selectedAvatar.config;
 
-  function resolvePreferredAvatarProviderId(fallbackId?: string) {
+  const resolvePreferredAvatarProviderId = useCallback((fallbackId?: string) => {
     const preferredAvatarId = readAvatarProviderPreference();
     return resolveAvatarProvider(preferredAvatarId ?? fallbackId ?? initialAvatarProviderId).id;
-  }
+  }, [initialAvatarProviderId]);
 
-  function buildCurrentThread(): PersistedLessonThread {
+  const buildCurrentThread = useCallback((): PersistedLessonThread => {
     const runtimeSelection = normalizeRuntimeSelection({
       llmModel,
       llmProvider,
@@ -144,9 +157,9 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
       tutorText,
       version: 1,
     };
-  }
+  }, [avatarProviderId, conversation, gradeBand, lessonSessionId, lessonState, llmModel, llmProvider, preference, studentPrompt, subject, transcript, ttsModel, ttsProvider, tutorText]);
 
-  function applyThread(thread: PersistedLessonThread) {
+  const applyThread = useCallback((thread: PersistedLessonThread) => {
     const preferredAvatarProviderId = resolvePreferredAvatarProviderId(thread.avatarProviderId);
     const runtimeSelection = resolveCompatibleRuntimeSelectionForAvatar(preferredAvatarProviderId, normalizeRuntimeSelection({
       llmModel: thread.llmModel,
@@ -169,7 +182,7 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     setTtsProvider(runtimeSelection.ttsProvider);
     setTranscript(thread.transcript);
     setTutorText(thread.tutorText);
-  }
+  }, [resolvePreferredAvatarProviderId]);
 
   function closeHistoryDrawer() {
     if (typeof document === "undefined") {
@@ -185,7 +198,7 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     setHistoryOpen(false);
   }
 
-  function syncRuntimeSelection(nextSelection: Partial<RuntimeSelection> = {}) {
+  const syncRuntimeSelection = useCallback((nextSelection: Partial<RuntimeSelection> = {}) => {
     const normalized = normalizeRuntimeSelection({
       llmModel,
       llmProvider,
@@ -198,6 +211,18 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     setTtsProvider(normalized.ttsProvider);
     setTtsModel(normalized.ttsModel);
     return normalized;
+  }, [llmModel, llmProvider, ttsModel, ttsProvider]);
+
+  function startAvatarPlayback(baseMs: number) {
+    setAvatarNowMs(baseMs);
+    setAvatarPlaybackClock({ baseMs, startedAtMs: performance.now() });
+  }
+
+  function stopAvatarPlayback(resetTimeline: boolean) {
+    setAvatarPlaybackClock(null);
+    if (resetTimeline) {
+      setAvatarNowMs(0);
+    }
   }
 
   const actions = createTutorSessionActions({
@@ -229,6 +254,8 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     ttsModel,
     ttsProvider,
     setAvatarNowMs,
+    setAvatarSpeechCue,
+    setAudioEnergySamples,
     setAvatarProviderId,
     setConversation,
     setError,
@@ -250,14 +277,16 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     setTtsModel,
     setTtsProvider,
     setTutorText,
+    startAvatarPlayback,
+    stopAvatarPlayback,
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setAvatarProviderId((currentId) => {
       const preferredAvatarId = resolvePreferredAvatarProviderId(currentId);
       return preferredAvatarId === currentId ? currentId : preferredAvatarId;
     });
-  }, []);
+  }, [resolvePreferredAvatarProviderId]);
 
   useEffect(() => {
     if (!storageReady) {
@@ -327,6 +356,9 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
       setTtsProvider(compatibleDefaults.ttsProvider);
 
       const resumeThread = requestedResumeLessonId ? await refreshArchivedLessonThread(requestedResumeLessonId) : null;
+      if (cancelled) {
+        return;
+      }
       const persistedThread = resumeThread ?? hydratedStore.activeThread ?? readPersistedLessonThread();
       if (persistedThread) {
         const normalizedThread = withNormalizedThreadSessionId(persistedThread);
@@ -354,7 +386,7 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     return () => {
       cancelled = true;
     };
-  }, [requestedLessonId, requestedResumeLessonId]);
+  }, [applyThread, requestedLessonId, requestedResumeLessonId, resolvePreferredAvatarProviderId]);
 
   useEffect(() => {
     if (!storageReady) {
@@ -362,7 +394,7 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     }
 
     void persistActiveLessonThread(buildCurrentThread());
-  }, [avatarProviderId, conversation, gradeBand, lessonSessionId, lessonState, llmModel, llmProvider, preference, storageReady, studentPrompt, subject, transcript, ttsModel, ttsProvider, tutorText]);
+  }, [buildCurrentThread, storageReady]);
 
   useEffect(() => {
     const compatibleSelection = resolveCompatibleRuntimeSelectionForAvatar(avatarProviderId, {
@@ -381,42 +413,46 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     }
 
     syncRuntimeSelection(compatibleSelection);
-  }, [avatarProviderId, llmModel, llmProvider, ttsModel, ttsProvider]);
+  }, [avatarProviderId, llmModel, llmProvider, syncRuntimeSelection, ttsModel, ttsProvider]);
 
   useEffect(() => {
     let fadeTimer: ReturnType<typeof setTimeout> | null = null;
+    const avatarPlaybackActive = avatarPlaybackClock !== null;
 
     if (sessionState === "listening" || sessionState === "thinking") {
       setAvatarState(sessionState);
-    } else if (playbackState === "speaking") {
+    } else if (avatarPlaybackActive) {
       setAvatarState("speaking");
-    } else if (previousPlaybackStateRef.current === "speaking" && playbackState === "idle") {
+    } else if (previousAvatarPlaybackActiveRef.current) {
       setAvatarState("fading");
       fadeTimer = setTimeout(() => setAvatarState("idle"), 180);
     } else {
       setAvatarState("idle");
     }
 
-    previousPlaybackStateRef.current = playbackState;
+    previousAvatarPlaybackActiveRef.current = avatarPlaybackActive;
 
     return () => {
       if (fadeTimer) {
         clearTimeout(fadeTimer);
       }
     };
-  }, [playbackState, sessionState]);
+  }, [avatarPlaybackClock, sessionState]);
 
   useEffect(() => {
-    if (playbackState !== "speaking" || timestamps.length === 0) {
+    if (!avatarPlaybackClock) {
       return;
     }
 
-    const playbackStartedAtMs = performance.now();
-    const baseMs = timestamps[0]?.startMs ?? 0;
+    const { baseMs, startedAtMs } = avatarPlaybackClock;
     let animationFrame = 0;
+    let nextUpdateAtMs = startedAtMs + AVATAR_FRAME_INTERVAL_MS;
 
-    const tick = () => {
-      setAvatarNowMs(baseMs + (performance.now() - playbackStartedAtMs));
+    const tick = (frameAtMs: number) => {
+      if (frameAtMs >= nextUpdateAtMs) {
+        setAvatarNowMs(baseMs + (frameAtMs - startedAtMs));
+        nextUpdateAtMs = frameAtMs + AVATAR_FRAME_INTERVAL_MS;
+      }
       animationFrame = window.requestAnimationFrame(tick);
     };
 
@@ -426,7 +462,7 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
     return () => {
       window.cancelAnimationFrame(animationFrame);
     };
-  }, [playbackState, timestamps]);
+  }, [avatarPlaybackClock]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -464,12 +500,15 @@ export function useTutorSessionController({ initialAvatarProviderId, transport }
       ? "Open ended live session. Talk, practice, and follow the thread naturally."
       : "Open ended session for questions, drills, and follow ups.";
   const supportStyle = preference.trim() || "Balanced guidance";
+  const avatarAudioEnergy = sampleAudioEnergy(audioEnergySamples, avatarNowMs);
 
   return {
     ...actions,
     avatarConfig,
+    avatarAudioEnergy,
     avatarNowMs,
     avatarProviderId,
+    avatarSpeechCue,
     avatarState,
     closeHistoryDrawer,
     connectionState,

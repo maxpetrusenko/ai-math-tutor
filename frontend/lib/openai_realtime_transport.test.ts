@@ -138,20 +138,39 @@ test("openai realtime transport mints a client secret and resolves a text turn w
   });
 
   socket.emit({ type: "response.text.delta", delta: "It is 42." });
-  socket.emit({ type: "response.audio.delta", delta: "AAA=" });
+  const pcmBytes = new Uint8Array(48_000);
+  const pcmView = new DataView(pcmBytes.buffer);
+  for (let sample = 12_000; sample < 18_000; sample += 1) {
+    pcmView.setInt16(sample * 2, sample % 2 === 0 ? 22_000 : -22_000, true);
+  }
+  let pcmBinary = "";
+  for (const byte of pcmBytes) {
+    pcmBinary += String.fromCharCode(byte);
+  }
+  const oneSecondPcm = btoa(pcmBinary);
+  socket.emit({ type: "response.audio.delta", delta: oneSecondPcm });
   socket.emit({ type: "response.audio.done" });
   socket.emit({ type: "response.done" });
 
-  await expect(runPromise).resolves.toMatchObject({
+  const result = await runPromise;
+  expect(result).toMatchObject({
     transcript: "What is 6 times 7?",
     tutorText: "It is 42.",
+    timestamps: [
+      { word: "It", startMs: 0 },
+      { word: "is" },
+      { word: "42." },
+    ],
     audioSegments: [
       {
         text: "It is 42.",
         audioMimeType: "audio/wav",
+        durationMs: 1_000,
       },
     ],
   });
+  expect(result.audioEnergySamples?.some((sample) => sample.value === 0)).toBe(true);
+  expect(result.audioEnergySamples?.some((sample) => sample.value > 0.5)).toBe(true);
 });
 
 test("openai realtime transport accepts the live backend top-level value shape", async () => {

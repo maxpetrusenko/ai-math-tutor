@@ -74,6 +74,14 @@ function buildWordTimestamps(text: string): TutorTurnResult["timestamps"] {
     }));
 }
 
+function buildFixtureEnergySamples(durationMs: number): NonNullable<TutorTurnResult["audioEnergySamples"]> {
+  return Array.from({ length: Math.ceil(durationMs / 20) + 1 }, (_, index) => {
+    const phase = index % 9;
+    const value = phase <= 1 ? 0 : phase <= 4 ? 0.25 + phase * 0.16 : Math.max(0, 0.9 - (phase - 4) * 0.22);
+    return { atMs: index * 20, value: Number(value.toFixed(2)) };
+  });
+}
+
 export function createFixtureTransport(options: FixtureTransportOptions = {}): SessionTransport {
   const scenario = FIXTURE_SCENARIOS[options.scenarioId ?? "guided-fractions"];
   const avatar = options.avatarId ? resolveAvatarProvider(options.avatarId) : null;
@@ -91,12 +99,14 @@ export function createFixtureTransport(options: FixtureTransportOptions = {}): S
       const turn = scenario.turns[Math.min(turnIndex, scenario.turns.length - 1)];
       turnIndex += 1;
 
+      const timestamps = buildWordTimestamps(turn.tutorText);
       return {
         transcript: request.studentText,
         tutorText: turn.tutorText,
         state: "speaking",
         latency: turn.latency,
-        timestamps: buildWordTimestamps(turn.tutorText),
+        timestamps,
+        audioEnergySamples: buildFixtureEnergySamples(timestamps.at(-1)?.endMs ?? 0),
         avatarConfig: avatar
           ? {
               assetRef: avatar.config.assetRef,

@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { createFixtureTransport } from "./fixture_transport";
 
 describe("fixture transport", () => {
-  test("returns deterministic text-only lesson results without live providers", async () => {
+  test("migrates legacy local avatar ids to the TalkingHead tutor", async () => {
     const transport = createFixtureTransport({
       avatarId: "banana-css-2d",
     });
@@ -22,9 +22,9 @@ describe("fixture transport", () => {
       tutorText: expect.stringContaining("fraction"),
       state: "speaking",
       avatarConfig: {
-        assetRef: "banana",
-        provider: "css",
-        type: "2d",
+        assetRef: "nerdy-tutor",
+        provider: "talkinghead",
+        type: "3d",
       },
     });
   });
@@ -64,8 +64,8 @@ describe("fixture transport", () => {
     expect(firstTurn.tutorText).not.toEqual(followUpTurn.tutorText);
     expect(afterResetTurn.tutorText).toEqual(firstTurn.tutorText);
     expect(afterResetTurn.avatarConfig).toMatchObject({
-      assetRef: "human",
-      provider: "threejs",
+      assetRef: "nerdy-tutor",
+      provider: "talkinghead",
       type: "3d",
     });
   });
