@@ -22,7 +22,7 @@ Click `Send`.
 
 Now watch two things at once.  
 First, the tutor starts responding immediately.  
-Second, the default SVG avatar has visible mouth motion tied to the word timings coming back from the speech path.
+Second, the self-hosted TalkingHead avatar has visible mouth motion tied to the word timings coming back from the speech path.
 
 ## Socratic Follow Up
 
@@ -64,14 +64,14 @@ That interruption behavior is important because it makes the interaction feel co
 
 Now I will go to the avatar page.
 
-Here the lightweight 2D tutor is the default path.  
-I can opt into the 3D tutor when I want a richer visual branch.
+Here the self-hosted Nerdy Tutor is the only selectable path.
+Managed avatar integrations remain internal experiments and cannot change the active tutor identity.
 
-Switch to `3D`.  
-Select `Human 3D`.
+Show `Nerdy Tutor`.
+Point out the `Local tutor` label.
 
-Now switch back to `2D`.  
-Select `Robot`.
+Confirm there is no `Live avatars` section.
+Keep `Nerdy Tutor` selected.
 
 This shows that the avatar layer is modular and can change without rewriting the session contract.
 
@@ -80,5 +80,5 @@ This shows that the avatar layer is modular and can change without rewriting the
 On the verification side, the backend test suite is green, the frontend verify gate is green, and the browser smoke suite is green.  
 That includes a browser regression that explicitly checks visible mouth motion on the default tutor.
 
-So the engineering story is complete: realtime tutor loop, visible lip sync, interruption, history continuity, and avatar switching are all verified.  
+So the engineering story is complete: realtime tutor loop, multi-shape phoneme lip sync, interruption, history continuity, and deterministic local avatar selection are all verified.
 The only remaining manual step, if we need it, is recording the final demo video.

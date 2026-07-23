@@ -89,7 +89,7 @@
     <circle cx="1114" cy="664" r="13" fill="#b76036"/>
     <path d="M1094 695 c13 -20 27 -20 40 0" stroke="#b76036" stroke-width="7" stroke-linecap="round" fill="none"/>
     <text x="1082" y="732" class="card-title">Avatar</text>
-    <text x="1082" y="762" class="card-copy">2D SVG, CSS, Three.js</text>
+    <text x="1082" y="762" class="card-copy">TalkingHead or LiveKit</text>
   </g>
 
   <path class="line" d="M1214 480 C1214 558 398 532 398 610"/>

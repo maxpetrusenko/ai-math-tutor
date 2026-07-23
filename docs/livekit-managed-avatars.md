@@ -1,6 +1,6 @@
 # LiveKit Managed Avatars
 
-Managed avatars now run on a separate LiveKit media plane while local 2D and 3D avatars stay on the existing browser renderer path.
+Managed avatars run on a separate LiveKit media plane while the self-hosted TalkingHead tutor stays on the browser renderer path.
 
 ## Providers
 
@@ -60,9 +60,13 @@ Managed avatars are fail-closed:
 - raw model-to-room audio is disabled with `RoomOutputOptions(audio_enabled=False)` while a managed avatar is active
 - the browser attaches only audio and video from the expected avatar participant
 
-If a provider fails to attach or is rate-limited, the user should see a retryable
-live-link error and should not hear the model voice disconnected from avatar
-lipsync.
+If a provider fails to attach, the user should see a retryable live-link error
+and should not hear the model voice disconnected from avatar lipsync.
+
+The July 2026 Simli incident was not rate limiting. The worker received HTTP 400
+`Character loading crashed` because the configured face and the plugin's forced
+emotion suffix were incompatible with the account's current v2 face. The fix and
+acceptance criteria are tracked in GitHub issue #30.
 
 ## UI behavior
 

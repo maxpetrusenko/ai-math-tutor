@@ -7,6 +7,10 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+vi.mock("./TalkingHeadAvatar", () => ({
+  TalkingHeadAvatar: () => <div>Talking avatar</div>,
+}));
+
 import { TutorSession } from "./TutorSession";
 
 test("renders the tutor-style session shell", async () => {
@@ -52,7 +56,7 @@ test("renders the tutor-style session shell", async () => {
   expect(screen.queryByTestId("session-chat")).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getAllByText("Intro to Fractions").length).toBeGreaterThan(0));
   expect(screen.queryByText("Ready for a new lesson?")).not.toBeInTheDocument();
-  expect(screen.getAllByText("Sage").length).toBeGreaterThan(0);
+  expect(screen.getByTestId("avatar-surface-talkinghead")).toBeInTheDocument();
   expect(screen.queryByText("Patient guide")).not.toBeInTheDocument();
   expect(screen.queryByText("Grade 3-5")).not.toBeInTheDocument();
   expect(screen.getByText("Tutor approach")).toBeInTheDocument();

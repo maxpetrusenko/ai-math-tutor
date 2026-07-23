@@ -1,16 +1,14 @@
 # Avatar Attribution
 
-All local presets in this folder are repo-original placeholders built from CSS and Three.js primitive geometry inside this codebase.
+## Nerdy Tutor
 
-| Preset | Source | License / rights note |
+| Asset | Source | License / rights note |
 | --- | --- | --- |
-| `banana` | Repo-original | Safe for local/demo use in this project |
-| `apple` | Repo-original | Safe for local/demo use in this project |
-| `human` | Repo-original | Safe for local/demo use in this project |
-| `robot` | Repo-original | Safe for local/demo use in this project |
-| `wizard-school-inspired` | Repo-original, non-branded homage | Safe for local/demo use in this project |
-| `yellow-sidekick-inspired` | Repo-original, non-branded homage | Safe for local/demo use in this project |
+| `nerdy-tutor.glb` | `avatars/mpfb.glb` from [met4citizen/TalkingHead](https://github.com/met4citizen/TalkingHead) | CC0; created with Blender and the MPFB extension from MakeHuman ecosystem assets |
 
-No third-party avatar binaries, trademarked characters, or premium provider outputs are bundled in the repository.
+The repository copy was optimized mechanically with glTF Transform 4.4.1.
+TalkingHead runtime code is MIT licensed. The model's CC0 status is stated in
+the upstream TalkingHead README and is independent of the engine license.
 
-Imported assets are not allowed into the shipped demo path until the exact source and license are recorded in `docs/avatar-costs-and-licensing.md`.
+No trademarked characters or premium provider outputs are bundled in the
+repository.

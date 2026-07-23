@@ -2,6 +2,7 @@ import { createSessionMetrics, snapshotSessionMetrics, toLatencyMetrics } from "
 import { appendSessionActivityLog } from "./session_activity_log";
 import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/session/session_types";
 import type { PersistedLessonThread } from "./lesson_thread_store";
+import { buildWavPcm16EnergyEnvelope } from "./audio_energy";
 
 const SESSION_SOCKET_LOG_PREFIX = "[session_socket]";
 const TURN_TIMEOUT_MS = 15_000;
@@ -279,6 +280,7 @@ export function createSessionSocketTransport(): SessionTransport {
         turnId?: string;
         timestamps: TutorTurnResult["timestamps"];
         audioSegments: NonNullable<TutorTurnResult["audioSegments"]>;
+        audioEnergySamples: NonNullable<TutorTurnResult["audioEnergySamples"]>;
         pendingSegmentTexts: string[];
         timeoutId: ReturnType<typeof setTimeout> | null;
       }
@@ -450,10 +452,24 @@ export function createSessionSocketTransport(): SessionTransport {
         incomingTimestamps
       );
       const segmentText = activeTurn.pendingSegmentTexts.shift() ?? "";
+      const audioBase64 = typeof payload.audio_b64 === "string" ? payload.audio_b64 : undefined;
+      const audioMimeType = typeof payload.audio_mime_type === "string" ? payload.audio_mime_type : undefined;
+      const segmentOffsetMs = activeTurn.audioSegments.reduce(
+        (total, segment) => total + (segment.durationMs ?? 0),
+        0,
+      );
+      if (audioBase64 && audioMimeType === "audio/wav") {
+        activeTurn.audioEnergySamples.push(
+          ...buildWavPcm16EnergyEnvelope(base64ToBytes(audioBase64)).map((sample) => ({
+            atMs: segmentOffsetMs + sample.atMs,
+            value: sample.value,
+          })),
+        );
+      }
       activeTurn.audioSegments.push({
         text: appendCommittedText("", segmentText),
-        audioBase64: typeof payload.audio_b64 === "string" ? payload.audio_b64 : undefined,
-        audioMimeType: typeof payload.audio_mime_type === "string" ? payload.audio_mime_type : undefined,
+        audioBase64,
+        audioMimeType,
         durationMs: incomingTimestamps.at(-1)?.endMs,
       });
       activeTurn.metrics.mark({ name: "tts_first_audio", tsMs: performance.now() });
@@ -470,6 +486,7 @@ export function createSessionSocketTransport(): SessionTransport {
         metricEvents: snapshotSessionMetrics(activeTurn.metrics),
         timestamps: activeTurn.timestamps,
         audioSegments: activeTurn.audioSegments,
+        audioEnergySamples: activeTurn.audioEnergySamples,
       });
       if (activeTurn.timeoutId) {
         clearTimeout(activeTurn.timeoutId);
@@ -675,6 +692,7 @@ export function createSessionSocketTransport(): SessionTransport {
           phase: resolveInitialTurnPhase(request),
           timestamps: [],
           audioSegments: [],
+          audioEnergySamples: [],
           pendingSegmentTexts: [],
           timeoutId: null,
         };
@@ -713,6 +731,8 @@ export function createSessionSocketTransport(): SessionTransport {
             student_profile: request.studentProfile,
             tts_provider: request.ttsProvider,
             tts_model: request.ttsModel,
+            avatar_provider_id: request.avatarProviderId,
+            voice_config: request.voiceConfig,
           });
         })().catch((error) => {
           failActiveTurn(error instanceof Error ? error.message : "WebSocket send failed");

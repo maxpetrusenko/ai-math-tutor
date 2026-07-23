@@ -19,7 +19,7 @@ student speech or text
   -> tutor LLM policy
   -> streamed TTS
   -> browser playback
-  -> 2D, SVG, Three.js, or managed avatar
+  -> self-hosted TalkingHead tutor
 ```
 
 The session contract stays stable while providers change underneath it. That makes the repo useful as a realtime tutoring spine, not just a one-provider demo.
@@ -33,7 +33,7 @@ The session contract stays stable while providers change underneath it. That mak
 | Speech input | `audio.chunk.bytes_b64` browser chunks, Deepgram provider path |
 | Tutor brain | runtime provider switch for Gemini, MiniMax, OpenAI, Anthropic |
 | Speech output | Cartesia and MiniMax TTS behind one streamed context contract |
-| Avatar | 2D CSS, 2D SVG, lazy Three.js, plus managed LiveKit avatar notes |
+| Avatar | self-hosted TalkingHead 3D tutor with timed phoneme visemes and audio-energy fallback |
 | Interruption | `Escape` cancels active playback and returns the tutor to the next turn |
 | Lesson memory | active and archived thread state, history drawer, new lesson flow |
 | Evals | math, science, and English fixtures score 4+ / 5 across tutoring dimensions |
@@ -43,9 +43,9 @@ Runtime benchmark snapshot from [`docs/planning/benchmark-report-v1.md`](docs/pl
 
 | Stage | p50 | p95 | Gate |
 | --- | ---: | ---: | --- |
-| `speech_end -> stt_final` | `67.8 ms` | `112.23 ms` | pass under `350 ms` p95 |
-| `speech_end -> tts_first_audio` | `363.6 ms` | `658.97 ms` | pass under `500 ms` p50 and `900 ms` p95 |
-| `speech_end -> first_viseme` | `363.6 ms` | `658.97 ms` | pass with playback-start proxy |
+| `speech_end -> stt_final` | `114.1 ms` | `185.18 ms` | pass under `350 ms` p95 |
+| `speech_end -> tts_first_audio` | `404.6 ms` | `558.72 ms` | pass under `500 ms` p50 and `900 ms` p95 |
+| `tts_first_audio -> first_viseme` | `0.0 ms` | `0.0 ms` | benchmark proxy only; browser motion verified separately |
 
 ## Closure Lane Status
 
@@ -71,7 +71,7 @@ Runtime benchmark snapshot from [`docs/planning/benchmark-report-v1.md`](docs/pl
 | STT | Deepgram by default | `open_session`, `push_audio`, `finalize`, `close` |
 | LLM | Gemini, MiniMax, OpenAI, Anthropic | streamed tutor response through `ProviderSwitch` |
 | TTS | Cartesia, MiniMax | streamed phrase context, flush, cancel |
-| Avatar | 2D CSS, 2D SVG, Three.js, managed LiveKit notes | visible `idle`, `listening`, `thinking`, `speaking`, `fading` states |
+| Avatar | `@met4citizen/talkinghead` | visible states plus coarticulated English phoneme visemes |
 | Observability | latency tracker, JSONL AI call log, optional LangSmith | stage timing, failures, prompt/output inspection |
 
 Design rules are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/STACK.md`](docs/STACK.md).
@@ -96,7 +96,7 @@ The reviewer-visible flow:
 4. Continue with a follow-up turn to prove lesson continuity.
 5. Open `History` to prove state preservation.
 6. Press `Escape` during speech to prove interruption.
-7. Open `/avatar` and switch between 2D and 3D tutor modes.
+7. Open `/avatar` and confirm the dependable local Nerdy Tutor is the only selectable avatar.
 
 Operator notes: [`docs/demo-operator-notes.md`](docs/demo-operator-notes.md)
 
@@ -151,7 +151,7 @@ NERDY_LLM_FALLBACK_PROVIDER=gemini
 NERDY_RUNTIME_LLM_PROVIDER=gemini
 NERDY_RUNTIME_LLM_FALLBACK_PROVIDER=minimax
 NERDY_TTS_PROVIDER=cartesia
-NERDY_AVATAR_PROVIDER=threejs
+NERDY_AVATAR_PROVIDER=talkinghead
 NERDY_AI_LOG_PATH=.nerdy-data/ai-calls.jsonl
 NERDY_ENABLE_LANGSMITH=0
 
@@ -243,7 +243,8 @@ Managed avatar notes: [`docs/livekit-managed-avatars.md`](docs/livekit-managed-a
 | LLM provider outage | primary provider can fail or slow the turn | use fallback provider env and inspect AI call JSONL |
 | Public-provider latency tail | live vendor bakeoff can miss hard latency gates | use runtime fast path as acceptance lane, keep bakeoff as comparison |
 | Stale lesson state | session may feel noisy after repeated demos | press `Escape`, then `New` |
-| Avatar branch load issue | 3D path may be heavier than default 2D path | switch back to 2D SVG or CSS avatar |
+| Local avatar load issue | WebGL or the licensed GLB model could not initialize | use the visible retry, inspect `[TalkingHeadAvatar] avatar.load_failed`, and verify `/avatars/nerdy-tutor.glb` |
+| Managed avatar attach issue | provider did not publish expected audio and video | inspect the provider-specific worker error; Simli compatibility work is tracked in issue #30 |
 
 Known benchmark caveats:
 

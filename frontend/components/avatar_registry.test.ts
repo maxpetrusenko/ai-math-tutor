@@ -5,76 +5,35 @@ import {
   resolveAvatarProvider,
   resolveAvatarProviderId,
 } from "./avatar_registry";
+import { LEGACY_LOCAL_AVATAR_IDS } from "../lib/avatar_manifest";
 
-test("registry exposes provider options for session controls", () => {
-  const options = listAvatarProviders();
-
-  expect(options.map((option) => option.id)).toEqual(
-    expect.arrayContaining([
-      "sage-svg-2d",
-      "albert-svg-2d",
-      "nova-svg-2d",
-      "dex-svg-2d",
-      "banana-css-2d",
-      "apple-css-2d",
-      "human-css-2d",
-      "robot-css-2d",
-      "human-threejs-3d",
-      "wizard-school-inspired-threejs-3d",
-      "yellow-sidekick-inspired-threejs-3d",
-      "simli-b97a7777-live",
-      "heygen-liveavatar-default",
-    ])
-  );
-  expect(options.find((option) => option.id === "human-css-2d")?.label).toBe("Human");
-  expect(options.find((option) => option.id === "sage-svg-2d")?.persona).toBe("Patient guide");
+test("registry exposes one local tutor and two managed providers", () => {
+  expect(listAvatarProviders().map((option) => option.id)).toEqual([
+    "nerdy-talkinghead-3d",
+    "simli-b97a7777-live",
+    "heygen-liveavatar-default",
+  ]);
 });
 
-test("registry falls back to the default provider when config is unknown", () => {
-  expect(resolveAvatarProviderId({ provider: "unknown", type: "3d" })).toBe(DEFAULT_AVATAR_PROVIDER_ID);
+test("registry filters local and live modes", () => {
+  expect(listAvatarProvidersForMode("local").map((option) => option.id)).toEqual([
+    "nerdy-talkinghead-3d",
+  ]);
+  expect(listAvatarProvidersForMode("live").map((option) => option.id)).toEqual([
+    "simli-b97a7777-live",
+    "heygen-liveavatar-default",
+  ]);
 });
 
-test("registry can filter avatar presets by render mode", () => {
-  expect(listAvatarProvidersForMode("2d").map((option) => option.id)).toEqual(
-    expect.arrayContaining([
-      "sage-svg-2d",
-      "albert-svg-2d",
-      "nova-svg-2d",
-      "dex-svg-2d",
-      "banana-css-2d",
-      "apple-css-2d",
-      "human-css-2d",
-      "robot-css-2d",
-    ])
-  );
-  expect(listAvatarProvidersForMode("3d").map((option) => option.id)).toEqual(
-    expect.arrayContaining([
-      "human-threejs-3d",
-      "robot-threejs-3d",
-      "wizard-school-inspired-threejs-3d",
-      "yellow-sidekick-inspired-threejs-3d",
-    ])
-  );
-  expect(listAvatarProvidersForMode("live").map((option) => option.id)).toEqual(
-    expect.arrayContaining([
-      "simli-b97a7777-live",
-      "heygen-liveavatar-default",
-    ])
-  );
+test("every removed local avatar ID migrates to the TalkingHead tutor", () => {
+  for (const legacyId of LEGACY_LOCAL_AVATAR_IDS) {
+    expect(resolveAvatarProvider(legacyId).id).toBe(DEFAULT_AVATAR_PROVIDER_ID);
+  }
 });
 
-test("registry resolves backend 3d config to the default 3d preset", () => {
-  const provider = resolveAvatarProvider(resolveAvatarProviderId({ provider: "threejs", type: "3d" }));
-
-  expect(provider.id).toBe("human-threejs-3d");
-  expect(provider.mode).toBe("3d");
-});
-
-test("registry resolves backend svg config to the matching 2d preset", () => {
-  const provider = resolveAvatarProvider(resolveAvatarProviderId({ provider: "svg", type: "2d", assetRef: "nova" }));
-
-  expect(provider.id).toBe("nova-svg-2d");
-  expect(provider.mode).toBe("2d");
+test("unknown local config resolves to the TalkingHead tutor", () => {
+  expect(resolveAvatarProviderId({ provider: "threejs", type: "3d" })).toBe(DEFAULT_AVATAR_PROVIDER_ID);
+  expect(resolveAvatarProvider(resolveAvatarProviderId({ provider: "threejs", type: "3d" })).mode).toBe("local");
 });
 
 test("registry resolves managed avatar entries", () => {

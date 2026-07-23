@@ -15,11 +15,7 @@ def test_multi_turn_fixtures_cover_core_subjects_and_lock_demo_shape() -> None:
     for payload in payloads:
         assert payload["demo"]["locked"] is True
         assert payload["demo"]["transport_mode"] == "fixture"
-        assert payload["demo"]["avatar_preset"] in {
-            "human-css-2d",
-            "robot-css-2d",
-            "human-threejs-3d",
-        }
+        assert payload["demo"]["avatar_preset"] == "nerdy-talkinghead-3d"
         assert len(payload["turns"]) >= 3
         assert payload["turns"][0]["turn_goal"] == "diagnose"
         assert payload["turns"][-1]["turn_goal"] == "reflect"

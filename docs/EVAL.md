@@ -11,7 +11,7 @@ This plan prioritizes:
 
 - latency closure
 - committed playback quality
-- 2D avatar credibility
+- talking-avatar credibility
 - Socratic tutoring quality
 
 ## 2. Phase 0 Benchmark Gate
@@ -82,7 +82,7 @@ Report:
 
 - stable-phrase commit likely wins for MVP
 
-## 5. 2D Avatar Evaluation
+## 5. Talking Avatar Evaluation
 
 The visual tutor must be judged directly.
 
@@ -177,11 +177,10 @@ Located in `eval/fixtures/multi_turn/`:
 
 ### Demo Lock
 
-Current frozen demo-safe presets for reviewer use:
+Current frozen demo-safe preset for reviewer use:
 
-- primary avatar: `human-css-2d`
-- alternate 2D: `robot-css-2d`
-- alternate 3D: `human-threejs-3d`
+- primary local avatar: `nerdy-talkinghead-3d`
+- managed comparison options: Simli and HeyGen, only when provider credentials and spend are explicitly in scope
 - primary lesson arc: math linear equations
 - backup lesson arcs: photosynthesis basics, subject-verb agreement
 
@@ -221,6 +220,6 @@ Each stretch branch must beat the MVP baseline on a measured dimension, not just
 The MVP is ready when it can prove:
 
 - the latency budget closes
-- the 2D visual tutor is credible
+- the self-hosted visual tutor is credible
 - the tutor remains Socratic
 - the benchmark report justifies any next branch

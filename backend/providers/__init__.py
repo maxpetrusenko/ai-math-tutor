@@ -13,7 +13,7 @@ def create_provider(provider_type: str, name: str | None = None):
         "stt": os.getenv("NERDY_STT_PROVIDER", "deepgram"),
         "llm": os.getenv("NERDY_LLM_PROVIDER", "minimax"),
         "tts": os.getenv("NERDY_TTS_PROVIDER", "cartesia"),
-        "avatar": os.getenv("NERDY_AVATAR_PROVIDER", "threejs"),
+        "avatar": os.getenv("NERDY_AVATAR_PROVIDER", "talkinghead"),
     }
     provider_cls = get_provider(provider_type, name or default_names.get(provider_type))
     return provider_cls()

@@ -1,6 +1,6 @@
 # Requirements Trace Matrix
 
-Last updated: 2026-03-12
+Last updated: 2026-07-22
 
 ## Completion Read
 
@@ -21,18 +21,18 @@ Current acceptance lane:
 
 ## Verified Commands
 
-Fresh verification from 2026-03-12:
+Fresh verification from 2026-07-22:
 
 ```bash
-python3 -m pytest -q
+uv run pytest -q
 cd frontend && pnpm verify
-cd frontend && pnpm e2e
+cd frontend && pnpm exec playwright test
 ```
 
 Observed results:
 
-- `174 passed` in backend pytest
-- `35` frontend test files, `128` frontend tests passed
+- `171 passed` in backend pytest
+- `50` frontend test files, `181` frontend tests passed
 - production build passed
 - typecheck passed
 - `10` Playwright specs passed
@@ -44,6 +44,7 @@ Observed results:
 | LR-1 | `speech_end -> stt_final` p95 | `< 350 ms` | PASS in runtime lane: `112.23 ms` p95 on 2026-03-11 |
 | LR-2 | `speech_end -> tts_first_audio` p50 | `< 500 ms` | PASS in runtime lane: `363.6 ms` p50 on 2026-03-11 |
 | LR-3 | `speech_end -> tts_first_audio` p95 | `< 900 ms` | PASS in runtime lane: `658.97 ms` p95 on 2026-03-11 |
+| LR-4 | `tts_first_audio -> first_viseme` p95 | `< 80 ms` | PARTIAL: benchmark values remain playback-start proxies; browser proves rendered morph changes but does not yet measure provider-audio onset against the first changed pixel/morph |
 
 Public stack note:
 
@@ -64,9 +65,11 @@ Public stack note:
 
 | ID | Requirement | Evidence | Status |
 | --- | --- | --- | --- |
-| AV-1 | avatar visibly enters speaking state | [AvatarRenderer.test.tsx](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/components/AvatarRenderer.test.tsx), [TutorSession.test.tsx](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/components/TutorSession.test.tsx) | PASS |
-| AV-2 | default SVG tutor exposes measurable mouth movement | [AvatarProvider.test.tsx](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/components/AvatarProvider.test.tsx), [avatar-lipsync.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/avatar-lipsync.spec.ts) | PASS |
-| AV-3 | 2D / 3D avatar switching works in browser | [avatar-mode-toggle.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/avatar-mode-toggle.spec.ts), [avatar-provider.spec.ts](/Users/maxpetrusenko/Desktop/Gauntlet/Nerdy/frontend/e2e/avatar-provider.spec.ts) | PASS |
+| AV-1 | local avatar visibly enters speaking state | `frontend/components/TalkingHeadAvatar.test.tsx`, `frontend/components/TutorSession.test.tsx` | PASS |
+| AV-2 | local tutor renders at least three distinct timed phoneme mouth shapes per utterance; visible holds survive 30 FPS | `frontend/lib/avatar_model_visemes.test.ts`, `frontend/lib/avatar_viseme_timeline.test.ts`, `frontend/e2e/avatar-lipsync.spec.ts` | PASS |
+| AV-3 | only the local avatar is selectable and legacy/managed IDs migrate locally | `frontend/e2e/avatar-mode-toggle.spec.ts`, `frontend/lib/avatar_preference.ts` | PASS |
+| AV-4 | local model has explicit redistribution rights | `frontend/public/avatars/ATTRIBUTION.md`, `frontend/public/avatars/README.md` | PASS |
+| AV-5 | voice identity is deterministic per selectable avatar and provider | `frontend/lib/avatar_voice.test.ts`, `tests/tts/test_cartesia_client.py` | PASS |
 
 ## Browser Flow Trace
 
@@ -92,7 +95,7 @@ These are the remaining non-engineering gaps:
 
 1. final recorded demo video is not committed in repo
 2. public-provider bakeoff still misses hard latency budget
-3. benchmark runner still uses proxy `first_viseme` / `audio_done` in benchmark mode even though the shipped browser path now verifies visible mouth motion
+3. benchmark runner still uses proxy `first_viseme` / `audio_done` in runtime mode; browser morph variation is verified separately, but exact audio-to-rendered-morph onset remains open
 
 ## Acceptance Call
 

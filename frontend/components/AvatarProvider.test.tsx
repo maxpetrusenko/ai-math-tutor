@@ -1,128 +1,56 @@
 import React from "react";
-import { afterEach, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+import { AvatarProvider } from "./AvatarProvider";
 
-afterEach(() => {
-  vi.resetModules();
-  vi.clearAllMocks();
-});
+vi.mock("./TalkingHeadAvatar", () => ({
+  TalkingHeadAvatar: ({ frame, modelUrl }: { frame: { mouthOpen: number; state: string }; modelUrl: string }) => (
+    <div
+      data-avatar-state={frame.state}
+      data-model-url={modelUrl}
+      data-mouth-open={frame.mouthOpen}
+      data-testid="talking-head"
+    />
+  ),
+}));
 
-
-test("avatar provider lazy loads the 3d avatar branch", async () => {
-  vi.doMock("./Avatar3D", () => {
-    throw new Error("Avatar3D was imported eagerly");
-  });
-
-  await expect(import("./AvatarProvider")).resolves.toBeTruthy();
-}, 10000);
-
-test("3d hero loading fallback stays inside the hero shell", async () => {
-  vi.doMock("next/dynamic", () => ({
-    default: (_loader: unknown, options: { loading: React.ComponentType }) => {
-      const Loading = options.loading;
-      return function MockDynamicComponent() {
-        return <Loading />;
-      };
-    },
-  }));
-
-  const { AvatarProvider } = await import("./AvatarProvider");
-
+test("local avatar renders the TalkingHead adapter with measurable mouth state", () => {
   render(
     <AvatarProvider
-      config={{ provider: "threejs", type: "3d" }}
-      energy={0.2}
-      nowMs={0}
-      state="idle"
-      timestamps={[]}
+      avatarId="nerdy-talkinghead-3d"
+      energy={0.8}
+      nowMs={80}
+      state="speaking"
+      subtitle="Hint mode active"
+      timestamps={[{ endMs: 120, startMs: 0, word: "factor" }]}
       variant="hero"
     />
   );
 
-  expect(screen.getByTestId("avatar-surface-3d")).toBeInTheDocument();
-  expect(screen.queryByTestId("avatar-surface-3d-loading")).not.toBeInTheDocument();
-  expect(screen.getByTestId("avatar-3d-loading")).toBeInTheDocument();
+  expect(screen.getByTestId("avatar-surface-talkinghead")).toBeInTheDocument();
+  expect(screen.getByTestId("talking-head")).toHaveAttribute("data-avatar-state", "speaking");
+  expect(Number(screen.getByTestId("talking-head").getAttribute("data-mouth-open"))).toBeGreaterThan(0.8);
+  expect(screen.getByText("Hint mode active")).toBeInTheDocument();
 });
 
-test("3d chunk load failures fall back to the 2d shell instead of crashing the page", async () => {
-  vi.doMock("next/dynamic", () => ({
-    default: () => function MockDynamicComponent() {
-      throw new Error("Loading chunk _app-pages-browser_components_Avatar3D_tsx failed.");
-    },
-  }));
-
-  const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-  const { AvatarProvider } = await import("./AvatarProvider");
-
-  render(
-    <AvatarProvider
-      config={{ provider: "threejs", type: "3d", assetRef: "human" }}
-      energy={0.2}
-      nowMs={0}
-      state="idle"
-      subtitle="Tutor fallback"
-      timestamps={[]}
-      variant="hero"
-    />
-  );
-
-  expect(await screen.findByTestId("avatar-surface-2d")).toBeInTheDocument();
-  expect(screen.getByText("Tutor fallback")).toBeInTheDocument();
-  consoleErrorSpy.mockRestore();
-});
-
-test("3d runtime failures fall back to the 2d shell instead of leaving the hero stage broken", async () => {
-  vi.doMock("next/dynamic", () => ({
-    default: () => function MockDynamicComponent(props: { onError?: (error: Error) => void }) {
-      React.useEffect(() => {
-        props.onError?.(new Error("Error creating WebGL context."));
-      }, [props]);
-      return <div data-testid="avatar-3d-runtime">3D runtime</div>;
-    },
-  }));
-
-  const { AvatarProvider } = await import("./AvatarProvider");
-
+test("legacy local configs migrate to the TalkingHead adapter", () => {
   render(
     <AvatarProvider
       config={{ provider: "threejs", type: "3d", assetRef: "robot" }}
       energy={0.2}
       nowMs={0}
-      subtitle="Tutor fallback"
       state="idle"
       timestamps={[]}
-      variant="hero"
     />
   );
 
-  expect(await screen.findByTestId("avatar-surface-2d")).toBeInTheDocument();
-  expect(screen.getByText("Tutor fallback")).toBeInTheDocument();
-});
-
-test("svg avatars render inside the 2d shell", async () => {
-  const { AvatarProvider } = await import("./AvatarProvider");
-
-  render(
-    <AvatarProvider
-      config={{ provider: "svg", type: "2d", assetRef: "nova" }}
-      energy={0.6}
-      nowMs={90}
-      state="speaking"
-      subtitle="Hint mode active"
-      timestamps={[{ endMs: 120, startMs: 0, word: "factor" }]}
-    />
+  expect(screen.getByTestId("talking-head")).toHaveAttribute(
+    "data-model-url",
+    "/avatars/nerdy-tutor.glb?v=7a05c998"
   );
-
-  expect(screen.getByTestId("avatar-surface-2d")).toBeInTheDocument();
-  expect(screen.getByText("Hint mode active")).toBeInTheDocument();
-  expect(screen.getByText("Give me hints")).toBeInTheDocument();
-  expect(Number(screen.getByTestId("avatar-mouth").getAttribute("data-open"))).toBeGreaterThan(0.8);
 });
 
-test("managed avatars render a remote-session placeholder shell when no preview clip exists", async () => {
-  const { AvatarProvider } = await import("./AvatarProvider");
-
+test("managed avatars render a remote-session placeholder shell when no preview clip exists", () => {
   render(
     <AvatarProvider
       avatarId="heygen-liveavatar-default"
@@ -139,9 +67,7 @@ test("managed avatars render a remote-session placeholder shell when no preview 
   expect(screen.getByText("Remote tutor ready")).toBeInTheDocument();
 });
 
-test("managed avatars use a local non-room surface in gallery mode", async () => {
-  const { AvatarProvider } = await import("./AvatarProvider");
-
+test("managed avatars use a local non-room surface in gallery mode", () => {
   render(
     <AvatarProvider
       avatarId="simli-b97a7777-live"

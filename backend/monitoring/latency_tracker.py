@@ -17,6 +17,7 @@ REQUIRED_EVENT_NAMES = [
 _FAILURE_THRESHOLDS_MS = {
     "speech_end->stt_final": 350,
     "speech_end->tts_first_audio": 900,
+    "tts_first_audio->first_viseme": 80,
 }
 
 

@@ -20,7 +20,11 @@ cd "${ROOT_DIR}"
 if command -v python3 >/dev/null 2>&1; then
   eval "$(python3 -m backend.runtime.local_env --shell)"
 fi
-uvicorn backend.session.server:app --host "${HOST}" --port "${BACKEND_PORT}" &
+if command -v uv >/dev/null 2>&1; then
+  uv run --no-sync uvicorn backend.session.server:app --host "${HOST}" --port "${BACKEND_PORT}" &
+else
+  python3 -m uvicorn backend.session.server:app --host "${HOST}" --port "${BACKEND_PORT}" &
+fi
 BACKEND_PID=$!
 
 if [ -d "${FRONTEND_CACHE_DIR}" ] && command -v trash >/dev/null 2>&1; then

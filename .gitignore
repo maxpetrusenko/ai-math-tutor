@@ -21,3 +21,4 @@ __pycache__/
 *.tsbuildinfo
 nerdy.egg-info/
 .env
+.gstack/

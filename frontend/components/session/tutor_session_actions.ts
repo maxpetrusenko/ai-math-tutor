@@ -1,6 +1,8 @@
 import type React from "react";
 
 import type { CapturedAudioChunk } from "../../lib/audio_capture";
+import type { AvatarSpeechCue } from "../../lib/avatar_contract";
+import { buildAvatarSpeechCue } from "../../lib/avatar_speech_cue";
 import {
   clearPersistedLessonThreadRemote,
   generateLessonSessionId,
@@ -14,6 +16,7 @@ import type { PlaybackController } from "../../lib/playback_controller";
 import { normalizeRuntimeSelection, type RuntimeSelection } from "../../lib/runtime_options";
 import { getSessionActivityLogSnapshot } from "../../lib/session_activity_log";
 import { resolveAvatarPersona } from "../../lib/avatar_persona";
+import { resolveAvatarVoiceConfig } from "../../lib/avatar_voice";
 import { createSessionMetrics, hydrateSessionMetrics, seedSessionMetricsFromLatency, toLatencyMetrics } from "../../lib/session_metrics";
 import type { LessonState } from "../../lib/lesson_catalog";
 import type { LatencyMetrics } from "../LatencyMonitor";
@@ -104,6 +107,8 @@ type TutorSessionActionDeps = {
   ttsProvider: string;
   syncRuntimeSelection: (nextSelection?: Partial<RuntimeSelection>) => RuntimeSelection;
   setAvatarNowMs: React.Dispatch<React.SetStateAction<number>>;
+  setAvatarSpeechCue: React.Dispatch<React.SetStateAction<AvatarSpeechCue | null>>;
+  setAudioEnergySamples: React.Dispatch<React.SetStateAction<NonNullable<TutorTurnResult["audioEnergySamples"]>>>;
   setAvatarProviderId: React.Dispatch<React.SetStateAction<string>>;
   setConversation: React.Dispatch<React.SetStateAction<LessonConversationTurn[]>>;
   setError: React.Dispatch<React.SetStateAction<string>>;
@@ -125,6 +130,8 @@ type TutorSessionActionDeps = {
   setTtsModel: React.Dispatch<React.SetStateAction<string>>;
   setTtsProvider: React.Dispatch<React.SetStateAction<string>>;
   setTutorText: React.Dispatch<React.SetStateAction<string>>;
+  startAvatarPlayback: (baseMs: number) => void;
+  stopAvatarPlayback: (resetTimeline: boolean) => void;
 };
 
 export function createTutorSessionActions(deps: TutorSessionActionDeps) {
@@ -164,6 +171,9 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
     deps.setError("");
     deps.setSessionState("thinking");
     deps.setLatency(null);
+    deps.setAudioEnergySamples([]);
+    deps.setAvatarSpeechCue(null);
+    deps.stopAvatarPlayback(true);
     deps.metricsRef.current = createSessionMetrics();
 
     if (
@@ -177,6 +187,7 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
 
     try {
       const result = await deps.sessionTransport.runTurn({
+        avatarProviderId: deps.avatarProviderId,
         studentText: submittedPrompt,
         subject: deps.subject,
         gradeBand: deps.gradeBand,
@@ -200,6 +211,7 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
         audioChunks,
         ttsModel: runtimeSelection.ttsModel,
         ttsProvider: runtimeSelection.ttsProvider,
+        voiceConfig: resolveAvatarVoiceConfig(deps.avatarProviderId, runtimeSelection.ttsProvider),
       });
 
       if (deps.activeTurnIdRef.current !== turnId) {
@@ -239,6 +251,7 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
         : seedSessionMetricsFromLatency(result.latency);
       deps.setLatency(toLatencyMetrics(deps.metricsRef.current));
       deps.setTimestamps(result.timestamps);
+      deps.setAudioEnergySamples(result.audioEnergySamples ?? []);
       deps.setAvatarProviderId((currentId) => {
         if (!result.avatarConfig) {
           return currentId;
@@ -252,16 +265,33 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
         ? result.audioSegments
         : [{ text: result.tutorText, durationMs: result.timestamps.at(-1)?.endMs ?? Math.max(600, result.tutorText.length * 25) }];
 
+      let cumulativeSegmentDurationMs = 0;
       playbackSegments.forEach((segment, index) => {
+        const durationMs = segment.durationMs ?? Math.max(300, segment.text.length * 18);
+        const segmentOffsetMs = cumulativeSegmentDurationMs;
+        cumulativeSegmentDurationMs += durationMs;
+        const speechCue = buildAvatarSpeechCue({
+          cueId: `${turnId}-${index}`,
+          durationMs,
+          segmentOffsetMs,
+          segmentText: segment.text,
+          timestamps: result.timestamps,
+        });
+
         deps.playbackController.enqueue({
           id: `${turnId}-${index}-${Date.now()}`,
           text: segment.text,
           audioBase64: segment.audioBase64,
           audioMimeType: segment.audioMimeType,
-          deferCompletion: Boolean(segment.audioBase64),
-          durationMs: segment.durationMs ?? Math.max(300, segment.text.length * 18),
+          deferCompletion: true,
+          durationMs,
           onPlaybackStart: () => {
-            if (deps.activeTurnIdRef.current !== turnId || index !== 0) {
+            if (deps.activeTurnIdRef.current !== turnId) {
+              return;
+            }
+            deps.setAvatarSpeechCue(speechCue);
+            deps.startAvatarPlayback(segmentOffsetMs);
+            if (index !== 0) {
               return;
             }
             deps.metricsRef.current.mark({ name: "first_viseme", tsMs: performance.now() });
@@ -272,7 +302,13 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
             }
           },
           onPlaybackComplete: () => {
-            if (deps.activeTurnIdRef.current !== turnId || index !== playbackSegments.length - 1) {
+            if (deps.activeTurnIdRef.current !== turnId) {
+              return;
+            }
+            const isFinalSegment = index === playbackSegments.length - 1;
+            deps.setAvatarSpeechCue(null);
+            deps.stopAvatarPlayback(isFinalSegment);
+            if (!isFinalSegment) {
               return;
             }
             deps.metricsRef.current.mark({ name: "audio_done", tsMs: performance.now() });
@@ -330,8 +366,10 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
     ...micActions,
     async interruptTurn() {
       deps.activeTurnIdRef.current += 1;
-      await deps.sessionTransport.interrupt();
+      deps.setAvatarSpeechCue(null);
+      deps.stopAvatarPlayback(true);
       deps.playbackController.interrupt();
+      await deps.sessionTransport.interrupt();
       await deps.audioCapture.cancel();
       deps.micHoldRef.current = false;
       deps.micStartingRef.current = false;
@@ -339,6 +377,8 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
       deps.setSessionState("idle");
       deps.setLatency(null);
       deps.setTimestamps([]);
+      deps.setAudioEnergySamples([]);
+      deps.setAvatarSpeechCue(null);
       deps.setAvatarNowMs(0);
       deps.setMicActive(false);
       deps.closeHistoryDrawer();
@@ -347,12 +387,14 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
       deps.setRecentLessons(await persistArchivedLessonThread(deps.buildCurrentThread()));
       const nextSessionId = normalizeLessonSessionId(generateLessonSessionId());
       deps.activeTurnIdRef.current += 1;
+      deps.setAvatarSpeechCue(null);
+      deps.stopAvatarPlayback(true);
+      deps.playbackController.interrupt();
       if (deps.sessionTransport.switchSession) {
         await deps.sessionTransport.switchSession(nextSessionId);
       } else {
         await deps.sessionTransport.reset();
       }
-      deps.playbackController.interrupt();
       await deps.audioCapture.cancel();
       deps.micHoldRef.current = false;
       deps.micStartingRef.current = false;
@@ -364,6 +406,8 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
       deps.setConversation([]);
       deps.setLatency(null);
       deps.setTimestamps([]);
+      deps.setAudioEnergySamples([]);
+      deps.setAvatarSpeechCue(null);
       deps.setAvatarNowMs(0);
       deps.setError("");
       deps.setMicActive(false);
@@ -387,12 +431,14 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
       const normalizedThread = withNormalizedThreadSessionId(archivedThread);
 
       deps.activeTurnIdRef.current += 1;
+      deps.setAvatarSpeechCue(null);
+      deps.stopAvatarPlayback(true);
+      deps.playbackController.interrupt();
       if (deps.sessionTransport.switchSession) {
         await deps.sessionTransport.switchSession(normalizedThread.sessionId, normalizedThread);
       } else {
         await deps.sessionTransport.reset();
       }
-      deps.playbackController.interrupt();
       await deps.audioCapture.cancel();
       deps.micHoldRef.current = false;
       deps.micStartingRef.current = false;
@@ -401,6 +447,8 @@ export function createTutorSessionActions(deps: TutorSessionActionDeps) {
       deps.setSessionState("idle");
       deps.setLatency(null);
       deps.setTimestamps([]);
+      deps.setAudioEnergySamples([]);
+      deps.setAvatarSpeechCue(null);
       deps.setAvatarNowMs(0);
       deps.setError("");
       deps.setMicActive(false);

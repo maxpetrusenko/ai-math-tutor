@@ -1,4 +1,5 @@
 import { createSessionMetrics, snapshotSessionMetrics, toLatencyMetrics } from "./session_metrics";
+import { buildPcm16EnergyEnvelope } from "./audio_energy";
 import type { SessionTransport, TutorTurnRequest, TutorTurnResult } from "../components/session/session_types";
 import type { PersistedLessonThread } from "./lesson_thread_store";
 
@@ -103,6 +104,10 @@ function isAudioTurn(request: TutorTurnRequest) {
   return (request.audioChunks ?? []).some((chunk) => Boolean(chunk.bytesBase64));
 }
 
+function resolveRealtimeVoice(request: TutorTurnRequest) {
+  return request.voiceConfig?.voice?.trim() || REALTIME_VOICE;
+}
+
 function buildRealtimeResponseSession(request: TutorTurnRequest) {
   return {
     type: "realtime",
@@ -116,7 +121,7 @@ function buildRealtimeResponseSession(request: TutorTurnRequest) {
       },
       output: {
         format: { type: "audio/pcm", rate: REALTIME_SAMPLE_RATE },
-        voice: REALTIME_VOICE,
+        voice: resolveRealtimeVoice(request),
       },
     },
   };
@@ -141,6 +146,26 @@ function buildRealtimeTranscriptionSession() {
 function joinBase64PcmChunks(chunks: string[]) {
   const bytes = chunks.flatMap((chunk) => Array.from(base64ToUint8Array(chunk)));
   return new Uint8Array(bytes);
+}
+
+function getPcm16DurationMs(pcmBytes: Uint8Array, sampleRate: number) {
+  return Math.round((pcmBytes.length / 2 / sampleRate) * 1_000);
+}
+
+function buildRealtimeWordTimestamps(text: string, durationMs: number): TutorTurnResult["timestamps"] {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0 || durationMs <= 0) {
+    return [];
+  }
+
+  const slotMs = durationMs / words.length;
+  const gapMs = Math.min(70, slotMs * 0.2);
+
+  return words.map((word, index) => ({
+    word,
+    startMs: Math.round(index * slotMs),
+    endMs: Math.round(Math.min(durationMs, (index + 1) * slotMs - gapMs)),
+  }));
 }
 
 function pcm16ToWavBase64(pcmBytes: Uint8Array, sampleRate: number) {
@@ -301,25 +326,30 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
       clearTimeout(activeTurn.timeoutId);
     }
     const resolvedTurn = activeTurn;
-    const wavBase64 = pcm16ToWavBase64(joinBase64PcmChunks(resolvedTurn.audioBase64Chunks), REALTIME_SAMPLE_RATE);
+    const tutorText = resolvedTurn.tutorText.trim();
+    const pcmBytes = joinBase64PcmChunks(resolvedTurn.audioBase64Chunks);
+    const durationMs = getPcm16DurationMs(pcmBytes, REALTIME_SAMPLE_RATE);
+    const wavBase64 = pcm16ToWavBase64(pcmBytes, REALTIME_SAMPLE_RATE);
     resolvedTurn.resolve({
       transcript: resolvedTurn.transcript,
-      tutorText: resolvedTurn.tutorText.trim(),
+      tutorText,
       state: "speaking",
       latency: toLatencyMetrics(resolvedTurn.metrics),
       metricEvents: snapshotSessionMetrics(resolvedTurn.metrics),
-      timestamps: [],
+      timestamps: buildRealtimeWordTimestamps(tutorText, durationMs),
+      audioEnergySamples: buildPcm16EnergyEnvelope(pcmBytes, REALTIME_SAMPLE_RATE),
       audioSegments: resolvedTurn.audioBase64Chunks.length > 0
         ? [{
-            text: resolvedTurn.tutorText.trim(),
+            text: tutorText,
             audioBase64: wavBase64,
             audioMimeType: "audio/wav",
+            durationMs,
           }]
         : undefined,
     });
     conversationHistory.push({
       transcript: resolvedTurn.transcript,
-      tutorText: resolvedTurn.tutorText.trim(),
+      tutorText,
     });
     activeTurn = null;
   };
@@ -455,7 +485,7 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
           instructions: buildRealtimeInstructions(request),
           model: requestedModel,
           session_type: options.sessionType,
-          voice: REALTIME_VOICE,
+          voice: resolveRealtimeVoice(request),
         }),
       });
     } catch (error) {
@@ -604,11 +634,13 @@ export function createOpenAIRealtimeTransport(deps: TransportDeps = {}): Session
       }
 
       const requestedModel = REALTIME_TRANSCRIPTION_MODEL;
-      const clientSecret = await mintClientSecret(request, {
-        model: requestedModel,
-        sessionType: "transcription",
-      });
-      const pcmChunks = await requestAudioAsPcmBase64Chunks(request);
+      const [clientSecret, pcmChunks] = await Promise.all([
+        mintClientSecret(request, {
+          model: requestedModel,
+          sessionType: "transcription",
+        }),
+        requestAudioAsPcmBase64Chunks(request),
+      ]);
       if (pcmChunks.length === 0) {
         return request.studentText;
       }

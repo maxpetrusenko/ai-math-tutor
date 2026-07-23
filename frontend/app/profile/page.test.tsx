@@ -98,7 +98,7 @@ test("profile surfaces saved lesson library and current learner snapshot", async
   expect(screen.getByText("Learning profile")).toBeInTheDocument();
   expect(screen.getByText("Achievements earned")).toBeInTheDocument();
   expect(screen.getByText("Strongest subject")).toBeInTheDocument();
-  expect(screen.getAllByText("Sage").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("Nerdy Tutor").length).toBeGreaterThan(0);
   expect(screen.getAllByText("Linear Equations").length).toBeGreaterThan(0);
   expect(screen.getByText("Resume Intro to Fractions")).toBeInTheDocument();
 });

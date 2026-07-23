@@ -6,14 +6,14 @@ This report scores the locked multi-turn lesson fixtures used for demo prep and 
 
 | Fixture | Subject | Concept | Grade Band | Avatar | Socratic quality | Follow-up continuity | Grade fit | Lesson arc | Correction style |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| `english_subject_verb.json` | english | subject-verb agreement | 11-12 | `human-css-2d` | 5 | 5 | 4 | 5 | 5 |
-| `math-linear-equations.json` | math | linear equations | 6-8 | `human-css-2d` | 5 | 5 | 5 | 5 | 5 |
-| `science_photosynthesis.json` | science | photosynthesis basics | 9-10 | `human-css-2d` | 5 | 5 | 4 | 5 | 5 |
+| `english_subject_verb.json` | english | subject-verb agreement | 11-12 | `nerdy-talkinghead-3d` | 5 | 5 | 4 | 5 | 5 |
+| `math-linear-equations.json` | math | linear equations | 6-8 | `nerdy-talkinghead-3d` | 5 | 5 | 5 | 5 | 5 |
+| `science_photosynthesis.json` | science | photosynthesis basics | 9-10 | `nerdy-talkinghead-3d` | 5 | 5 | 4 | 5 | 5 |
 
 ## Locked Demo Notes
 
 - Transport mode stays `fixture` for repeatable rehearsal and browser smoke.
-- Demo-safe presets stay inside the frozen set: `human-css-2d`, `robot-css-2d`, `human-threejs-3d`.
+- The frozen demo-safe avatar is the self-hosted `nerdy-talkinghead-3d` preset.
 - All three fixtures maintain a diagnose -> guide/practice -> verify/reflect lesson arc.
 - All three fixtures score `4+ / 5` on every rubric dimension; two score perfect `5 / 5` for Socratic quality and follow-up continuity.
 

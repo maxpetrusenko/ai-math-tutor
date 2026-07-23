@@ -22,7 +22,6 @@ export default defineConfig({
         ".next/**",
         "next-env.d.ts",
         "lib/avatar_contract.ts",
-        "lib/avatar_3d_scene.ts",
       ],
       thresholds: {
         branches: 80,

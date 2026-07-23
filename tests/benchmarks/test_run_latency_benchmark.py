@@ -49,7 +49,9 @@ def test_run_benchmark_executes_30_runs_per_prompt_and_computes_gate() -> None:
     assert outcome.pass_fail["time_to_first_audio_p50_pass"] is True
     assert outcome.pass_fail["time_to_first_audio_p95_pass"] is True
     assert outcome.pass_fail["speech_end_to_stt_final_p95_pass"] is True
+    assert outcome.pass_fail["audio_to_first_viseme_p95_pass"] is False
     assert outcome.pass_fail["required_event_set_pass"] is False
+    assert outcome.pass_fail["event_order_pass"] is True
     assert outcome.required_event_coverage["missing_event_counts"]["first_viseme"] == 90
     assert len(outcome.raw_event_logs) == 90
 
@@ -76,9 +78,35 @@ def test_run_benchmark_marks_required_event_pass_when_all_required_events_exist(
 
     assert outcome.mode == "live"
     assert outcome.pass_fail["required_event_set_pass"] is True
+    assert outcome.pass_fail["audio_to_first_viseme_p95_pass"] is True
+    assert outcome.pass_fail["event_order_pass"] is True
     assert outcome.required_event_coverage["complete_runs"] == 3
     assert outcome.summary["tts_first_audio->first_viseme"]["p50_ms"] == 40
     assert outcome.summary["speech_end->audio_done"]["p95_ms"] == 520
+
+
+def test_benchmark_rejects_non_monotonic_audio_and_mouth_events() -> None:
+    def invalid_pipeline(prompt_id: str, iteration: int) -> LatencyTracker:
+        del prompt_id, iteration
+        tracker = LatencyTracker()
+        tracker.mark("speech_end", 0)
+        tracker.mark("stt_partial_stable", 40)
+        tracker.mark("stt_final", 80)
+        tracker.mark("llm_first_token", 140)
+        tracker.mark("tts_first_audio", 260)
+        tracker.mark("first_viseme", 240)
+        tracker.mark("audio_done", 520)
+        return tracker
+
+    outcome = run_benchmark(
+        "backend/benchmarks/canned_prompts.json",
+        pipeline=invalid_pipeline,
+        runs_per_prompt=1,
+    )
+
+    assert outcome.pass_fail["event_order_pass"] is False
+    assert outcome.pass_fail["audio_to_first_viseme_p95_pass"] is True
+    assert len(outcome.required_event_coverage["non_monotonic_runs"]) == 3
 
 
 def test_run_benchmark_from_event_logs_aggregates_live_runs(tmp_path) -> None:
@@ -186,6 +214,8 @@ def test_benchmark_main_writes_runtime_output(tmp_path, monkeypatch) -> None:
             "time_to_first_audio_p95_pass": True,
             "speech_end_to_stt_final_p95_pass": True,
             "required_event_set_pass": True,
+            "audio_to_first_viseme_p95_pass": True,
+            "event_order_pass": True,
         },
         required_event_coverage={
             "required_events": [],
@@ -193,6 +223,7 @@ def test_benchmark_main_writes_runtime_output(tmp_path, monkeypatch) -> None:
             "total_runs": 3,
             "missing_event_counts": {},
             "missing_runs": [],
+            "non_monotonic_runs": [],
         },
     )
     runtime_module = types.SimpleNamespace(run_runtime_fast_benchmark=lambda path, runs_per_prompt=1: fake_outcome)

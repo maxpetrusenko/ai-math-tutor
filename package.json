@@ -11,8 +11,5 @@
 		"smoke:prod": "python3 scripts/smoke_hosted.py",
 		"test": "pnpm --dir frontend test",
 		"typecheck": "pnpm --dir frontend typecheck"
-	},
-	"devDependencies": {
-		"@types/three": "^0.183.1"
 	}
 }

@@ -65,7 +65,7 @@ class ProviderRegistry:
 
     @classmethod
     def get_avatar(cls, name: str | None = None) -> type[BaseAvatarProvider]:
-        name = name or os.getenv("NERDY_AVATAR_PROVIDER", "threejs")
+        name = name or os.getenv("NERDY_AVATAR_PROVIDER", "talkinghead")
         if name not in cls._avatar_providers:
             raise ValueError(f"unknown avatar provider: {name}")
         return cls._avatar_providers[name]
@@ -97,7 +97,7 @@ def auto_register_providers() -> None:
         "backend.providers.llm.minimax,backend.providers.llm.gemini,backend.providers.llm.openai,backend.providers.llm.anthropic",
     ).split(",")
     tts_modules = os.getenv("TTS_MODULES", "backend.providers.tts.cartesia,backend.providers.tts.minimax").split(",")
-    avatar_modules = os.getenv("AVATAR_MODULES", "backend.providers.avatar.threejs").split(",")
+    avatar_modules = os.getenv("AVATAR_MODULES", "backend.providers.avatar.talkinghead").split(",")
 
     for module_path in stt_modules + llm_modules + tts_modules + avatar_modules:
         try:
