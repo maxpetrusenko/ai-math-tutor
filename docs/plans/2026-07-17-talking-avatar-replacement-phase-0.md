@@ -1,7 +1,7 @@
 # Talking Avatar Replacement: Phase 0
 
-Date: 2026-07-17  
-Status: Implemented and verified  
+Date: 2026-07-17
+Status: Implemented and verified
 Related incident: [GitHub issue #30](https://github.com/maxpetrusenko/ai-math-tutor/issues/30)
 
 ## Decision
