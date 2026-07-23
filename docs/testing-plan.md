@@ -23,7 +23,7 @@ Every task should land with at least one of:
 | 06 | commit manager | `tests/tts/test_commit_manager.py` | review phrase vs sentence output quality |
 | 07 | Cartesia path | `tests/tts/test_cartesia_client.py`, audio buffer tests | review timestamp quality |
 | 08 | frontend shell | component tests for `TutorSession`, `MicCapture`, `LatencyMonitor` | review state clarity and responsive layout |
-| 09 | avatar renderer | `frontend/components/AvatarRenderer.test.tsx`, avatar timing tests | review mouth motion and state readability |
+| 09 | avatar renderer | `TalkingHeadAvatar.test.tsx`, `AvatarProvider.test.tsx`, avatar timing tests | review model load, mouth motion, state readability, and disposal |
 | 10 | playback + interruption | `frontend/lib/playback_controller.test.ts`, `AudioPlayer` tests | review fade, cut, and audio/avatar stop-together behavior |
 | 11 | pedagogy eval pack | `tests/eval/*` | review rubric completeness and subject spread |
 | 12 | benchmark report | template test plus report regeneration check | review go / no-go honesty |
@@ -40,7 +40,7 @@ Every task should land with at least one of:
 
 ## Missing Test Work Right Now
 
-- browser-level smoke coverage exists for app load, demo turns, interruption, lesson reset, and avatar switching
+- browser-level smoke coverage exists for app load, demo turns, interruption, lesson reset, local-only avatar selection, managed-ID migration, and continuously varying mouth motion
 - live mic capture exists, and component coverage exercises recorded-chunk turns; browser permission UX still needs a higher-fidelity automation pass
 - frontend latency cards derive from real session events; broader reviewer-facing sync assertions can still expand beyond the current event coverage
 - no clean-shell startup verification command exists yet

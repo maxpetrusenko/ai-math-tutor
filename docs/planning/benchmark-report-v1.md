@@ -1,5 +1,26 @@
 # Benchmark Report V1
 
+## 2026-07-22 Rebenchmark
+
+The latency harness now rejects non-monotonic event sequences and applies an
+`80 ms` p95 gate to `tts_first_audio -> first_viseme`. The browser lip-sync gate
+is separate because the runtime benchmark still records `first_viseme` at
+playback start rather than observing the rendered morph target.
+
+| Mode | Runs | STT final p50 / p95 | First audio p50 / p95 | Audio to first viseme p50 / p95 | Event order |
+| --- | ---: | ---: | ---: | ---: | --- |
+| fixture | 90 | `125 / 135 ms` | `455 / 495 ms` | `35 / 35 ms` | pass, 0 non-monotonic runs |
+| runtime | 15 | `114.1 / 185.18 ms` | `404.6 / 558.72 ms` | `0 / 0 ms` proxy | pass, 0 non-monotonic runs |
+
+Real-browser provider-audio evidence: 120 mouth samples over 4.8 seconds,
+`0.12` to `1.0` openness, 33 distinct levels, and 70 transitions. This closes
+the visual regression that previously opened once and closed only at the end.
+
+Generated evidence:
+
+- `/tmp/nerdy-fixture-2026-07-22.json`
+- `/tmp/nerdy-runtime-2026-07-22.json`
+
 ## Fixture Baseline Metadata
 
 - Date: 2026-03-08

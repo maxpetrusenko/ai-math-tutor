@@ -1,6 +1,6 @@
 # Submission Checklist
 
-Last updated: 2026-03-12
+Last updated: 2026-07-22
 
 ## Current Read
 
@@ -20,11 +20,11 @@ Engineering status:
 
 ## Verified Now
 
-- [x] `python3 -m pytest -q` passes with `174 passed`
-- [x] `cd frontend && pnpm verify` passes
-- [x] `cd frontend && pnpm e2e` passes with `10 passed`
-- [x] visible SVG lip-sync is browser-covered
-- [x] avatar switching is browser-covered
+- [x] `uv run pytest -q` passes with `171 passed`
+- [x] `cd frontend && pnpm verify` passes with `47` files and `177` tests
+- [x] `cd frontend && pnpm exec playwright test` passes with `10 passed`
+- [x] continuously varying TalkingHead lip-sync is browser-covered
+- [x] local-only avatar selection and managed-ID migration are browser-covered
 - [x] interruption is browser-covered
 - [x] lesson history / new lesson / reload continuity are browser-covered
 

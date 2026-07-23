@@ -1,7 +1,7 @@
 # Demo Script
 
 Status: engineering complete, ready for recording  
-Last verified: 2026-03-12
+Last verified: 2026-07-17
 
 ## What This Demo Actually Shows
 
@@ -12,15 +12,15 @@ This script matches the UI and flows that are currently shipped.
 - model defaults live at `/models`
 - primary interaction controls are `Send`, `Hold to talk`, `History`, `New`
 - interruption is shown with `Escape`
-- visible lip sync is shown on the default SVG tutor and is covered by browser smoke
+- visible lip sync is shown on the self-hosted TalkingHead tutor and is covered by component and browser proof
 
 ## Verified Baseline
 
-Fresh evidence captured on 2026-03-12:
+Fresh evidence captured on 2026-07-17:
 
-- backend: `python3 -m pytest -q` -> `174 passed`
-- frontend verify: `cd frontend && pnpm verify` -> `35` files, `128` tests, build and typecheck pass
-- browser smoke: `cd frontend && pnpm e2e` -> `10 passed`
+- backend: `uv run --extra dev pytest` -> `169 passed`
+- frontend verify: `cd frontend && pnpm verify` -> `45` files, `166` tests, build and typecheck pass
+- browser smoke: `cd frontend && pnpm e2e` -> `9 passed`
 
 ## Demo Goal
 
@@ -30,7 +30,7 @@ Show one tight story:
 2. the tutor stays Socratic
 3. the avatar visibly lip syncs
 4. interruption is immediate
-5. avatar mode switches cleanly
+5. the product exposes one dependable local tutor identity
 
 Do not try to show every page. Keep it crisp.
 
@@ -54,7 +54,7 @@ Do not try to show every page. Keep it crisp.
    - `Fractions still confuse me.`
 6. Click `Send`
 7. While the tutor replies, say:
-   - "The tutor is already speaking, and the avatar mouth movement is tied to the returned word timings."
+   - "The tutor is already speaking, and the avatar mouth movement follows the decoded audio energy."
 8. Point to:
    - the speaking avatar
    - the subtitle text
@@ -85,13 +85,13 @@ Do not try to show every page. Keep it crisp.
 ### Part 5: Show Avatar Switching
 
 19. Open `http://127.0.0.1:3000/avatar`
-20. Show `2D` first with the default SVG tutor
-21. Click `3D`
-22. Select `Human 3D`
+20. Show the local `Nerdy Tutor`
+21. Point out that it loads locally and uses no managed-avatar credits
+22. Confirm there is no `Live avatars` section or provider mode control
 23. Say:
-   - "The richer avatar branch is opt in. The default 2D path stays light and fast."
-24. Click back to `2D`
-25. Select `Robot`
+   - "The product now exposes one dependable self-hosted tutor. Experimental managed providers are not user-selectable."
+24. Select `Nerdy Tutor`
+25. Confirm the local choice
 26. Return to `http://127.0.0.1:3000/session`
 
 ### Part 6: Close
@@ -99,7 +99,7 @@ Do not try to show every page. Keep it crisp.
 27. Say:
    - "The current acceptance lane is the fast runtime path. Public-provider bakeoff results are documented separately, but the shipped runtime and browser gates are green."
 28. End with:
-   - "Nerdy now has a verified realtime tutor loop, visible lip sync, clean interruption, avatar mode switching, and documented demo flow."
+   - "Nerdy now has a verified realtime tutor loop, visible lip sync, clean interruption, a self-hosted avatar, and documented managed options."
 
 ## Suggested Narration
 
@@ -109,7 +109,7 @@ Do not try to show every page. Keep it crisp.
 
 ### During The First Reply
 
-> The important part here is that the tutor is not just returning text. It is speaking through a live playback path, and the default SVG avatar now has visible mouth motion tied to the returned timestamps.
+> The important part here is that the tutor is not just returning text. It is speaking through a live playback path, and the self-hosted TalkingHead tutor has continuously varying mouth motion driven by decoded audio energy.
 
 ### During History
 
@@ -121,7 +121,7 @@ Do not try to show every page. Keep it crisp.
 
 ### During Avatar Switching
 
-> The avatar system is provider driven. We keep the session contract stable and let the visual layer switch between lightweight 2D and opt-in 3D.
+> The avatar system keeps provider contracts behind the product boundary. The local TalkingHead tutor is the only selectable path, so the session stays independent of managed-avatar credits and failures.
 
 ### Closing
 

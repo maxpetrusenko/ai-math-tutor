@@ -1,7 +1,7 @@
 # Architecture
 
-Date: 2026-03-08  
-Status: aligned to MVP baseline
+Date: 2026-07-17
+Status: aligned to current runtime
 
 ## 1. Purpose
 
@@ -10,7 +10,7 @@ Define the MVP architecture for the benchmark-first prototype.
 This version assumes:
 
 - backend WebSocket transport
-- client-side 2D avatar by default, with optional 3D Three.js rendering
+- one selectable self-hosted TalkingHead avatar; managed integrations stay internal and unavailable from the product menu
 - Deepgram streaming STT via provider-backed session factory
 - MiniMax primary LLM
 - Gemini fallback LLM
@@ -50,8 +50,8 @@ Responsibilities:
 - display transcript and latency panel
 - play streamed tutor audio
 - render avatar states through a provider shell
-- default to 2D CSS tutor visuals, with repo-original 2D SVG tutors available behind the same lightweight provider lane
-- lazy-load Three.js only when the `3D Three.js` provider is selected
+- lazy-load the TalkingHead runtime and the licensed local GLB only on avatar surfaces
+- keep dormant managed Simli and HeyGen rooms behind `ManagedAvatarSession`, outside user-facing selection
 - render mouth motion from timestamps and audio energy
 
 ### Backend
@@ -106,7 +106,7 @@ Avatar states:
 6. commit manager promotes only safe text to playback
 7. selected TTS provider starts context and streams audio for committed text
 8. browser audio player starts playback
-9. avatar provider renders 2D by default, with either CSS or SVG variants, or 3D on selection
+9. avatar provider maps timing and energy into the local TalkingHead morphs, or routes a managed selection into LiveKit
 
 ## 7. Required Interfaces
 
@@ -202,26 +202,25 @@ Committed playback only.
 Default avatar path should be:
 
 - client-side
-- simple to iterate
+- self-hosted and independent of provider credits
 - visually clear in `listening`, `thinking`, and `speaking`
 - driven by word timestamps plus energy smoothing
-- use the `2D CSS` provider by default; `2D SVG` stays in the same client-side low-latency path for richer tutor identities
+- use `@met4citizen/talkinghead` with the CC0 `nerdy-tutor.glb` model
+- expose deterministic loading, error, retry, reduced-motion, and disposal behavior
 
 Optional avatar path:
 
-- `3D Three.js`
-- lazy-loaded only when selected
-- should not increase the default 2D bundle path
-
-Do not overbuild the 3D rig before benchmark closure.
+- managed Simli or HeyGen video through the existing LiveKit worker boundary
+- never bootstrap a managed room for the local tutor
+- fail closed until the expected avatar participant publishes both audio and video
 
 ## 12. Deferred Branches
 
 Only after benchmark pass:
 
-- photoreal avatar provider spike
+- higher-fidelity local avatar model evaluation
 - WebRTC transport spike
-- richer viseme rig
+- audio-derived viseme comparison
 
 ## 13. Final Direction
 

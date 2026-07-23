@@ -4,28 +4,20 @@ This note freezes the cheap, demo-safe rules for avatar work in the MVP tree.
 
 ## Default Policy
 
-- Local CSS, local SVG, and local Three.js presets are the default for all day-to-day avatar work.
+- The self-hosted Nerdy Tutor is the default for all day-to-day avatar work.
 - Fixture transport is the default for browser smoke, UI polish, and demo rehearsal.
 - Premium avatar vendors stay out of the main session path unless the task explicitly says bakeoff.
 
 ## Shipped Presets
 
-The repo currently ships only repo-original placeholders:
+The repo ships one redistributable local model:
 
-| Preset | Render modes | Source | Demo-safe status |
+| Preset | Runtime | Source | Demo-safe status |
 | --- | --- | --- | --- |
-| `sage` | `2d` | repo-original SVG | allowed |
-| `albert` | `2d` | repo-original SVG | allowed |
-| `nova` | `2d` | repo-original SVG | allowed |
-| `dex` | `2d` | repo-original SVG | allowed |
-| `banana` | `2d`, `3d` | repo-original | allowed |
-| `apple` | `2d`, `3d` | repo-original | allowed |
-| `human` | `2d`, `3d` | repo-original | allowed |
-| `robot` | `2d`, `3d` | repo-original | allowed |
-| `wizard-school-inspired` | `2d`, `3d` | repo-original homage | allowed if kept non-branded |
-| `yellow-sidekick-inspired` | `2d`, `3d` | repo-original homage | allowed if kept non-branded |
+| `nerdy-tutor` | TalkingHead 3D | upstream `mpfb.glb`, optimized locally | allowed, CC0 |
 
 Attribution for shipped presets lives in `frontend/public/avatars/ATTRIBUTION.md`.
+The runtime is MIT licensed. Engine and model rights are recorded separately.
 
 ## Approved External Source List
 
@@ -71,6 +63,6 @@ Outside those cases:
 ## Reviewer Notes
 
 - The MVP demo is built to run without any premium avatar dependency.
-- The local SVG tutors are repo-original characters wired into the `svg-2d` provider lane.
-- The “inspired” presets are intentionally original lookalikes, not branded character reproductions.
+- The local model is a CC0 MPFB example from TalkingHead, optimized from 36.82 MB to 2.8 MB.
+- The removed SVG, CSS, and procedural Three.js presets remain supported only as migrated persistence IDs.
 - If a future asset source enters the repo, update this file, `docs/cost-performance.md`, and `frontend/public/avatars/ATTRIBUTION.md` in the same change.

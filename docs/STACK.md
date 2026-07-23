@@ -1,7 +1,7 @@
 # Stack Recommendation
 
-Date: 2026-03-08  
-Status: aligned to MVP baseline
+Date: 2026-07-17
+Status: aligned to current runtime
 
 ## 1. Goal
 
@@ -23,7 +23,7 @@ This version aligns to:
 - Fallback LLM: `Gemini 3.1 Flash-Lite Preview`
 - Primary TTS: `Cartesia Sonic-3` over WebSocket
 - Alternate TTS: `MiniMax` through the same TTS factory path
-- MVP visual tutor: client-side `2D CSS` avatar by default, optional lazy-loaded `3D Three.js`
+- MVP visual tutor: self-hosted `@met4citizen/talkinghead` with a CC0 optimized GLB
 - Benchmark gate required before higher-risk branches
 
 ## 3. Why This Baseline
@@ -33,7 +33,7 @@ This stack is chosen for MVP because it optimizes for:
 - lowest-risk latency closure
 - measurable stage boundaries
 - simpler transport
-- simple default visual layer with an opt-in richer branch
+- one dependable local visual path with managed providers kept internal
 - fast iteration during the planning-to-build transition
 
 It does not reduce product scope. It reduces MVP implementation risk.
@@ -83,8 +83,8 @@ Before opening photoreal avatar or transport-upgrade branches, run the benchmark
 | LLM fallback | `Gemini 3.1 Flash-Lite Preview` | behind provider switch |
 | TTS | `Cartesia Sonic-3` | default via provider factory |
 | TTS alt | `MiniMax` | same context / phrase / flush contract |
-| Visual tutor | client-side `2D CSS` avatar | default |
-| Visual tutor alt | lazy-loaded `Three.js` avatar | opt-in from UI |
+| Visual tutor | `@met4citizen/talkinghead` 1.7.0 + CC0 GLB | self-hosted default |
+| Visual tutor alt | Simli / HeyGen through LiveKit | internal experiment only; absent from the product menu |
 | Metrics | structured latency events + benchmark report | required |
 
 ## 7. Design Rules
@@ -99,10 +99,10 @@ Before opening photoreal avatar or transport-upgrade branches, run the benchmark
 
 ## 8. Deferred Branches
 
-These are explicitly not part of the default MVP baseline.
+These are explicitly not part of the default self-hosted path.
 
-- photoreal managed avatar
-- OSS photoreal avatar
+- alternate local avatar engines
+- neural/GPU avatar rendering
 - WebRTC transport upgrade
 - richer avatar rig
 
@@ -114,6 +114,8 @@ Only open these branches after the benchmark gate passes.
 - the session server resolves LLM providers through `ProviderSwitch`, which creates providers via the shared registry-backed path
 - frontend `typecheck` runs `next typegen && tsc -p tsconfig.typecheck.json --noEmit`
 - frontend `verify` runs `pnpm test && pnpm build && pnpm typecheck`
+- legacy SVG, CSS, and procedural Three.js avatar IDs migrate to `nerdy-talkinghead-3d`
+- the TalkingHead package is patched reproducibly to enable Meshopt decoding for the optimized model
 
 ## 10. Final Direction
 
