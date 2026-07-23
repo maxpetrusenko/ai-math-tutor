@@ -6,13 +6,13 @@ settings:
 
 patchedDependencies:
   '@met4citizen/talkinghead@1.7.0':
-    hash: ujj56rget5p5hwzpqwknck766a
+    hash: ks255nk3w2qebomzj5mjbgkey4
     path: patches/@met4citizen__talkinghead@1.7.0.patch
 
 dependencies:
   '@met4citizen/talkinghead':
     specifier: 1.7.0
-    version: 1.7.0(patch_hash=ujj56rget5p5hwzpqwknck766a)
+    version: 1.7.0(patch_hash=ks255nk3w2qebomzj5mjbgkey4)
   livekit-client:
     specifier: ^2.17.2
     version: 2.17.2(@types/dom-mediacapture-record@1.0.22)
@@ -700,7 +700,7 @@ packages:
       '@bufbuild/protobuf': 1.10.1
     dev: false
 
-  /@met4citizen/talkinghead@1.7.0(patch_hash=ujj56rget5p5hwzpqwknck766a):
+  /@met4citizen/talkinghead@1.7.0(patch_hash=ks255nk3w2qebomzj5mjbgkey4):
     resolution: {integrity: sha512-iBQhTjvwOO2lLht/YeWqAUmsH0jk4FGpxiPTPMMp3QYVjst/u2rDhn4up59BMJwfdeW3DyU7Im6y+TWmnNllZA==}
     dependencies:
       three: 0.180.0
