@@ -17,6 +17,8 @@ The workflow runs these before any image push:
 - `pnpm build`
 - `python3 -m pytest`
 
+The Python gate uses `actions/setup-python` pip caching keyed by `pyproject.toml` so repeated production-readiness runs do not re-download the same backend dependency set.
+
 ## Images
 
 All images are pushed under `ghcr.io/maxpetrusenko/` with tag `sha-${{ github.sha }}`:
