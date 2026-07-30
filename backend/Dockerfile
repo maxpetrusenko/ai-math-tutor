@@ -28,4 +28,7 @@ RUN for attempt in 1 2 3 4 5; do \
 
 EXPOSE 8080
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT:-8080}/api/runtime-options" >/dev/null || exit 1
+
 CMD ["uvicorn", "backend.session.server:app", "--host", "0.0.0.0", "--port", "8080"]
