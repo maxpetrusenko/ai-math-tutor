@@ -221,8 +221,9 @@ Hosted deploys run through Coolify on `maxpetrusenko.com`. GitHub Actions builds
 
 Required Actions config:
 
-- `COOLIFY_URL`
-- `COOLIFY_TOKEN`
+- `COOLIFY_SSH_PRIVATE_KEY`
+- `COOLIFY_API_TOKEN` or legacy `COOLIFY_TOKEN`
+- optional `COOLIFY_SSH_KNOWN_HOSTS`, `COOLIFY_SSH_HOST`, and `COOLIFY_SSH_USER`
 
 Hosted smoke:
 

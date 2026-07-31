@@ -6,7 +6,9 @@ Flow:
 
 1. run available repo gates
 2. build and push GHCR images with BuildKit and GitHub Actions cache
-3. trigger Coolify deploys with Docker tag `sha-<commit>` and `force=false`
+3. connect to the Contabo/Coolify host over SSH
+4. patch each covered Coolify app to the matching GHCR image tag
+5. trigger Coolify deploys with `force=false`
 
 ## Gates
 
@@ -25,6 +27,7 @@ All images are pushed under `ghcr.io/maxpetrusenko/` with tag `sha-${{ github.sh
 - `ghcr.io/maxpetrusenko/ai-math-tutor-session`
 - `ghcr.io/maxpetrusenko/ai-math-tutor-avatar-worker`
 - `ghcr.io/maxpetrusenko/ai-math-tutor-frontend`
+- `ghcr.io/maxpetrusenko/ai-math-tutor-web`
 
 Backend and session both build from `backend/Dockerfile`.
 The LiveKit avatar worker builds from `backend/Dockerfile.worker`.
@@ -32,41 +35,57 @@ Frontend builds from `frontend/Dockerfile`.
 
 ## Coolify Apps
 
-Covered by the workflow:
+Deployed by the workflow:
 
 | App | UUID | Dockerfile | Port | Health |
 | --- | --- | --- | --- | --- |
-| `ai-math-tutor-backend` | `jbglbhx2tegm7olw37rmy9zm` | `backend/Dockerfile` | `8080` | `/api/runtime-options` |
-| `ai-math-tutor-session` | `q47hwdffry6w02uc0ykr8rmy` | `backend/Dockerfile` | `8080` | `/api/runtime-options` |
-| `ai-math-tutor-avatar-worker` | `yw36ciy2dqqcq9ituuwzdsru` | `backend/Dockerfile.worker` | `8080` | disabled |
-| `ai-math-tutor-frontend` | `nz1pemtpromq4ujwpu83zphm` | `frontend/Dockerfile` | `3000` | `/api/runtime/status` |
+| `session` | `gx7frryikdt0o7uqtgumzi72` | `backend/Dockerfile` | `8080` | `/api/runtime-options` |
+| `web` | `rx0jx3ghadj7r2uemnhsl9kt` | `frontend/Dockerfile` | `3000` | `/api/runtime/status` |
+| `avatar-worker` | `yw36ciy2dqqcq9ituuwzdsru` | `backend/Dockerfile.worker` | `8080` | disabled |
+
+Built but not deployed by the workflow:
+
+| App/image | Status |
+| --- | --- |
+| `ai-math-tutor-backend` | image is built and pushed, but no deploy matrix entry exists yet |
+| `ai-math-tutor-frontend` | image is built and pushed, but no deploy matrix entry exists yet |
 
 Blocked:
 
-- `ai-math-tutor-web` (`ecedjb8684h04h01m508baih`) is configured for `/Dockerfile`, but this repo has no root `Dockerfile`. Add a root Dockerfile or point that Coolify app at `frontend/Dockerfile` or a prebuilt image before adding it to the workflow matrix.
-- `ai-math-tutor-frontend` is currently noted as Nixpacks in Coolify. The workflow builds and pushes a GHCR image, so Coolify must be configured to deploy that image/tag for the pushed image to be used.
+- The listed sslip backend/frontend domains currently return 404 from outside the host. Keep them out of the deploy matrix until the Coolify app UUIDs, build pack, and health path are confirmed against production.
+- Do not add a Coolify app to the deploy matrix unless its UUID, port, image, and health endpoint are verified. A wrong UUID here can deploy the right image to the wrong public app.
 
 ## Required GitHub Config
 
-Repo variable or secret:
+Repo secrets:
 
-- `COOLIFY_URL`, for example `https://coolify.example.com`
+- `COOLIFY_SSH_PRIVATE_KEY`, a deploy key that can SSH to the Coolify host
+- `COOLIFY_API_TOKEN` or legacy `COOLIFY_TOKEN`, for the local Coolify API call over SSH
 
-Repo secret:
+Optional repo secrets:
 
-- `COOLIFY_TOKEN`
+- `COOLIFY_SSH_KNOWN_HOSTS`, to pin host keys instead of relying on `ssh-keyscan`
+- `COOLIFY_SSH_HOST`, defaults to `173.249.52.27`
+- `COOLIFY_SSH_USER`, defaults to `root`
 
 `GITHUB_TOKEN` is used for GHCR push, with workflow `packages: write` permission.
 
 ## Deploy API
 
-The workflow calls Coolify `POST /api/v1/deploy?force=false` with:
+The workflow runs `scripts/coolify_ssh_deploy.sh`. That script SSHes to the Coolify host, then calls the local Coolify API at `http://127.0.0.1:8000/api/v1`:
+
+1. `PATCH /applications/<uuid>` to set image name, image tag, exposed port, and health check settings.
+2. `POST /deploy?uuid=<uuid>&force=false` to trigger the deploy.
+
+The application patch payload is:
 
 ```json
 {
-  "uuid": "<coolify-app-uuid>",
-  "tag": "sha-<commit>"
+  "build_pack": "dockerimage",
+  "docker_registry_image_name": "ghcr.io/maxpetrusenko/<image>",
+  "docker_registry_image_tag": "sha-<commit>",
+  "ports_exposes": "<port>",
+  "health_check_enabled": true,
+  "health_check_path": "<path>"
 }
 ```
-
-Coolify docs: https://coolify.io/docs/api-reference/api/operations/deploy-by-tag-or-uuid
