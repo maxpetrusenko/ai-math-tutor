@@ -14,7 +14,7 @@ The workflow runs these before any image push:
 
 - `pnpm test`
 - `pnpm typecheck`
-- `pnpm build`
+- `pnpm --dir frontend build`
 - `python3 -m pytest`
 
 ## Images
