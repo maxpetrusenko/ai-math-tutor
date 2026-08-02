@@ -22,7 +22,15 @@ COOLIFY_SSH_USER="${COOLIFY_SSH_USER:-root}"
 COOLIFY_HEALTH_PATH="${COOLIFY_HEALTH_PATH:-}"
 
 install -m 700 -d ~/.ssh
-key_file="$HOME/.ssh/coolify_deploy_key"
+key_file=""
+cleanup() {
+  if [ -n "${key_file}" ] && [ -f "${key_file}" ]; then
+    rm -f "${key_file}"
+  fi
+}
+trap cleanup EXIT
+
+key_file="$(mktemp "$HOME/.ssh/coolify_deploy_key.XXXXXX")"
 printf '%s\n' "${COOLIFY_SSH_PRIVATE_KEY}" > "${key_file}"
 chmod 600 "${key_file}"
 
