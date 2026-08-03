@@ -37,6 +37,11 @@ COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/public ./public
 
+RUN groupadd --system nerdy && useradd --system --gid nerdy --home-dir /app nerdy
+RUN chown -R nerdy:nerdy /app
+
+USER nerdy
+
 EXPOSE 3000
 
 CMD ["node", "server.js"]

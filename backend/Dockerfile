@@ -26,6 +26,11 @@ RUN for attempt in 1 2 3 4 5; do \
     done; \
     exit 1
 
+RUN groupadd --system nerdy && useradd --system --gid nerdy --home-dir /app nerdy
+RUN mkdir -p /app/.nerdy-data && chown -R nerdy:nerdy /app/.nerdy-data
+
+USER nerdy
+
 EXPOSE 8080
 
 CMD ["uvicorn", "backend.session.server:app", "--host", "0.0.0.0", "--port", "8080"]
