@@ -13,6 +13,11 @@ COPY pyproject.toml README.md /app/
 COPY backend /app/backend
 COPY eval /app/eval
 
+# Create a narrow system user for the avatar-worker runtime.
+# The worker does not write local state, so no state directory is needed.
+RUN groupadd --system --gid 10001 nerdy \
+    && useradd --system --uid 10001 --gid 10001 --disabled-password --no-create-home nerdy
+
 RUN for attempt in 1 2 3 4 5; do \
         pip install --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" . \
             && rm -rf /root/.cache/pip \
@@ -20,5 +25,8 @@ RUN for attempt in 1 2 3 4 5; do \
         sleep "$((attempt * 15))"; \
     done; \
     exit 1
+
+# Switch to the unprivileged user before launching the worker process.
+USER nerdy
 
 CMD ["python3", "-m", "backend.livekit.avatar_agent", "start"]
