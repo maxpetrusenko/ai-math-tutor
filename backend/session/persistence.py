@@ -148,7 +148,6 @@ def load_archived_lesson_thread(lesson_id: str, namespace: str | None = None) ->
 def _store_path() -> Path:
     base_dir = Path.cwd() / ".nerdy-data"
     configured = Path((Path.cwd() / ".nerdy-data").as_posix())
-    env_value = Path.cwd()
     try:
         from os import getenv
 
@@ -159,7 +158,7 @@ def _store_path() -> Path:
                 configured = (Path.cwd() / configured).resolve()
         else:
             configured = base_dir
-    except Exception:
+    except (ValueError, RuntimeError, OSError):
         configured = base_dir
 
     configured.mkdir(parents=True, exist_ok=True)
@@ -191,7 +190,7 @@ def _read_store() -> PersistedSessionData:
 
     try:
         payload = json.loads(path.read_text())
-    except Exception:
+    except (json.JSONDecodeError, ValueError, OSError):
         return _empty_store()
 
     if not isinstance(payload, dict):
