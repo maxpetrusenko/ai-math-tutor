@@ -24,11 +24,30 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
-  "pytest-asyncio>=1.0,<2.0"
+  "pytest-asyncio>=1.0,<2.0",
+  "ruff>=0.8.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "B",     # flake8-bugbear — BLE001 = bare except (real bug)
+  "F",     # pyflakes — undefined names, unused vars (real bugs)
+  "S",     # flake8-bandit — security anti-patterns
+]
+ignore = [
+  "S101",   # assert — used in test/benchmark files
+  "S105",   # hardcoded password in test code
+  "S110",   # try-except-pass — intentional LangSmith tracing suppressions
+  "S310",   # audit URLs — intentional in realtime client
+]
+
 
 [tool.setuptools.packages.find]
 include = ["backend*", "eval*"]
