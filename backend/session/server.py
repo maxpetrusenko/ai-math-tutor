@@ -41,7 +41,17 @@ from backend.tts.commit_manager import CommitManager
 from backend.tts.provider import TTSProviderFactory
 from backend.turn_taking.controller import SessionController
 
-app = FastAPI(title="Nerdy Live Tutor Backend")
+
+def _api_docs_enabled() -> bool:
+    return os.getenv("NERDY_ENABLE_API_DOCS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+app = FastAPI(
+    title="Nerdy Live Tutor Backend",
+    docs_url="/docs" if _api_docs_enabled() else None,
+    redoc_url="/redoc" if _api_docs_enabled() else None,
+    openapi_url="/openapi.json" if _api_docs_enabled() else None,
+)
 logger = logging.getLogger(__name__)
 app.add_middleware(
     CORSMiddleware,
