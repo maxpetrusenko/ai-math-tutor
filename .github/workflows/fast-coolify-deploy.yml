@@ -114,6 +114,8 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:${{ env.DOCKER_TAG }}
             ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:latest
+          build-args: |
+            APP_REVISION=${{ env.DOCKER_TAG }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
 
@@ -171,3 +173,34 @@ jobs:
           COOLIFY_HEALTH_PATH: ${{ matrix.health }}
           COOLIFY_HEALTH_ENABLED: ${{ matrix.health_enabled }}
         run: bash scripts/coolify_ssh_deploy.sh
+
+  smoke-production:
+    name: Smoke canonical production endpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip deploy]') }}
+    needs:
+      - deploy
+    env:
+      COOLIFY_SSH_PRIVATE_KEY: ${{ secrets.COOLIFY_SSH_PRIVATE_KEY }}
+      DOCKER_TAG: ${{ env.DOCKER_TAG }}
+
+    steps:
+      - name: Check out repo
+        if: ${{ env.COOLIFY_SSH_PRIVATE_KEY != '' }}
+        uses: actions/checkout@v4
+
+      - name: Skip smoke when SSH secret is absent
+        if: ${{ env.COOLIFY_SSH_PRIVATE_KEY == '' }}
+        run: echo "::warning::COOLIFY_SSH_PRIVATE_KEY is not configured; deploy was skipped, so production smoke was skipped."
+
+      - name: Smoke canonical production endpoints
+        if: ${{ env.COOLIFY_SSH_PRIVATE_KEY != '' }}
+        env:
+          FRONTEND_SMOKE_URL: ${{ vars.PROD_FRONTEND_SMOKE_URL || 'https://aitutor.maxpetrusenko.com' }}
+          SESSION_SMOKE_URL: ${{ vars.PROD_SESSION_SMOKE_URL || 'https://aitutor-session.maxpetrusenko.com' }}
+        run: |
+          python3 scripts/smoke_coolify.py \
+            --frontend-url "$FRONTEND_SMOKE_URL" \
+            --session-url "$SESSION_SMOKE_URL" \
+            --expect-revision "$DOCKER_TAG"

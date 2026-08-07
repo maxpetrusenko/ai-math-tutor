@@ -7,6 +7,7 @@ Flow:
 1. run available repo gates
 2. build and push GHCR images with BuildKit and GitHub Actions cache
 3. trigger Coolify deploys with Docker tag `sha-<commit>` and `force=false`
+4. smoke the canonical production frontend and session endpoints
 
 ## Gates
 
@@ -45,6 +46,24 @@ Blocked:
 
 - `ai-math-tutor-web` (`ecedjb8684h04h01m508baih`) is configured for `/Dockerfile`, but this repo has no root `Dockerfile`. Add a root Dockerfile or point that Coolify app at `frontend/Dockerfile` or a prebuilt image before adding it to the workflow matrix.
 - `ai-math-tutor-frontend` is currently noted as Nixpacks in Coolify. The workflow builds and pushes a GHCR image, so Coolify must be configured to deploy that image/tag for the pushed image to be used.
+
+## Post-deploy smoke
+
+After the Coolify deploy matrix completes, the workflow runs against the image tag stamped into the frontend runtime status:
+
+```bash
+python3 scripts/smoke_coolify.py \
+  --frontend-url "$FRONTEND_SMOKE_URL" \
+  --session-url "$SESSION_SMOKE_URL" \
+  --expect-revision "$DOCKER_TAG"
+```
+
+Defaults:
+
+- frontend: `https://aitutor.maxpetrusenko.com`
+- session: `https://aitutor-session.maxpetrusenko.com`
+
+Override with repo variables `PROD_FRONTEND_SMOKE_URL` and `PROD_SESSION_SMOKE_URL` if the canonical domains change. The smoke keeps to safe read-only probes: frontend root, frontend `/api/runtime/status`, and session `/api/runtime-options`, and rejects insecure `ws://` runtime wiring when the frontend is HTTPS or when `sessionWsUrl` drifts away from `/ws/session`. It waits until `/api/runtime/status.revision` matches the expected `sha-<commit>` Docker tag, so the job validates the rollout it just triggered instead of an older healthy deployment. It intentionally does not probe the listed sslip URLs while issue #11 owns that routing inventory gap. If `COOLIFY_SSH_PRIVATE_KEY` is absent, the workflow skips both the deploy and the post-deploy smoke so it does not fail against unrelated existing production state.
 
 ## Required GitHub Config
 
