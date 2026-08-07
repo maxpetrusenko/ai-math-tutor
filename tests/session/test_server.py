@@ -260,6 +260,42 @@ def test_lesson_history_api_persists_active_and_archived_threads() -> None:
     assert clear_response.json()["activeThread"] is None
 
 
+def test_lesson_history_api_compresses_large_payloads() -> None:
+    client = TestClient(app)
+    active_thread = {
+        "avatarProviderId": "human-css-2d",
+        "conversation": [
+            {
+                "id": f"turn-{index}",
+                "transcript": "How do I solve this equation? " * 8,
+                "tutorText": "Start by isolating the variable and show each inverse operation. " * 8,
+            }
+            for index in range(12)
+        ],
+        "gradeBand": "6-8",
+        "llmModel": "gemini-3-flash-preview",
+        "llmProvider": "gemini",
+        "preference": "slow down",
+        "sessionId": "lesson-large",
+        "studentPrompt": "How do I solve this equation?",
+        "subject": "math",
+        "transcript": "How do I solve this equation?",
+        "ttsModel": "sonic-2",
+        "ttsProvider": "cartesia",
+        "tutorText": "Start by isolating the variable.",
+        "version": 1,
+    }
+
+    put_response = client.put("/api/lessons/active", json=active_thread)
+    response = client.get("/api/lessons", headers={"Accept-Encoding": "gzip"})
+
+    assert put_response.status_code == 200
+    assert response.status_code == 200
+    assert response.headers.get("Content-Encoding") == "gzip"
+    assert response.headers.get("Vary") == "Accept-Encoding"
+    assert response.json()["activeThread"]["sessionId"] == "lesson-large"
+
+
 def test_lessons_analytics_endpoint_summarizes_saved_history() -> None:
     client = TestClient(app)
     yesterday = datetime.now(UTC) - timedelta(days=1)
