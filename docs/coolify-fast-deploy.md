@@ -30,6 +30,8 @@ Backend and session both build from `backend/Dockerfile`.
 The LiveKit avatar worker builds from `backend/Dockerfile.worker`.
 Frontend builds from `frontend/Dockerfile`.
 
+All production `FROM` base images are digest-pinned (e.g. `python:3.11.15-slim@sha256:...`) so rebuilds are reproducible and cannot silently inherit a changed floating tag. `tests/runtime/test_base_image_pinning.py` enforces this. To bump a base image, resolve the new tag's digest (e.g. `docker buildx imagetools inspect <image>:<tag>` or the Docker Hub API), update the `FROM` line, and confirm the guard still passes.
+
 ## Coolify Apps
 
 Covered by the workflow:

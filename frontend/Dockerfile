@@ -1,4 +1,4 @@
-FROM node:22-slim AS build
+FROM node:22.23.2-slim@sha256:d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0c23dfb172dc3cc6436 AS build
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -20,7 +20,7 @@ ENV NEXT_PUBLIC_SESSION_WS_URL=$NEXT_PUBLIC_SESSION_WS_URL
 
 RUN pnpm build
 
-FROM node:22-slim
+FROM node:22.23.2-slim@sha256:d649c27dae7ba0137b3cef5dd75baa422c08dc3d9e3fc0c23dfb172dc3cc6436
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
