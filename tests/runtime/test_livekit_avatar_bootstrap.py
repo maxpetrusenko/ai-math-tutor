@@ -10,6 +10,7 @@ from backend.livekit.avatar_bootstrap import (
     collect_avatar_bootstrap_errors,
     is_managed_avatar_provider_id,
     resolve_managed_avatar_metadata,
+    serialize_simli_face_id,
 )
 
 
@@ -33,6 +34,62 @@ def test_simli_metadata_uses_default_face_id_when_env_missing() -> None:
     assert target.avatar_participant_identity == "avatar-simli"
     assert target.metadata["avatar_participant_identity"] == "avatar-simli"
     assert target.metadata["instructions"] == "Tutor mode"
+    assert "emotion_id" not in target.metadata
+
+
+def test_simli_metadata_uses_emotion_only_when_explicitly_configured() -> None:
+    target = resolve_managed_avatar_metadata(
+        "simli-b97a7777-live",
+        {
+            "SIMLI_FACE_ID": "custom-face",
+            "SIMLI_EMOTION_ID": "natural-0",
+        },
+    )
+
+    assert target.avatar_id == "custom-face"
+    assert target.metadata["emotion_id"] == "natural-0"
+
+
+def test_serialize_simli_face_id_omits_emotion_suffix_by_default() -> None:
+    assert serialize_simli_face_id("custom-face", None) == "custom-face"
+    assert serialize_simli_face_id("custom-face", "") == "custom-face"
+    assert serialize_simli_face_id("custom-face", "natural-0") == "custom-face/natural-0"
+
+
+def test_avatar_agent_simli_config_matches_preflight_face_serialization() -> None:
+    from backend.livekit.avatar_agent import _build_simli_config
+
+    raw_config = _build_simli_config(api_key="key", face_id="custom-face", emotion_id="")
+    emotion_config = _build_simli_config(api_key="key", face_id="custom-face", emotion_id="natural-0")
+
+    assert raw_config.create_json()["faceId"] == "custom-face"
+    assert emotion_config.create_json()["faceId"] == "custom-face/natural-0"
+
+
+def test_avatar_agent_uses_room_metadata_instead_of_worker_only_simli_emotion(monkeypatch) -> None:
+    import backend.livekit.avatar_agent as avatar_agent
+
+    captured_face_ids: list[str] = []
+
+    class FakeAvatarSession:
+        def __init__(self, *, simli_config, **_kwargs) -> None:
+            captured_face_ids.append(simli_config.create_json()["faceId"])
+
+    monkeypatch.setattr(avatar_agent.simli, "AvatarSession", FakeAvatarSession)
+    monkeypatch.setenv("SIMLI_API_KEY", "key")
+    monkeypatch.setenv("SIMLI_FACE_ID", "env-face")
+    monkeypatch.setenv("SIMLI_EMOTION_ID", "stale-worker-emotion")
+
+    avatar_agent._resolve_avatar_session({"provider": "simli", "face_id": "metadata-face"})
+    avatar_agent._resolve_avatar_session(
+        {
+            "provider": "simli",
+            "face_id": "metadata-face",
+            "emotion_id": "metadata-emotion",
+        }
+    )
+
+    assert captured_face_ids == ["metadata-face", "metadata-face/metadata-emotion"]
 
 
 def test_liveavatar_metadata_prefers_liveavatar_env_aliases() -> None:

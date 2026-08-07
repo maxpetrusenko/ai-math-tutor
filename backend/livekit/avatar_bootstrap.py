@@ -40,6 +40,14 @@ def _coalesce_env(env: Mapping[str, str], *keys: str) -> str:
     return ""
 
 
+def serialize_simli_face_id(face_id: str, emotion_id: str | None = None) -> str:
+    normalized_face_id = face_id.strip()
+    normalized_emotion_id = (emotion_id or "").strip()
+    if normalized_emotion_id:
+        return f"{normalized_face_id}/{normalized_emotion_id}"
+    return normalized_face_id
+
+
 def _runtime_env(env: Mapping[str, str] | None = None) -> Mapping[str, str]:
     if env is not None:
         return env
@@ -61,6 +69,7 @@ def resolve_managed_avatar_metadata(
 
     if provider_id == "simli-b97a7777-live":
         face_id = _coalesce_env(resolved_env, "SIMLI_FACE_ID") or DEFAULT_SIMLI_FACE_ID
+        emotion_id = _coalesce_env(resolved_env, "SIMLI_EMOTION_ID")
         avatar_participant_identity = DEFAULT_SIMLI_AVATAR_PARTICIPANT_IDENTITY
         metadata = {
             "provider": "simli",
@@ -71,6 +80,8 @@ def resolve_managed_avatar_metadata(
             "voice": voice,
             "instructions": instructions,
         }
+        if emotion_id:
+            metadata["emotion_id"] = emotion_id
         return ManagedAvatarTarget(
             provider_id=provider_id,
             provider="simli",
@@ -156,8 +167,12 @@ def _describe_simli_bootstrap_failure(detail: str, *, face_id: str) -> str:
 
 
 async def _validate_simli_avatar_target(target: ManagedAvatarTarget, env: Mapping[str, str]) -> None:
+    emotion_id = target.metadata.get("emotion_id")
     compose_payload = {
-        "faceId": target.avatar_id,
+        "faceId": serialize_simli_face_id(
+            target.avatar_id,
+            emotion_id if isinstance(emotion_id, str) else None,
+        ),
         "handleSilence": True,
         "maxSessionLength": 600,
         "maxIdleTime": 30,

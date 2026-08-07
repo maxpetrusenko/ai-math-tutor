@@ -16,9 +16,12 @@ LIVEKIT_API_SECRET=
 OPENAI_API_KEY=
 SIMLI_API_KEY=
 SIMLI_FACE_ID=
+SIMLI_EMOTION_ID= # optional; omit for raw face IDs
 LIVEAVATAR_API_KEY=
 LIVEAVATAR_AVATAR_ID=
 ```
+
+Simli face IDs are sent as raw `SIMLI_FACE_ID` values by default. Set `SIMLI_EMOTION_ID` only for Trinity faces that explicitly support a `face/emotion` pair.
 
 Accepted aliases for HeyGen:
 
