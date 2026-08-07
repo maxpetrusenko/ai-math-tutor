@@ -26,6 +26,8 @@ All images are pushed under `ghcr.io/maxpetrusenko/` with tag `sha-${{ github.sh
 - `ghcr.io/maxpetrusenko/ai-math-tutor-avatar-worker`
 - `ghcr.io/maxpetrusenko/ai-math-tutor-frontend`
 
+Frontend images receive `NERDY_FRONTEND_REVISION=sha-${{ github.sha }}` and `NERDY_FRONTEND_SERVICE=<image>` as Docker build args so `/api/runtime/status` can identify the running image even when the host does not provide Cloud Run-style `K_REVISION` or `K_SERVICE` variables.
+
 Backend and session both build from `backend/Dockerfile`.
 The LiveKit avatar worker builds from `backend/Dockerfile.worker`.
 Frontend builds from `frontend/Dockerfile`.
