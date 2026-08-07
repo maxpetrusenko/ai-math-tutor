@@ -33,3 +33,18 @@ test("enables standalone packaging for production builds", async () => {
 
   expect(config.output).toBe("standalone");
 });
+
+test("adds baseline security headers to every frontend response", async () => {
+  const { default: config } = await import("./next.config");
+
+  const headerRules = await config.headers?.();
+
+  expect(headerRules).toContainEqual({
+    source: "/:path*",
+    headers: expect.arrayContaining([
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+    ]),
+  });
+});
