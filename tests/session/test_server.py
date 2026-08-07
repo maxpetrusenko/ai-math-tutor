@@ -260,6 +260,48 @@ def test_lesson_history_api_persists_active_and_archived_threads() -> None:
     assert clear_response.json()["activeThread"] is None
 
 
+def test_lesson_history_api_responses_are_not_cacheable() -> None:
+    client = TestClient(app)
+    active_thread = {
+        "avatarProviderId": "human-css-2d",
+        "conversation": [],
+        "gradeBand": "6-8",
+        "llmModel": "gemini-3-flash-preview",
+        "llmProvider": "gemini",
+        "preference": "slow down",
+        "sessionId": "lesson-cache-check",
+        "studentPrompt": "What is x?",
+        "subject": "math",
+        "transcript": "What is x?",
+        "ttsModel": "sonic-2",
+        "ttsProvider": "cartesia",
+        "tutorText": "What do you know already?",
+        "version": 1,
+    }
+    archive_entry = {
+        "gradeBand": "6-8",
+        "id": "archive-cache-check",
+        "subject": "math",
+        "thread": active_thread,
+        "title": "Cache Check",
+        "turnCount": 1,
+        "updatedAt": "2026-03-10T00:00:00.000Z",
+    }
+
+    responses = [
+        client.put("/api/lessons/active", json=active_thread),
+        client.post("/api/lessons/archive", json=archive_entry),
+        client.get("/api/lessons"),
+        client.get("/api/lessons/analytics"),
+        client.get("/api/lessons/archive/archive-cache-check"),
+        client.delete("/api/lessons/archive"),
+        client.delete("/api/lessons/active"),
+    ]
+
+    assert all(response.status_code == 200 for response in responses)
+    assert {response.headers.get("cache-control") for response in responses} == {"no-store"}
+
+
 def test_lessons_analytics_endpoint_summarizes_saved_history() -> None:
     client = TestClient(app)
     yesterday = datetime.now(UTC) - timedelta(days=1)

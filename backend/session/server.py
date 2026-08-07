@@ -7,7 +7,7 @@ import os
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.livekit import create_avatar_room_session, is_managed_avatar_provider_id
@@ -57,6 +57,15 @@ app.add_middleware(
     allow_headers=["*"],
     allow_methods=["*"],
 )
+
+
+@app.middleware("http")
+async def add_lesson_api_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/lessons"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 def create_stt_provider() -> StreamingSTTProvider:
     return STTProviderFactory().create()
