@@ -70,3 +70,43 @@ The workflow calls Coolify `POST /api/v1/deploy?force=false` with:
 ```
 
 Coolify docs: https://coolify.io/docs/api-reference/api/operations/deploy-by-tag-or-uuid
+
+## Rollback
+
+Use this when a production deploy passes CI but the live app is bad. Roll back by pointing each Coolify app at the previous `sha-<commit>` tag that was known-good in GHCR or in the last green GitHub Actions deploy.
+
+The rollback uses the same SSH deploy script as the forward deploy. Set the target app UUID, image, port, health settings, and the previous image tag, then run the script:
+
+```bash
+export DOCKER_TAG=sha-<previous-commit>
+export COOLIFY_UUID=<coolify-app-uuid>
+export COOLIFY_IMAGE=ghcr.io/maxpetrusenko/<image-name>
+export COOLIFY_PORT=<container-port>
+export COOLIFY_HEALTH_ENABLED=true
+export COOLIFY_HEALTH_PATH=<health-path>
+bash scripts/coolify_ssh_deploy.sh
+```
+
+Workflow-deployed app/image pairs:
+
+| App | Image | Port | Health |
+| --- | --- | --- | --- |
+| `session` | `ghcr.io/maxpetrusenko/ai-math-tutor-session` | `8080` | `/api/runtime-options` |
+| `web` | `ghcr.io/maxpetrusenko/ai-math-tutor-web` | `3000` | `/api/runtime/status` |
+| `avatar-worker` | `ghcr.io/maxpetrusenko/ai-math-tutor-avatar-worker` | `8080` | disabled |
+
+For `avatar-worker`, set `COOLIFY_HEALTH_ENABLED=false` and leave `COOLIFY_HEALTH_PATH` empty. It is a LiveKit worker, not an HTTP service.
+
+After rollback, smoke the canonical production surfaces:
+
+```bash
+curl -fsS https://aitutor.maxpetrusenko.com >/dev/null
+curl -fsS https://aitutor.maxpetrusenko.com/api/runtime/status
+curl -fsS https://aitutor-session.maxpetrusenko.com/api/runtime-options
+```
+
+Then run the hosted smoke gate against the same frontend and session service:
+
+```bash
+pnpm smoke:prod -- --frontend-url https://aitutor.maxpetrusenko.com --backend-url https://aitutor-session.maxpetrusenko.com/api/lessons
+```
