@@ -132,11 +132,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - app: backend
+            uuid: jbglbhx2tegm7olw37rmy9zm
+            image: ai-math-tutor-backend
+            port: "8080"
+            health: /api/runtime-options
+            health_enabled: "true"
           - app: session
             uuid: gx7frryikdt0o7uqtgumzi72
             image: ai-math-tutor-session
             port: "8080"
             health: /api/runtime-options
+            health_enabled: "true"
+          - app: frontend
+            uuid: nz1pemtpromq4ujwpu83zphm
+            image: ai-math-tutor-frontend
+            port: "3000"
+            health: /api/runtime/status
             health_enabled: "true"
           - app: web
             uuid: rx0jx3ghadj7r2uemnhsl9kt

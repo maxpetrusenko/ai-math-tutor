@@ -25,10 +25,11 @@ All images are pushed under `ghcr.io/maxpetrusenko/` with tag `sha-${{ github.sh
 - `ghcr.io/maxpetrusenko/ai-math-tutor-session`
 - `ghcr.io/maxpetrusenko/ai-math-tutor-avatar-worker`
 - `ghcr.io/maxpetrusenko/ai-math-tutor-frontend`
+- `ghcr.io/maxpetrusenko/ai-math-tutor-web`
 
 Backend and session both build from `backend/Dockerfile`.
 The LiveKit avatar worker builds from `backend/Dockerfile.worker`.
-Frontend builds from `frontend/Dockerfile`.
+Frontend and web both build from `frontend/Dockerfile`.
 
 ## Coolify Apps
 
@@ -37,14 +38,16 @@ Covered by the workflow:
 | App | UUID | Dockerfile | Port | Health |
 | --- | --- | --- | --- | --- |
 | `ai-math-tutor-backend` | `jbglbhx2tegm7olw37rmy9zm` | `backend/Dockerfile` | `8080` | `/api/runtime-options` |
-| `ai-math-tutor-session` | `q47hwdffry6w02uc0ykr8rmy` | `backend/Dockerfile` | `8080` | `/api/runtime-options` |
+| `ai-math-tutor-session` | `gx7frryikdt0o7uqtgumzi72` | `backend/Dockerfile` | `8080` | `/api/runtime-options` |
 | `ai-math-tutor-avatar-worker` | `yw36ciy2dqqcq9ituuwzdsru` | `backend/Dockerfile.worker` | `8080` | disabled |
 | `ai-math-tutor-frontend` | `nz1pemtpromq4ujwpu83zphm` | `frontend/Dockerfile` | `3000` | `/api/runtime/status` |
+| `ai-math-tutor-web` | `rx0jx3ghadj7r2uemnhsl9kt` | `frontend/Dockerfile` | `3000` | `/api/runtime/status` |
 
-Blocked:
+Notes:
 
-- `ai-math-tutor-web` (`ecedjb8684h04h01m508baih`) is configured for `/Dockerfile`, but this repo has no root `Dockerfile`. Add a root Dockerfile or point that Coolify app at `frontend/Dockerfile` or a prebuilt image before adding it to the workflow matrix.
-- `ai-math-tutor-frontend` is currently noted as Nixpacks in Coolify. The workflow builds and pushes a GHCR image, so Coolify must be configured to deploy that image/tag for the pushed image to be used.
+- `ai-math-tutor-backend` and `ai-math-tutor-frontend` keep the direct sslip.io Coolify URLs current.
+- `ai-math-tutor-session` and `ai-math-tutor-web` serve the canonical custom domains.
+- `ai-math-tutor-avatar-worker` has no HTTP readiness endpoint, so the workflow keeps Coolify health checks disabled for that app.
 
 ## Required GitHub Config
 
