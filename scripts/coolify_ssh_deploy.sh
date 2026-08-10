@@ -63,9 +63,12 @@ ssh_opts=(
 )
 
 echo "Deploying ${COOLIFY_IMAGE}:${DOCKER_TAG} through ${COOLIFY_SSH_HOST}"
-# shellcheck disable=SC2029
-ssh "${ssh_opts[@]}" "${ssh_target}" \
-  "COOLIFY_API_TOKEN_B64='${token_b64}' COOLIFY_UUID='${COOLIFY_UUID}' PAYLOAD_B64='${payload_b64}' bash -s" <<'REMOTE'
+# Keep the encoded Coolify token off the ssh process argv; argv is visible to process listings.
+{
+  printf 'COOLIFY_API_TOKEN_B64=%q\n' "${token_b64}"
+  printf 'COOLIFY_UUID=%q\n' "${COOLIFY_UUID}"
+  printf 'PAYLOAD_B64=%q\n' "${payload_b64}"
+  cat <<'REMOTE'
 set -euo pipefail
 
 COOLIFY_API_TOKEN="$(printf '%s' "${COOLIFY_API_TOKEN_B64}" | base64 -d)"
@@ -84,3 +87,4 @@ curl --connect-timeout 10 --max-time 30 --fail --silent --show-error \
   --url "${api_base}/deploy?uuid=${COOLIFY_UUID}&force=false" \
   --header "Authorization: Bearer ${COOLIFY_API_TOKEN}"
 REMOTE
+} | ssh "${ssh_opts[@]}" "${ssh_target}" "bash -s"
