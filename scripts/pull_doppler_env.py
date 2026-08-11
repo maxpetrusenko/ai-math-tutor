@@ -30,7 +30,6 @@ def fetch_doppler_secrets(*, project: str, config: str) -> dict[str, str]:
             "--format",
             "json",
             "--no-file",
-            "--no-verify-tls",
         ],
         text=True,
     )
