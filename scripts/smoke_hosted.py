@@ -7,15 +7,25 @@ from typing import Any
 from urllib import error, parse, request
 
 
+def _parse_json_object(payload: str) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def _fetch_json(url: str) -> tuple[int, dict[str, Any] | None]:
     req = request.Request(url, headers={"User-Agent": "nerdy-smoke/1.0"})
     try:
         with request.urlopen(req) as response:
             payload = response.read().decode("utf-8")
-            return response.getcode(), json.loads(payload) if payload else None
+            return response.getcode(), _parse_json_object(payload)
     except error.HTTPError as exc:
         payload = exc.read().decode("utf-8")
-        return exc.code, json.loads(payload) if payload else None
+        return exc.code, _parse_json_object(payload)
 
 
 def _fetch_status(url: str) -> int:
