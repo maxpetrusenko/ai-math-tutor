@@ -3,6 +3,7 @@
 import React from "react";
 import { TalkingHeadAvatar } from "./TalkingHeadAvatar";
 import { resolveAvatarProvider, resolveAvatarProviderId } from "./avatar_registry";
+import { resolveAvatarManifestEntry } from "../lib/avatar_manifest";
 import type { AvatarConfig, AvatarSignal, AvatarSpeechCue, AvatarVisualState, WordTimestamp } from "../lib/avatar_contract";
 import { buildAvatarFrame } from "../lib/avatar_driver";
 
@@ -132,7 +133,7 @@ export function AvatarProvider({
       <div className="avatar avatar--talkinghead">
         <TalkingHeadAvatar
           frame={frame}
-          modelUrl={avatarConfig.model_url ?? "/avatars/nerdy-tutor.glb?v=7a05c998"}
+          modelUrl={avatarConfig.model_url ?? resolveAvatarManifestEntry().config.model_url!}
           speechCue={speechCue}
           variant={variant}
         />

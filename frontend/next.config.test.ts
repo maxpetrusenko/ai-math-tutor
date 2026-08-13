@@ -33,3 +33,19 @@ test("enables standalone packaging for production builds", async () => {
 
   expect(config.output).toBe("standalone");
 });
+
+test("adds long lived cache headers for the versioned avatar model asset", async () => {
+  const { default: config } = await import("./next.config");
+
+  const headerRules = await config.headers?.();
+
+  expect(headerRules).toContainEqual({
+    source: "/avatars/nerdy-tutor.glb",
+    headers: [
+      {
+        key: "Cache-Control",
+        value: "public, max-age=31536000, immutable",
+      },
+    ],
+  });
+});
