@@ -7,7 +7,7 @@ import os
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.livekit import create_avatar_room_session, is_managed_avatar_provider_id
@@ -94,7 +94,8 @@ def get_lessons_analytics() -> dict[str, object]:
 
 
 @app.get("/api/runtime-options")
-def get_runtime_options() -> dict[str, object]:
+def get_runtime_options(response: Response) -> dict[str, object]:
+    response.headers["Cache-Control"] = "no-store"
     return runtime_options_payload()
 
 
