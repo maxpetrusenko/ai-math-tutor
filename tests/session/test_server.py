@@ -260,6 +260,15 @@ def test_lesson_history_api_persists_active_and_archived_threads() -> None:
     assert clear_response.json()["activeThread"] is None
 
 
+def test_runtime_options_endpoint_is_not_cacheable() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/runtime-options")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+
+
 def test_lessons_analytics_endpoint_summarizes_saved_history() -> None:
     client = TestClient(app)
     yesterday = datetime.now(UTC) - timedelta(days=1)
