@@ -43,6 +43,24 @@ from backend.turn_taking.controller import SessionController
 
 app = FastAPI(title="Nerdy Live Tutor Backend")
 logger = logging.getLogger(__name__)
+
+SESSION_API_SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    for header, value in SESSION_API_SECURITY_HEADERS.items():
+        if header not in response.headers:
+            response.headers[header] = value
+    return response
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[

@@ -20,6 +20,18 @@ def _session_ws(client: TestClient, path: str = "/ws/session", **kwargs):
     return client.websocket_connect(path, headers=headers, **kwargs)
 
 
+def test_session_api_sets_production_security_headers() -> None:
+    client = TestClient(app)
+
+    response = client.get("/api/runtime-options")
+
+    assert response.status_code == 200
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["Referrer-Policy"] == "no-referrer"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Strict-Transport-Security"] == "max-age=31536000; includeSubDomains"
+
+
 def test_session_websocket_streams_state_and_tutor_events() -> None:
     client = TestClient(app)
 
