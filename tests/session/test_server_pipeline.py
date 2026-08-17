@@ -50,6 +50,7 @@ def _committed_reply(events: list[dict[str, object]]) -> str:
 def disable_live_runtime(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("NERDY_DISABLE_LIVE_LLM", "1")
     monkeypatch.setenv("NERDY_DISABLE_LIVE_TTS", "1")
+    monkeypatch.setenv("NERDY_ENABLE_TURN_TRACES", "1")
     monkeypatch.setenv("NERDY_SESSION_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("NERDY_TURN_TRACE_DIR", str(tmp_path / "turn-traces"))
 

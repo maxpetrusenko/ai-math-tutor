@@ -8,6 +8,11 @@ from typing import Any
 from backend.monitoring.latency_tracker import LatencyTracker
 
 DEFAULT_TURN_TRACE_DIR = ".nerdy-data/turn-traces"
+_ENABLED_VALUES = {"1", "true", "yes", "on"}
+
+
+def turn_traces_enabled() -> bool:
+    return os.getenv("NERDY_ENABLE_TURN_TRACES", "").strip().lower() in _ENABLED_VALUES
 
 
 def trace_path(session_id: str, turn_id: str) -> Path:
@@ -16,7 +21,10 @@ def trace_path(session_id: str, turn_id: str) -> Path:
     return trace_dir / f"{session_id}-{turn_id}.json"
 
 
-def write_turn_trace(payload: dict[str, Any]) -> Path:
+def write_turn_trace(payload: dict[str, Any]) -> Path | None:
+    if not turn_traces_enabled():
+        return None
+
     session_id = str(payload.get("session_id") or "session")
     turn_id = str(payload.get("turn_id") or "turn")
     path = trace_path(session_id, turn_id)
@@ -32,6 +40,9 @@ def append_latency_trace_event(
     ts_ms: float,
     metadata: dict[str, Any] | None = None,
 ) -> Path | None:
+    if not turn_traces_enabled():
+        return None
+
     path = trace_path(session_id, turn_id)
     if not path.exists():
         return None
