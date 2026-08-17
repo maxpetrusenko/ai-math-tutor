@@ -44,3 +44,11 @@ def test_shell_export_commands_include_loaded_values(tmp_path: Path) -> None:
     exports = shell_export_commands(base_dir=tmp_path)
 
     assert "export DEEPGRAM_API_KEY=dg-shell" in exports
+
+
+def test_root_env_example_documents_turn_trace_opt_in() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    env_example = (repo_root / ".env.example").read_text()
+
+    assert "NERDY_ENABLE_TURN_TRACES=0" in env_example
+    assert "Set NERDY_ENABLE_TURN_TRACES=1" in env_example

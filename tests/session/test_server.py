@@ -127,7 +127,23 @@ def test_session_websocket_transcribe_only_accepts_stable_partial_when_final_is_
     assert back_to_idle == {"type": "state.changed", "state": "idle"}
 
 
-def test_session_websocket_writes_trace_for_transcribe_only_turn(monkeypatch, tmp_path) -> None:
+def test_session_websocket_does_not_write_turn_trace_by_default(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("NERDY_ENABLE_TURN_TRACES", raising=False)
+    monkeypatch.setenv("NERDY_TURN_TRACE_DIR", str(tmp_path / "turn-traces"))
+    client = TestClient(app)
+
+    with _session_ws(client) as websocket:
+        websocket.receive_json()
+        websocket.send_json({"type": "speech.end", "ts_ms": 1000, "text": "debug this mic release", "transcribe_only": True})
+        websocket.receive_json()
+        websocket.receive_json()
+        websocket.receive_json()
+
+    assert list(tmp_path.rglob("*.json")) == []
+
+
+def test_session_websocket_writes_trace_for_transcribe_only_turn_when_enabled(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("NERDY_ENABLE_TURN_TRACES", "1")
     monkeypatch.setenv("NERDY_TURN_TRACE_DIR", str(tmp_path / "turn-traces"))
     client = TestClient(app)
 
