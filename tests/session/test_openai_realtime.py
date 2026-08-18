@@ -111,6 +111,24 @@ def test_create_realtime_client_secret_requires_api_key(monkeypatch) -> None:
         create_realtime_client_secret({})
 
 
+def test_realtime_client_secret_route_rejects_missing_origin(monkeypatch) -> None:
+    called = False
+
+    def _fake_create(payload):
+        nonlocal called
+        called = True
+        return {"client_secret": {"value": "secret-xyz"}}
+
+    monkeypatch.setattr("backend.session.server.create_realtime_client_secret", _fake_create)
+    client = TestClient(app)
+
+    response = client.post("/api/realtime/client-secret", json={"model": "gpt-realtime-mini"})
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Realtime client secret origin not allowed"}
+    assert called is False
+
+
 def test_realtime_client_secret_route_returns_provider_payload(monkeypatch) -> None:
     monkeypatch.setattr(
         "backend.session.server.create_realtime_client_secret",
@@ -121,7 +139,11 @@ def test_realtime_client_secret_route_returns_provider_payload(monkeypatch) -> N
     )
     client = TestClient(app)
 
-    response = client.post("/api/realtime/client-secret", json={"model": "gpt-realtime-mini"})
+    response = client.post(
+        "/api/realtime/client-secret",
+        headers={"Origin": "http://localhost:3000"},
+        json={"model": "gpt-realtime-mini"},
+    )
 
     assert response.status_code == 200
     assert response.json() == {
@@ -142,6 +164,7 @@ def test_realtime_client_secret_route_forwards_transcription_session_type(monkey
 
     response = client.post(
         "/api/realtime/client-secret",
+        headers={"Origin": "http://localhost:3000"},
         json={"model": DEFAULT_OPENAI_TRANSCRIPTION_MODEL, "session_type": "transcription"},
     )
 
@@ -160,7 +183,11 @@ def test_realtime_client_secret_route_maps_missing_api_key_to_503(monkeypatch) -
     )
     client = TestClient(app)
 
-    response = client.post("/api/realtime/client-secret", json={"model": "gpt-realtime-mini"})
+    response = client.post(
+        "/api/realtime/client-secret",
+        headers={"Origin": "http://localhost:3000"},
+        json={"model": "gpt-realtime-mini"},
+    )
 
     assert response.status_code == 503
     assert response.json() == {"detail": "OPENAI_API_KEY is required for OpenAI Realtime"}
@@ -173,7 +200,11 @@ def test_realtime_client_secret_route_maps_upstream_failure_to_502(monkeypatch) 
     )
     client = TestClient(app)
 
-    response = client.post("/api/realtime/client-secret", json={"model": "gpt-realtime-mini"})
+    response = client.post(
+        "/api/realtime/client-secret",
+        headers={"Origin": "http://localhost:3000"},
+        json={"model": "gpt-realtime-mini"},
+    )
 
     assert response.status_code == 502
     assert response.json() == {"detail": "upstream OpenAI failure"}
@@ -186,7 +217,11 @@ def test_realtime_client_secret_route_maps_timeout_to_504(monkeypatch) -> None:
     )
     client = TestClient(app)
 
-    response = client.post("/api/realtime/client-secret", json={"model": "gpt-realtime-mini"})
+    response = client.post(
+        "/api/realtime/client-secret",
+        headers={"Origin": "http://localhost:3000"},
+        json={"model": "gpt-realtime-mini"},
+    )
 
     assert response.status_code == 504
     assert response.json() == {"detail": "OpenAI Realtime client secret request timed out"}

@@ -168,7 +168,10 @@ Frontend:
 
 ```bash
 NEXT_PUBLIC_SESSION_WS_URL=ws://127.0.0.1:8000/ws/session
+NERDY_ALLOWED_ORIGINS=http://localhost:3000
 ```
+
+Hosted OpenAI Realtime client-secret minting and session WebSockets only accept requests from these allowed frontend origins. In production, set `NERDY_ALLOWED_ORIGINS` to the hosted frontend domain, for example `https://aitutor.maxpetrusenko.com`.
 
 Typed fixture/demo paths work without live mic credentials. Live STT, LLM, and TTS calls need provider keys.
 
