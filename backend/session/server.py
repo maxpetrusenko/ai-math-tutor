@@ -7,7 +7,7 @@ import os
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.livekit import create_avatar_room_session, is_managed_avatar_provider_id
@@ -121,8 +121,12 @@ async def post_livekit_avatar_session(
 
 @app.post("/api/realtime/client-secret")
 def post_realtime_client_secret(
+    request: Request,
     payload: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    if not _is_allowed_websocket_origin(request.headers.get("origin")):
+        raise HTTPException(status_code=403, detail="Realtime client secret origin not allowed")
+
     try:
         return create_realtime_client_secret(payload or {})
     except ValueError as error:
