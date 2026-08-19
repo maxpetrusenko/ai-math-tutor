@@ -1,0 +1,24 @@
+# AI Math Tutor
+
+AI Math Tutor is a realtime voice tutor demo with a FastAPI WebSocket session backend, swappable STT/LLM/TTS providers, interruption-safe browser playback, lesson memory, and a visible avatar.
+
+## Primary URLs
+
+- Live app: https://aitutor.maxpetrusenko.com
+- Tutor session: https://aitutor.maxpetrusenko.com/session
+- Lesson catalog: https://aitutor.maxpetrusenko.com/lessons
+- Avatar switcher: https://aitutor.maxpetrusenko.com/avatar
+- Model settings: https://aitutor.maxpetrusenko.com/models
+- Session API WebSocket: wss://aitutor-session.maxpetrusenko.com/ws/session
+
+## Source
+
+- Repository: https://github.com/maxpetrusenko/ai-math-tutor
+- Public README: https://github.com/maxpetrusenko/ai-math-tutor#readme
+
+## Useful project facts
+
+- Frontend: Next.js session UI, mic capture, transcript, playback, and avatar shell.
+- Backend: FastAPI session state, turn boundaries, provider orchestration, and lesson persistence APIs.
+- Tutor stack: Deepgram-compatible STT, Gemini/MiniMax/OpenAI/Anthropic LLM providers, Cartesia/MiniMax TTS, and a self-hosted TalkingHead avatar.
+- Demo path: open /session, send a typed or spoken turn, continue a follow-up turn, inspect History, interrupt with Escape, then open /avatar.
