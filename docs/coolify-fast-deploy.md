@@ -48,13 +48,16 @@ Blocked:
 
 ## Required GitHub Config
 
-Repo variable or secret:
+Repo secrets:
 
-- `COOLIFY_URL`, for example `https://coolify.example.com`
+- `COOLIFY_API_TOKEN` (preferred) or `COOLIFY_TOKEN` (legacy fallback)
+- `COOLIFY_SSH_PRIVATE_KEY`
+- `COOLIFY_SSH_KNOWN_HOSTS`, pinned from the Contabo host. Do not rely on runtime `ssh-keyscan`; the deploy script fails closed when this secret is absent.
 
-Repo secret:
+Optional repo secrets:
 
-- `COOLIFY_TOKEN`
+- `COOLIFY_SSH_HOST`, defaults to `173.249.52.27`
+- `COOLIFY_SSH_USER`, defaults to `root`
 
 `GITHUB_TOKEN` is used for GHCR push, with workflow `packages: write` permission.
 

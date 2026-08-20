@@ -16,6 +16,7 @@ require_env COOLIFY_IMAGE
 require_env DOCKER_TAG
 require_env COOLIFY_PORT
 require_env COOLIFY_HEALTH_ENABLED
+require_env COOLIFY_SSH_KNOWN_HOSTS
 
 COOLIFY_SSH_HOST="${COOLIFY_SSH_HOST:-173.249.52.27}"
 COOLIFY_SSH_USER="${COOLIFY_SSH_USER:-root}"
@@ -25,12 +26,7 @@ install -m 700 -d ~/.ssh
 key_file="$HOME/.ssh/coolify_deploy_key"
 printf '%s\n' "${COOLIFY_SSH_PRIVATE_KEY}" > "${key_file}"
 chmod 600 "${key_file}"
-
-if [ -n "${COOLIFY_SSH_KNOWN_HOSTS:-}" ]; then
-  printf '%s\n' "${COOLIFY_SSH_KNOWN_HOSTS}" >> ~/.ssh/known_hosts
-else
-  ssh-keyscan -H "${COOLIFY_SSH_HOST}" >> ~/.ssh/known_hosts
-fi
+printf '%s\n' "${COOLIFY_SSH_KNOWN_HOSTS}" >> ~/.ssh/known_hosts
 
 payload="$(
   python3 - <<'PY'
