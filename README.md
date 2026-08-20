@@ -219,10 +219,16 @@ Reference docs:
 
 Hosted deploys run through Coolify on `maxpetrusenko.com`. GitHub Actions builds GHCR images for the backend, session service, and frontend, then asks Coolify to deploy the matching commit tag.
 
-Required Actions config:
+Required Actions secrets:
 
-- `COOLIFY_URL`
-- `COOLIFY_TOKEN`
+- `COOLIFY_API_TOKEN` (or legacy `COOLIFY_TOKEN`), for the Coolify API call made over SSH
+- `COOLIFY_SSH_PRIVATE_KEY`, for the deploy runner's SSH connection to Contabo
+- `COOLIFY_SSH_KNOWN_HOSTS`, a pinned `known_hosts` entry for the Contabo host
+
+Optional Actions secrets:
+
+- `COOLIFY_SSH_HOST` (defaults to `173.249.52.27`)
+- `COOLIFY_SSH_USER` (defaults to `root`)
 
 Hosted smoke:
 
