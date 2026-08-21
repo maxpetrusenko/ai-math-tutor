@@ -103,6 +103,23 @@ def test_create_realtime_client_secret_auto_detects_transcription_session_from_m
     assert body["session"]["audio"]["input"]["transcription"]["model"] == DEFAULT_OPENAI_TRANSCRIPTION_MODEL
 
 
+def test_create_realtime_client_secret_rejects_unsupported_model_before_upstream(monkeypatch) -> None:
+    recorded: dict[str, object] = {"called": False}
+
+    def _fake_urlopen(req, timeout: int):
+        recorded["called"] = True
+        return _FakeResponse({"client_secret": {"value": "secret-123"}})
+
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test")
+    monkeypatch.setattr("backend.session.openai_realtime.load_local_env", lambda: [".env"])
+    monkeypatch.setattr("backend.session.openai_realtime.request.urlopen", _fake_urlopen)
+
+    with pytest.raises(ValueError, match="unsupported OpenAI Realtime model: gpt-4.1"):
+        create_realtime_client_secret({"model": "gpt-4.1"})
+
+    assert recorded["called"] is False
+
+
 def test_create_realtime_client_secret_requires_api_key(monkeypatch) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setattr("backend.session.openai_realtime.load_local_env", lambda: [])
@@ -151,6 +168,25 @@ def test_realtime_client_secret_route_forwards_transcription_session_type(monkey
         "model": DEFAULT_OPENAI_TRANSCRIPTION_MODEL,
         "session_type": "transcription",
     }
+
+
+def test_realtime_client_secret_route_rejects_unsupported_model(monkeypatch) -> None:
+    recorded: dict[str, object] = {"called": False}
+
+    def _fake_urlopen(req, timeout: int):
+        recorded["called"] = True
+        return _FakeResponse({"client_secret": {"value": "secret-xyz"}})
+
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test")
+    monkeypatch.setattr("backend.session.openai_realtime.load_local_env", lambda: [".env"])
+    monkeypatch.setattr("backend.session.openai_realtime.request.urlopen", _fake_urlopen)
+    client = TestClient(app)
+
+    response = client.post("/api/realtime/client-secret", json={"model": "gpt-4.1"})
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "unsupported OpenAI Realtime model: gpt-4.1"}
+    assert recorded["called"] is False
 
 
 def test_realtime_client_secret_route_maps_missing_api_key_to_503(monkeypatch) -> None:

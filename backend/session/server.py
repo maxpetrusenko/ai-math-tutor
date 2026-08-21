@@ -26,6 +26,7 @@ from backend.session.persistence import (
     write_active_lesson_thread,
 )
 from backend.session.openai_realtime import (
+    InvalidRealtimeClientSecretRequest,
     OpenAIRealtimeClientSecretTimeoutError,
     create_realtime_client_secret,
 )
@@ -125,6 +126,8 @@ def post_realtime_client_secret(
 ) -> dict[str, object]:
     try:
         return create_realtime_client_secret(payload or {})
+    except InvalidRealtimeClientSecretRequest as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except OpenAIRealtimeClientSecretTimeoutError as error:
