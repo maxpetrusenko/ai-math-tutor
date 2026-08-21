@@ -14,6 +14,8 @@ DEFAULT_OPENAI_REALTIME_MODEL = "gpt-realtime-mini"
 DEFAULT_OPENAI_TRANSCRIPTION_MODEL = "gpt-4o-transcribe"
 DEFAULT_OPENAI_REALTIME_VOICE = "marin"
 ALLOWED_OPENAI_SESSION_TYPES = {"realtime", "transcription"}
+ALLOWED_OPENAI_REALTIME_MODELS = {DEFAULT_OPENAI_REALTIME_MODEL}
+ALLOWED_OPENAI_TRANSCRIPTION_MODELS = {DEFAULT_OPENAI_TRANSCRIPTION_MODEL}
 
 
 class OpenAIRealtimeClientSecretError(RuntimeError):
@@ -22,6 +24,10 @@ class OpenAIRealtimeClientSecretError(RuntimeError):
 
 class OpenAIRealtimeClientSecretTimeoutError(OpenAIRealtimeClientSecretError):
     """Raised when the upstream client-secret request times out."""
+
+
+class InvalidRealtimeClientSecretRequest(ValueError):
+    """Raised when the browser requests an unsupported realtime session."""
 
 
 def create_realtime_client_secret(payload: dict[str, object] | None = None) -> dict[str, Any]:
@@ -50,6 +56,7 @@ def _build_client_secret_payload(payload: dict[str, object]) -> dict[str, object
         if requested_session_type in ALLOWED_OPENAI_SESSION_TYPES
         else "transcription" if _is_transcription_model(model) else "realtime"
     )
+    _validate_session_model(session_type, model)
     voice = str(payload.get("voice") or DEFAULT_OPENAI_REALTIME_VOICE).strip() or DEFAULT_OPENAI_REALTIME_VOICE
     instructions = str(payload.get("instructions") or "").strip()
 
@@ -97,6 +104,16 @@ def _build_client_secret_payload(payload: dict[str, object]) -> dict[str, object
         },
         "session": session_payload,
     }
+
+
+def _validate_session_model(session_type: str, model: str) -> None:
+    allowed_models = (
+        ALLOWED_OPENAI_TRANSCRIPTION_MODELS
+        if session_type == "transcription"
+        else ALLOWED_OPENAI_REALTIME_MODELS
+    )
+    if model not in allowed_models:
+        raise InvalidRealtimeClientSecretRequest(f"unsupported OpenAI Realtime model: {model}")
 
 
 def _post_json(url: str, *, body: dict[str, object], headers: dict[str, str]) -> dict[str, Any]:
