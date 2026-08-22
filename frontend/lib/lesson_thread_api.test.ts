@@ -12,8 +12,37 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   process.env = { ...ORIGINAL_ENV };
   vi.unstubAllGlobals();
+});
+
+test("lesson thread api aborts slow backend requests", async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi.fn(
+    (_: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal as AbortSignal | undefined;
+        signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      })
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  vi.stubGlobal("window", {} as Window & typeof globalThis);
+
+  const { fetchLessonStore } = await import("./lesson_thread_api");
+
+  const request = fetchLessonStore();
+  await Promise.resolve();
+
+  const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+  const signal = init?.signal as AbortSignal | undefined;
+  expect(signal).toBeDefined();
+  expect(signal?.aborted).toBe(false);
+
+  await vi.advanceTimersByTimeAsync(5000);
+
+  expect(signal?.aborted).toBe(true);
+  await expect(request).resolves.toBeNull();
 });
 
 test("lesson thread api calls the backend lesson store", async () => {
@@ -29,12 +58,16 @@ test("lesson thread api calls the backend lesson store", async () => {
   const { fetchLessonStore } = await import("./lesson_thread_api");
 
   await expect(fetchLessonStore()).resolves.toEqual({ activeThread: null, archive: [] });
-  expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8000/api/lessons", {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+  expect(fetchMock).toHaveBeenCalledWith(
+    "http://127.0.0.1:8000/api/lessons",
+    expect.objectContaining({
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      signal: expect.any(AbortSignal),
+    })
+  );
 });
 
 test("learning analytics api reuses the lesson backend", async () => {
@@ -70,10 +103,14 @@ test("learning analytics api reuses the lesson backend", async () => {
     strongestSubject: "Math",
     tutorTurns: 6,
   });
-  expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8000/api/lessons/analytics", {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+  expect(fetchMock).toHaveBeenCalledWith(
+    "http://127.0.0.1:8000/api/lessons/analytics",
+    expect.objectContaining({
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      signal: expect.any(AbortSignal),
+    })
+  );
 });

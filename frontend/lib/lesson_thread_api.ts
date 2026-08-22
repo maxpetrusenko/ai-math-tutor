@@ -26,11 +26,22 @@ function resolveLessonApiUrl() {
   }
 }
 
+const DEFAULT_LESSON_API_TIMEOUT_MS = 5000;
+
+function resolveLessonApiTimeoutMs() {
+  const rawTimeout = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_LESSON_API_TIMEOUT_MS : undefined;
+  const parsedTimeout = Number(rawTimeout);
+  return Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : DEFAULT_LESSON_API_TIMEOUT_MS;
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T | null> {
   const baseUrl = resolveLessonApiUrl();
   if (!baseUrl || typeof window === "undefined" || typeof fetch !== "function") {
     return null;
   }
+
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), resolveLessonApiTimeoutMs()) : undefined;
 
   try {
     const response = await fetch(path ? `${baseUrl}${path}` : baseUrl, {
@@ -39,6 +50,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T | nul
         "Content-Type": "application/json",
       },
       ...init,
+      signal: init?.signal ?? controller?.signal,
     });
     if (!response.ok) {
       return null;
@@ -46,6 +58,10 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T | nul
     return (await response.json()) as T;
   } catch {
     return null;
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
   }
 }
 
