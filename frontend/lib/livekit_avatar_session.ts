@@ -19,6 +19,18 @@ class LiveKitAvatarBootstrapHttpError extends Error {
   }
 }
 
+const DEFAULT_LIVEKIT_AVATAR_BOOTSTRAP_TIMEOUT_MS = 10000;
+
+function resolveLiveKitAvatarBootstrapTimeoutMs() {
+  const rawTimeout = typeof process !== "undefined"
+    ? process.env.NEXT_PUBLIC_LIVEKIT_AVATAR_BOOTSTRAP_TIMEOUT_MS
+    : undefined;
+  const parsedTimeout = Number(rawTimeout);
+  return Number.isFinite(parsedTimeout) && parsedTimeout > 0
+    ? parsedTimeout
+    : DEFAULT_LIVEKIT_AVATAR_BOOTSTRAP_TIMEOUT_MS;
+}
+
 function toAvatarSessionUrl(baseUrl: string) {
   try {
     const url = new URL(baseUrl);
@@ -111,6 +123,11 @@ export async function createLiveKitAvatarSession(
   let lastNetworkError: Error | null = null;
 
   for (const apiUrl of apiUrls) {
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeoutId: ReturnType<typeof setTimeout> | undefined = controller
+      ? setTimeout(() => controller.abort(), resolveLiveKitAvatarBootstrapTimeoutMs())
+      : undefined;
+
     try {
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -121,6 +138,7 @@ export async function createLiveKitAvatarSession(
           avatarProviderId,
           participantName,
         }),
+        signal: controller?.signal,
       });
 
       if (!response.ok) {
@@ -146,6 +164,10 @@ export async function createLiveKitAvatarSession(
         throw error;
       }
       lastNetworkError = error instanceof Error ? error : new Error("Could not start LiveKit avatar session.");
+    } finally {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
     }
   }
 
