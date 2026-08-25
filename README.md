@@ -219,6 +219,10 @@ Reference docs:
 
 Hosted deploys run through Coolify on `maxpetrusenko.com`. GitHub Actions builds GHCR images for the backend, session service, and frontend, then asks Coolify to deploy the matching commit tag.
 
+Frontend image builds must pass `NEXT_PUBLIC_SESSION_WS_URL` explicitly. The
+production workflow sets it to `wss://aitutor-session.maxpetrusenko.com/ws/session`;
+local image builds can use `--build-arg NEXT_PUBLIC_SESSION_WS_URL=ws://127.0.0.1:8000/ws/session`.
+
 Required Actions config:
 
 - `COOLIFY_URL`

@@ -17,6 +17,7 @@ concurrency:
 env:
   DOCKER_TAG: sha-${{ github.sha }}
   IMAGE_NAMESPACE: ghcr.io/maxpetrusenko
+  PRODUCTION_SESSION_WS_URL: wss://aitutor-session.maxpetrusenko.com/ws/session
 
 jobs:
   gates:
@@ -111,6 +112,8 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
+          build-args: |
+            NEXT_PUBLIC_SESSION_WS_URL=${{ env.PRODUCTION_SESSION_WS_URL }}
           tags: |
             ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:${{ env.DOCKER_TAG }}
             ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:latest
