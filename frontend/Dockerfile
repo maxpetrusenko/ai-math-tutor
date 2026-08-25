@@ -14,7 +14,15 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-ARG NEXT_PUBLIC_SESSION_WS_URL=wss://aitutor-session.maxpetrusenko.com/ws/session
+ARG NEXT_PUBLIC_SESSION_WS_URL
+RUN if [ -z "$NEXT_PUBLIC_SESSION_WS_URL" ]; then \
+      echo "NEXT_PUBLIC_SESSION_WS_URL must be set for frontend image builds" >&2; \
+      exit 1; \
+    fi; \
+    case "$NEXT_PUBLIC_SESSION_WS_URL" in \
+      ws://*|wss://*) ;; \
+      *) echo "NEXT_PUBLIC_SESSION_WS_URL must start with ws:// or wss://" >&2; exit 1 ;; \
+    esac
 
 ENV NEXT_PUBLIC_SESSION_WS_URL=$NEXT_PUBLIC_SESSION_WS_URL
 
@@ -26,6 +34,8 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ARG NEXT_PUBLIC_SESSION_WS_URL
+ENV NEXT_PUBLIC_SESSION_WS_URL=$NEXT_PUBLIC_SESSION_WS_URL
 
 WORKDIR /app
 

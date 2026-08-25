@@ -30,6 +30,12 @@ Backend and session both build from `backend/Dockerfile`.
 The LiveKit avatar worker builds from `backend/Dockerfile.worker`.
 Frontend builds from `frontend/Dockerfile`.
 
+Frontend and web image builds require an explicit `NEXT_PUBLIC_SESSION_WS_URL`
+build argument. The GitHub Actions workflow passes
+`wss://aitutor-session.maxpetrusenko.com/ws/session` through
+`PRODUCTION_SESSION_WS_URL` so production images cannot silently fall back to a
+stale or unintended session backend.
+
 ## Coolify Apps
 
 Covered by the workflow:
