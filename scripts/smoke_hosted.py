@@ -34,6 +34,21 @@ def _derive_backend_lessons_url(runtime_status: dict[str, Any]) -> str | None:
     return parse.urlunparse((scheme, parsed.netloc, "/api/lessons", "", "", ""))
 
 
+def _derive_session_ws_url(backend_url: str) -> str | None:
+    parsed = parse.urlparse(backend_url)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+
+    scheme = "wss" if parsed.scheme == "https" else "ws"
+    return parse.urlunparse((scheme, parsed.netloc, "/ws/session", "", "", ""))
+
+
+def _session_target_matches_backend(runtime_status: dict[str, Any], backend_url: str) -> bool:
+    expected_session_ws_url = _derive_session_ws_url(backend_url)
+    actual_session_ws_url = runtime_status.get("sessionWsUrl")
+    return isinstance(actual_session_ws_url, str) and actual_session_ws_url == expected_session_ws_url
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "--":
@@ -62,6 +77,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.expect_revision_contains and args.expect_revision_contains not in str(revision or ""):
         print(f"smoke: revision {revision!r} did not include {args.expect_revision_contains!r}")
+        return 1
+
+    if args.backend_url and not _session_target_matches_backend(runtime_status, args.backend_url):
+        expected_session_ws_url = _derive_session_ws_url(args.backend_url)
+        print(
+            "smoke: sessionWsUrl mismatch "
+            f"expected={expected_session_ws_url!r} actual={runtime_status.get('sessionWsUrl')!r}"
+        )
         return 1
 
     backend_url = args.backend_url or _derive_backend_lessons_url(runtime_status)

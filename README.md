@@ -224,7 +224,7 @@ Required Actions config:
 - `COOLIFY_URL`
 - `COOLIFY_TOKEN`
 
-Hosted smoke:
+Hosted smoke checks the frontend root, `/api/runtime/status`, the backend lesson API, and, when `--backend-url` is supplied, that the frontend-advertised `sessionWsUrl` points at the same session host.
 
 ```bash
 pnpm smoke:prod -- --frontend-url https://aitutor.maxpetrusenko.com --backend-url https://aitutor-session.maxpetrusenko.com/api/lessons
