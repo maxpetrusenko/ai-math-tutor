@@ -3,8 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
+from typing import Any, cast
 from urllib import error, parse, request
+
+from websockets.sync.client import connect as websocket_connect
+from websockets.typing import Origin
+
+
+DEFAULT_TIMEOUT_SECONDS = 10.0
 
 
 def _fetch_json(url: str) -> tuple[int, dict[str, Any] | None]:
@@ -24,14 +30,40 @@ def _fetch_status(url: str) -> int:
         return response.getcode()
 
 
-def _derive_backend_lessons_url(runtime_status: dict[str, Any]) -> str | None:
+def _derive_session_websocket_url(runtime_status: dict[str, Any]) -> str | None:
     session_ws_url = runtime_status.get("sessionWsUrl")
     if not isinstance(session_ws_url, str) or not session_ws_url:
+        return None
+    return session_ws_url
+
+
+def _derive_backend_lessons_url(runtime_status: dict[str, Any]) -> str | None:
+    session_ws_url = _derive_session_websocket_url(runtime_status)
+    if not session_ws_url:
         return None
 
     parsed = parse.urlparse(session_ws_url)
     scheme = "https" if parsed.scheme == "wss" else "http"
     return parse.urlunparse((scheme, parsed.netloc, "/api/lessons", "", "", ""))
+
+
+def _origin_from_url(url: str) -> str:
+    parsed = parse.urlparse(url)
+    if not parsed.scheme or not parsed.netloc:
+        return url
+    return parse.urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+
+
+def _fetch_websocket_event(url: str, *, origin: str, timeout_seconds: float) -> dict[str, Any] | None:
+    with websocket_connect(
+        url,
+        origin=cast(Origin, origin),
+        open_timeout=timeout_seconds,
+        close_timeout=min(timeout_seconds, 3.0),
+        max_size=65_536,
+    ) as websocket:
+        payload = websocket.recv(timeout=timeout_seconds)
+    return json.loads(payload) if payload else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -44,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--backend-url")
     parser.add_argument("--expect-auth", action="store_true")
     parser.add_argument("--expect-revision-contains")
+    parser.add_argument("--websocket-timeout-seconds", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     args = parser.parse_args(argv)
 
     frontend_url = args.frontend_url.rstrip("/")
@@ -63,6 +96,28 @@ def main(argv: list[str] | None = None) -> int:
     if args.expect_revision_contains and args.expect_revision_contains not in str(revision or ""):
         print(f"smoke: revision {revision!r} did not include {args.expect_revision_contains!r}")
         return 1
+
+    session_ws_url = _derive_session_websocket_url(runtime_status)
+    if not session_ws_url:
+        print("smoke: could not determine session websocket url")
+        return 1
+
+    frontend_origin = _origin_from_url(frontend_url)
+    try:
+        session_event = _fetch_websocket_event(
+            session_ws_url,
+            origin=frontend_origin,
+            timeout_seconds=args.websocket_timeout_seconds,
+        )
+    except Exception as exc:
+        print(f"smoke: session websocket failed for {session_ws_url}: {exc}")
+        return 1
+
+    if not isinstance(session_event, dict) or session_event.get("type") != "session.started":
+        print(f"smoke: unexpected session websocket first event {session_event!r}")
+        return 1
+
+    print(f"smoke: session_websocket=ok target={session_ws_url}")
 
     backend_url = args.backend_url or _derive_backend_lessons_url(runtime_status)
     if not backend_url:
