@@ -224,7 +224,7 @@ Required Actions config:
 - `COOLIFY_URL`
 - `COOLIFY_TOKEN`
 
-Hosted smoke:
+Hosted smoke verifies the frontend entrypoint, runtime metadata, advertised session WebSocket handshake, and lessons API:
 
 ```bash
 pnpm smoke:prod -- --frontend-url https://aitutor.maxpetrusenko.com --backend-url https://aitutor-session.maxpetrusenko.com/api/lessons
