@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import logging
 import os
@@ -43,6 +44,7 @@ from backend.turn_taking.controller import SessionController
 
 app = FastAPI(title="Nerdy Live Tutor Backend")
 logger = logging.getLogger(__name__)
+DEFAULT_MAX_AUDIO_CHUNK_BYTES = 5_000_000
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -77,6 +79,34 @@ def _is_allowed_websocket_origin(origin: str | None) -> bool:
         if entry.strip()
     }
     return origin in allowed
+
+
+def _max_audio_chunk_bytes() -> int:
+    raw_limit = os.getenv("NERDY_MAX_AUDIO_CHUNK_BYTES", str(DEFAULT_MAX_AUDIO_CHUNK_BYTES)).strip()
+    try:
+        limit = int(raw_limit)
+    except ValueError:
+        return DEFAULT_MAX_AUDIO_CHUNK_BYTES
+    return max(1, limit)
+
+
+def _max_base64_chars_for_bytes(byte_limit: int) -> int:
+    return ((byte_limit + 2) // 3) * 4
+
+
+def _decode_audio_chunk_bytes(chunk_b64: str) -> bytes:
+    byte_limit = _max_audio_chunk_bytes()
+    if len(chunk_b64) > _max_base64_chars_for_bytes(byte_limit):
+        raise ValueError(f"audio chunk exceeds configured {byte_limit} byte limit")
+
+    try:
+        audio_bytes = base64.b64decode(chunk_b64, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ValueError("audio chunk is not valid base64") from error
+
+    if len(audio_bytes) > byte_limit:
+        raise ValueError(f"audio chunk exceeds configured {byte_limit} byte limit")
+    return audio_bytes
 
 
 @app.get("/api/lessons")
@@ -245,14 +275,14 @@ async def _handle_message(
         if not chunk_b64:
             return events, stt_session
 
+        audio_bytes = _decode_audio_chunk_bytes(chunk_b64)
+
         if stt_session is None:
             logger.info(
                 "session websocket opening stt session %s",
                 _json_summary({"session_id": controller.session_id}),
             )
             stt_session = await stt_provider.open_session(controller.latency_tracker)
-
-        audio_bytes = base64.b64decode(chunk_b64)
         logger.info(
             "session websocket audio decoded %s",
             _json_summary(
