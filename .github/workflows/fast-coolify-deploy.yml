@@ -157,7 +157,9 @@ jobs:
 
       - name: Skip deploy when SSH secret is absent
         if: ${{ env.COOLIFY_SSH_PRIVATE_KEY == '' }}
-        run: echo "::warning::COOLIFY_SSH_PRIVATE_KEY is not configured; gates and image builds passed, deploy skipped."
+        run: |
+          echo "::error::COOLIFY_SSH_PRIVATE_KEY is not configured; production deploy cannot run."
+          exit 1
 
       - name: Point Coolify at image tag and deploy
         if: ${{ env.COOLIFY_SSH_PRIVATE_KEY != '' }}
