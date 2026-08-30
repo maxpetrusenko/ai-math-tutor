@@ -221,8 +221,9 @@ Hosted deploys run through Coolify on `maxpetrusenko.com`. GitHub Actions builds
 
 Required Actions config:
 
-- `COOLIFY_URL`
-- `COOLIFY_TOKEN`
+- `COOLIFY_API_TOKEN` or `COOLIFY_TOKEN`, for the local Coolify API call tunneled through SSH
+- `COOLIFY_SSH_PRIVATE_KEY`, for the deploy host SSH hop. The deploy job fails if this is absent so a green workflow cannot hide a skipped production rollout.
+- `COOLIFY_SSH_KNOWN_HOSTS`, pinned host keys for `173.249.52.27` so the deploy does not rely on runtime keyscan trust.
 
 Hosted smoke:
 
