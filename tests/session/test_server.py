@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from backend.session.persistence import load_session_snapshot
 from backend.session.server import app
 
 
@@ -199,6 +200,40 @@ def test_session_websocket_restores_existing_session_by_id() -> None:
         "session_id": "lesson-1",
         "state": "idle",
     }
+
+
+def test_session_restore_keeps_recent_bounded_history() -> None:
+    client = TestClient(app)
+    history = [
+        {"role": "user", "content": f"turn-{index}:" + ("x" * 2_500)}
+        for index in range(30)
+    ]
+
+    with _session_ws(client, "/ws/session?session_id=long-restore") as websocket:
+        websocket.receive_json()
+        websocket.send_json(
+            {
+                "type": "session.restore",
+                "subject": "math",
+                "grade_band": "6-8",
+                "student_profile": {"preference": "show one step at a time"},
+                "history": history,
+            }
+        )
+        restored = websocket.receive_json()
+
+    snapshot = load_session_snapshot("long-restore")
+
+    assert restored == {
+        "type": "session.restored",
+        "history_length": 24,
+        "session_id": "long-restore",
+        "state": "idle",
+    }
+    assert snapshot is not None
+    assert snapshot["history"][0]["content"].startswith("turn-6:")
+    assert snapshot["history"][-1]["content"].startswith("turn-29:")
+    assert {len(item["content"]) for item in snapshot["history"]} == {2_000}
 
 
 def test_session_websocket_ignores_late_authentication_messages_when_auth_is_not_required() -> None:

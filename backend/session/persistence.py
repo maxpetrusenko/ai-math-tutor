@@ -70,6 +70,25 @@ class PersistedSessionData(TypedDict):
 
 _PERSISTENCE_LOCK = Lock()
 _CURRENT_VERSION = 2
+SESSION_RESTORE_HISTORY_LIMIT = 24
+SESSION_RESTORE_HISTORY_CONTENT_LIMIT = 2_000
+SESSION_RESTORE_HISTORY_ROLE_LIMIT = 32
+
+
+def coerce_session_history(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+
+    history = [
+        {
+            "content": str(item.get("content", ""))[:SESSION_RESTORE_HISTORY_CONTENT_LIMIT],
+            "role": str(item.get("role", ""))[:SESSION_RESTORE_HISTORY_ROLE_LIMIT],
+        }
+        for item in value
+        if isinstance(item, dict)
+    ]
+    return history[-SESSION_RESTORE_HISTORY_LIMIT:]
+
 
 
 def load_session_snapshot(session_id: str, namespace: str | None = None) -> SessionSnapshot | None:
@@ -280,14 +299,7 @@ def _coerce_session_snapshot(value: object) -> SessionSnapshot:
     history = value.get("history", [])
     return {
         "grade_band": str(value.get("grade_band") or "6-8"),
-        "history": [
-            {
-                "content": str(item.get("content", "")),
-                "role": str(item.get("role", "")),
-            }
-            for item in history
-            if isinstance(item, dict)
-        ],
+        "history": coerce_session_history(history),
         "student_profile": {
             str(key): str(item)
             for key, item in cast(dict[object, object], value.get("student_profile", {})).items()
@@ -394,7 +406,7 @@ def _coerce_archive(value: object) -> list[PersistedLessonArchiveEntry]:
 def _clone_session_snapshot(snapshot: SessionSnapshot) -> SessionSnapshot:
     return {
         "grade_band": snapshot["grade_band"],
-        "history": [dict(item) for item in snapshot["history"]],
+        "history": coerce_session_history(snapshot["history"]),
         "student_profile": dict(snapshot["student_profile"]),
         "subject": snapshot["subject"],
     }
