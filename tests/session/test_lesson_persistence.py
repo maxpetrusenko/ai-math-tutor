@@ -1,9 +1,45 @@
+import json
+
 from backend.session.persistence import (
     archive_lesson_thread,
     load_archived_lesson_thread,
+    load_session_snapshot,
     read_lesson_store,
+    save_session_snapshot,
     write_active_lesson_thread,
 )
+
+
+def test_session_snapshot_persistence_trims_legacy_unbounded_history(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("NERDY_SESSION_DATA_DIR", str(tmp_path))
+    history = [
+        {"role": "assistant", "content": f"snapshot-turn-{index}:" + ("y" * 2_500)}
+        for index in range(30)
+    ]
+
+    save_session_snapshot(
+        "legacy-long-snapshot",
+        {
+            "grade_band": "6-8",
+            "history": history,
+            "student_profile": {},
+            "subject": "math",
+        },
+    )
+
+    store = json.loads((tmp_path / "session-store.json").read_text())
+    stored = store["namespaces"]["default"]["snapshots"]["legacy-long-snapshot"]
+    assert len(stored["history"]) == 24
+    assert stored["history"][0]["content"].startswith("snapshot-turn-6:")
+    assert {len(item["content"]) for item in stored["history"]} == {2_000}
+
+    snapshot = load_session_snapshot("legacy-long-snapshot")
+
+    assert snapshot is not None
+    assert len(snapshot["history"]) == 24
+    assert snapshot["history"][0]["content"].startswith("snapshot-turn-6:")
+    assert snapshot["history"][-1]["content"].startswith("snapshot-turn-29:")
+    assert {len(item["content"]) for item in snapshot["history"]} == {2_000}
 
 
 def test_lesson_state_survives_active_and_archived_persistence(monkeypatch, tmp_path) -> None:

@@ -21,6 +21,7 @@ from backend.session.persistence import (
     archive_lesson_thread,
     clear_archived_lesson_threads,
     clear_active_lesson_thread,
+    coerce_session_history,
     load_archived_lesson_thread,
     read_lesson_store,
     write_active_lesson_thread,
@@ -568,16 +569,7 @@ async def _handle_message(
     if message_type == "session.restore":
         raw_history = message.get("history")
         raw_student_profile = message.get("student_profile")
-        history = []
-        if isinstance(raw_history, list):
-            history = [
-                {
-                    "content": str(item.get("content", "")),
-                    "role": str(item.get("role", "")),
-                }
-                for item in raw_history
-                if isinstance(item, dict)
-            ]
+        history = coerce_session_history(raw_history)
         student_profile: dict[str, str] = {}
         if isinstance(raw_student_profile, dict):
             student_profile = {
