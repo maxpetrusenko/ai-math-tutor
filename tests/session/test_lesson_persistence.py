@@ -13,7 +13,7 @@ from backend.session.persistence import (
 def test_session_snapshot_persistence_trims_legacy_unbounded_history(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("NERDY_SESSION_DATA_DIR", str(tmp_path))
     history = [
-        {"role": "assistant", "content": f"snapshot-turn-{index}:" + ("y" * 2_500)}
+        {"role": "assistant-" + ("z" * 80), "content": f"snapshot-turn-{index}:" + ("y" * 2_500)}
         for index in range(30)
     ]
 
@@ -32,6 +32,7 @@ def test_session_snapshot_persistence_trims_legacy_unbounded_history(monkeypatch
     assert len(stored["history"]) == 24
     assert stored["history"][0]["content"].startswith("snapshot-turn-6:")
     assert {len(item["content"]) for item in stored["history"]} == {2_000}
+    assert {len(item["role"]) for item in stored["history"]} == {32}
 
     snapshot = load_session_snapshot("legacy-long-snapshot")
 

@@ -72,6 +72,7 @@ _PERSISTENCE_LOCK = Lock()
 _CURRENT_VERSION = 2
 SESSION_RESTORE_HISTORY_LIMIT = 24
 SESSION_RESTORE_HISTORY_CONTENT_LIMIT = 2_000
+SESSION_RESTORE_HISTORY_ROLE_LIMIT = 32
 
 
 def coerce_session_history(value: object) -> list[dict[str, str]]:
@@ -81,7 +82,7 @@ def coerce_session_history(value: object) -> list[dict[str, str]]:
     history = [
         {
             "content": str(item.get("content", ""))[:SESSION_RESTORE_HISTORY_CONTENT_LIMIT],
-            "role": str(item.get("role", "")),
+            "role": str(item.get("role", ""))[:SESSION_RESTORE_HISTORY_ROLE_LIMIT],
         }
         for item in value
         if isinstance(item, dict)
