@@ -29,6 +29,7 @@ All images are pushed under `ghcr.io/maxpetrusenko/` with tag `sha-${{ github.sh
 Backend and session both build from `backend/Dockerfile`.
 The LiveKit avatar worker builds from `backend/Dockerfile.worker`.
 Frontend builds from `frontend/Dockerfile`.
+The session health path `/api/runtime-options` supports both `GET` and `HEAD` so Coolify and uptime probes can perform bodyless checks without receiving a false 405.
 
 ## Coolify Apps
 

@@ -215,6 +215,15 @@ def test_session_websocket_ignores_late_authentication_messages_when_auth_is_not
     assert transcript == {"type": "transcript.final", "text": "Explain decimals"}
 
 
+def test_runtime_options_health_probe_allows_head_request() -> None:
+    client = TestClient(app)
+
+    response = client.head("/api/runtime-options")
+
+    assert response.status_code == 200
+    assert response.content == b""
+
+
 def test_lesson_history_api_persists_active_and_archived_threads() -> None:
     client = TestClient(app)
     active_thread = {
