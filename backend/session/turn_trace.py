@@ -2,18 +2,27 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
 from backend.monitoring.latency_tracker import LatencyTracker
 
 DEFAULT_TURN_TRACE_DIR = ".nerdy-data/turn-traces"
+_TRACE_ID_PATTERN = re.compile(r"[^A-Za-z0-9_.-]+")
+_TRACE_ID_COMPONENT_MAX_LENGTH = 100
+
+
+def _safe_trace_id(value: object, fallback: str) -> str:
+    raw = str(value or "").strip() or fallback
+    normalized = _TRACE_ID_PATTERN.sub("-", raw).strip(".-")
+    return normalized[:_TRACE_ID_COMPONENT_MAX_LENGTH] or fallback
 
 
 def trace_path(session_id: str, turn_id: str) -> Path:
     trace_dir = Path(os.getenv("NERDY_TURN_TRACE_DIR", DEFAULT_TURN_TRACE_DIR))
     trace_dir.mkdir(parents=True, exist_ok=True)
-    return trace_dir / f"{session_id}-{turn_id}.json"
+    return trace_dir / f"{_safe_trace_id(session_id, 'session')}-{_safe_trace_id(turn_id, 'turn')}.json"
 
 
 def write_turn_trace(payload: dict[str, Any]) -> Path:
