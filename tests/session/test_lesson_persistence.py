@@ -158,3 +158,45 @@ def test_turn_debug_survives_active_and_archived_persistence(monkeypatch, tmp_pa
     archived_debug = archived["conversation"][0]["debug"]
     assert archived_debug["latency"]["speechEndToSttFinalMs"] == 89
     assert archived_debug["sessionEvents"][0]["summary"] == "joined managed room"
+
+
+def test_corrupt_lesson_store_is_quarantined_before_empty_fallback(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("NERDY_SESSION_DATA_DIR", str(tmp_path))
+    store_path = tmp_path / "session-store.json"
+    store_path.write_text('{"namespaces": {')
+
+    lesson_store = read_lesson_store()
+
+    assert lesson_store == {"activeThread": None, "archive": [], "version": 2}
+    assert not store_path.exists()
+    quarantine_files = list(tmp_path.glob("session-store.corrupt-*.json"))
+    assert len(quarantine_files) == 1
+    assert quarantine_files[0].read_text() == '{"namespaces": {'
+
+
+def test_non_object_lesson_store_is_quarantined_before_empty_fallback(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("NERDY_SESSION_DATA_DIR", str(tmp_path))
+    store_path = tmp_path / "session-store.json"
+    store_path.write_text("[]")
+
+    lesson_store = read_lesson_store()
+
+    assert lesson_store == {"activeThread": None, "archive": [], "version": 2}
+    assert not store_path.exists()
+    quarantine_files = list(tmp_path.glob("session-store.corrupt-*.json"))
+    assert len(quarantine_files) == 1
+    assert quarantine_files[0].read_text() == "[]"
+
+
+def test_invalid_utf8_lesson_store_is_quarantined_before_empty_fallback(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("NERDY_SESSION_DATA_DIR", str(tmp_path))
+    store_path = tmp_path / "session-store.json"
+    store_path.write_bytes(b"{\xff")
+
+    lesson_store = read_lesson_store()
+
+    assert lesson_store == {"activeThread": None, "archive": [], "version": 2}
+    assert not store_path.exists()
+    quarantine_files = list(tmp_path.glob("session-store.corrupt-*.json"))
+    assert len(quarantine_files) == 1
+    assert quarantine_files[0].read_bytes() == b"{\xff"
