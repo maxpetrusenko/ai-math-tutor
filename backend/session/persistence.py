@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 from typing import TypedDict, cast
@@ -191,10 +192,14 @@ def _read_store() -> PersistedSessionData:
 
     try:
         payload = json.loads(path.read_text())
-    except Exception:
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        _quarantine_invalid_store(path)
+        return _empty_store()
+    except OSError:
         return _empty_store()
 
     if not isinstance(payload, dict):
+        _quarantine_invalid_store(path)
         return _empty_store()
 
     namespaces = payload.get("namespaces")
@@ -232,6 +237,20 @@ def _read_store() -> PersistedSessionData:
         },
         "version": _CURRENT_VERSION,
     }
+
+
+def _quarantine_invalid_store(path: Path) -> None:
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    quarantine_path = path.with_name(f"{path.stem}.corrupt-{stamp}{path.suffix}")
+    counter = 1
+    while quarantine_path.exists():
+        quarantine_path = path.with_name(f"{path.stem}.corrupt-{stamp}-{counter}{path.suffix}")
+        counter += 1
+
+    try:
+        path.replace(quarantine_path)
+    except OSError:
+        return
 
 
 def _write_store(store: PersistedSessionData) -> None:
