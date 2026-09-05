@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -40,11 +41,27 @@ def fetch_doppler_secrets(*, project: str, config: str) -> dict[str, str]:
     return {str(key): str(value) for key, value in payload.items()}
 
 
+def _write_private_text(path: Path, text: str) -> None:
+    if path.exists():
+        path.chmod(0o600)
+
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = -1
+            handle.write(text)
+    finally:
+        if fd != -1:
+            os.close(fd)
+
+    path.chmod(0o600)
+
+
 def write_env_file(path: Path, *, secrets: dict[str, str], keys: tuple[str, ...]) -> tuple[list[str], list[str]]:
     found = [key for key in keys if secrets.get(key)]
     missing = [key for key in keys if key not in found]
     lines = [f"{key}={secrets[key]}" for key in found]
-    path.write_text("\n".join(lines) + ("\n" if lines else ""))
+    _write_private_text(path, "\n".join(lines) + ("\n" if lines else ""))
     return found, missing
 
 
