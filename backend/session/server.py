@@ -7,7 +7,7 @@ import os
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.livekit import create_avatar_room_session, is_managed_avatar_provider_id
@@ -100,8 +100,12 @@ def get_runtime_options() -> dict[str, object]:
 
 @app.post("/api/avatars/livekit/session")
 async def post_livekit_avatar_session(
+    request: Request,
     payload: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    if not _is_allowed_websocket_origin(request.headers.get("origin")):
+        raise HTTPException(status_code=403, detail="Avatar session origin not allowed")
+
     avatar_provider_id = str((payload or {}).get("avatarProviderId") or "").strip()
     participant_name = str((payload or {}).get("participantName") or "Student").strip() or "Student"
 

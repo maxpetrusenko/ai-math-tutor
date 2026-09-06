@@ -433,6 +433,54 @@ def test_lessons_api_accepts_local_dev_origin_preflight() -> None:
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3012"
 
 
+def test_livekit_avatar_session_rejects_missing_origin_before_bootstrap(monkeypatch) -> None:
+    bootstrap_calls: list[tuple[str, str]] = []
+
+    async def _fake_create_avatar_room_session(avatar_provider_id: str, *, participant_name: str) -> dict[str, object]:
+        bootstrap_calls.append((avatar_provider_id, participant_name))
+        return {"token": "livekit-token"}
+
+    monkeypatch.setattr("backend.session.server.create_avatar_room_session", _fake_create_avatar_room_session)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/avatars/livekit/session",
+        json={"avatarProviderId": "simli-b97a7777-live", "participantName": "Student"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Avatar session origin not allowed"}
+    assert bootstrap_calls == []
+
+
+def test_livekit_avatar_session_allows_configured_origin(monkeypatch) -> None:
+    monkeypatch.setenv("NERDY_ALLOWED_ORIGINS", "https://aitutor.maxpetrusenko.com")
+
+    async def _fake_create_avatar_room_session(avatar_provider_id: str, *, participant_name: str) -> dict[str, object]:
+        return {
+            "avatar_participant_identity": "avatar-simli",
+            "participant_identity": "Student",
+            "provider": "simli",
+            "provider_id": avatar_provider_id,
+            "room_metadata": {},
+            "room_name": "nerdy-room",
+            "token": "livekit-token",
+            "url": "wss://example.livekit.cloud",
+        }
+
+    monkeypatch.setattr("backend.session.server.create_avatar_room_session", _fake_create_avatar_room_session)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/avatars/livekit/session",
+        headers={"Origin": "https://aitutor.maxpetrusenko.com"},
+        json={"avatarProviderId": "simli-b97a7777-live", "participantName": "Student"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["token"] == "livekit-token"
+
+
 def test_session_websocket_rejects_missing_origin() -> None:
     client = TestClient(app)
 
