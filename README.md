@@ -152,6 +152,7 @@ NERDY_RUNTIME_LLM_PROVIDER=gemini
 NERDY_RUNTIME_LLM_FALLBACK_PROVIDER=minimax
 NERDY_TTS_PROVIDER=cartesia
 NERDY_AVATAR_PROVIDER=talkinghead
+NERDY_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 NERDY_AI_LOG_PATH=.nerdy-data/ai-calls.jsonl
 NERDY_ENABLE_LANGSMITH=0
 
@@ -171,6 +172,7 @@ NEXT_PUBLIC_SESSION_WS_URL=ws://127.0.0.1:8000/ws/session
 ```
 
 Typed fixture/demo paths work without live mic credentials. Live STT, LLM, and TTS calls need provider keys.
+For hosted browser flows, set `NERDY_ALLOWED_ORIGINS` to the canonical frontend origin (for example `https://aitutor.maxpetrusenko.com`) so WebSocket and managed-avatar token minting accept the production app and reject cross-site requests.
 
 Refresh local AI keys from Doppler when needed:
 
