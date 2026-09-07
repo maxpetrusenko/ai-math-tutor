@@ -7,7 +7,7 @@ import re
 import time
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, Awaitable, Callable, TypeVar, cast
 
 from backend.ai.langsmith import trace_langsmith_run
 
@@ -17,7 +17,15 @@ _DEFAULT_AI_LOG_PATH = ".nerdy-data/ai-calls.jsonl"
 _MAX_TEXT_LENGTH = 280
 _REDACTED = "[redacted]"
 _SENSITIVE_KEY_MARKERS = ("api_key", "authorization", "token", "secret", "password")
-_URL_SECRET_PATTERN = re.compile(r"([?&](?:key|token|api_key)=)[^&]+", re.IGNORECASE)
+_URL_SECRET_PATTERN = re.compile(r"([?&](?:key|token|api_key|secret|password)=)[^&\s]+", re.IGNORECASE)
+_AUTH_HEADER_SECRET_PATTERN = re.compile(
+    r"\b(Authorization\s*:\s*(?:Bearer|Token|Basic)\s+)[^\s,;&]+",
+    re.IGNORECASE,
+)
+_INLINE_SECRET_PATTERN = re.compile(
+    r"\b((?:api[_-]?key|token|secret|password)\s*[:=]\s*)[^\s,;&]+",
+    re.IGNORECASE,
+)
 
 
 def run_logged_ai_call(
@@ -34,6 +42,8 @@ def run_logged_ai_call(
 ) -> T:
     logger.info("ai call start %s", _json_summary({"provider": provider, "operation": operation}))
     started_at = time.perf_counter()
+    captured_error: Exception | None = None
+    result: object = None
     with _langsmith_trace_context(
         provider=provider,
         operation=operation,
@@ -46,7 +56,8 @@ def run_logged_ai_call(
             result = call()
         except Exception as error:
             duration_ms = _duration_ms(started_at)
-            _end_langsmith_trace(trace_run, outputs={"status": "error", "duration_ms": duration_ms}, error=str(error))
+            error_message = _sanitize_error(error)
+            _end_langsmith_trace(trace_run, outputs={"status": "error", "duration_ms": duration_ms}, error=error_message)
             _record_and_log(
                 logger=logger,
                 provider=provider,
@@ -54,30 +65,33 @@ def run_logged_ai_call(
                 request_payload=request_payload,
                 status="error",
                 duration_ms=duration_ms,
-                error=str(error),
+                error=error_message,
             )
-            raise
+            captured_error = error
+        else:
+            response_payload = response_summarizer(result) if response_summarizer else result
+            duration_ms = _duration_ms(started_at)
+            _end_langsmith_trace(
+                trace_run,
+                outputs={
+                    "status": "success",
+                    "duration_ms": duration_ms,
+                    "response": _sanitize(response_payload),
+                },
+            )
+            _record_and_log(
+                logger=logger,
+                provider=provider,
+                operation=operation,
+                request_payload=request_payload,
+                response_payload=response_payload,
+                status="success",
+                duration_ms=duration_ms,
+            )
 
-        response_payload = response_summarizer(result) if response_summarizer else result
-        duration_ms = _duration_ms(started_at)
-        _end_langsmith_trace(
-            trace_run,
-            outputs={
-                "status": "success",
-                "duration_ms": duration_ms,
-                "response": _sanitize(response_payload),
-            },
-        )
-        _record_and_log(
-            logger=logger,
-            provider=provider,
-            operation=operation,
-            request_payload=request_payload,
-            response_payload=response_payload,
-            status="success",
-            duration_ms=duration_ms,
-        )
-        return result
+    if captured_error is not None:
+        raise captured_error
+    return cast(T, result)
 
 
 async def run_logged_ai_call_async(
@@ -94,6 +108,8 @@ async def run_logged_ai_call_async(
 ) -> T:
     logger.info("ai call start %s", _json_summary({"provider": provider, "operation": operation}))
     started_at = time.perf_counter()
+    captured_error: Exception | None = None
+    result: object = None
     with _langsmith_trace_context(
         provider=provider,
         operation=operation,
@@ -106,7 +122,8 @@ async def run_logged_ai_call_async(
             result = await call()
         except Exception as error:
             duration_ms = _duration_ms(started_at)
-            _end_langsmith_trace(trace_run, outputs={"status": "error", "duration_ms": duration_ms}, error=str(error))
+            error_message = _sanitize_error(error)
+            _end_langsmith_trace(trace_run, outputs={"status": "error", "duration_ms": duration_ms}, error=error_message)
             _record_and_log(
                 logger=logger,
                 provider=provider,
@@ -114,30 +131,33 @@ async def run_logged_ai_call_async(
                 request_payload=request_payload,
                 status="error",
                 duration_ms=duration_ms,
-                error=str(error),
+                error=error_message,
             )
-            raise
+            captured_error = error
+        else:
+            response_payload = response_summarizer(result) if response_summarizer else result
+            duration_ms = _duration_ms(started_at)
+            _end_langsmith_trace(
+                trace_run,
+                outputs={
+                    "status": "success",
+                    "duration_ms": duration_ms,
+                    "response": _sanitize(response_payload),
+                },
+            )
+            _record_and_log(
+                logger=logger,
+                provider=provider,
+                operation=operation,
+                request_payload=request_payload,
+                response_payload=response_payload,
+                status="success",
+                duration_ms=duration_ms,
+            )
 
-        response_payload = response_summarizer(result) if response_summarizer else result
-        duration_ms = _duration_ms(started_at)
-        _end_langsmith_trace(
-            trace_run,
-            outputs={
-                "status": "success",
-                "duration_ms": duration_ms,
-                "response": _sanitize(response_payload),
-            },
-        )
-        _record_and_log(
-            logger=logger,
-            provider=provider,
-            operation=operation,
-            request_payload=request_payload,
-            response_payload=response_payload,
-            status="success",
-            duration_ms=duration_ms,
-        )
-        return result
+    if captured_error is not None:
+        raise captured_error
+    return cast(T, result)
 
 
 def _record_and_log(
@@ -175,6 +195,11 @@ def _append_jsonl_record(record: dict[str, Any]) -> None:
         handle.write(f"{json.dumps(record, sort_keys=True, default=str)}\n")
 
 
+def _sanitize_error(error: object) -> str:
+    sanitized = _sanitize(str(error))
+    return sanitized if isinstance(sanitized, str) else str(sanitized)
+
+
 def _sanitize(value: Any, *, key: str | None = None) -> Any:
     key_lower = (key or "").lower()
     if any(marker in key_lower for marker in _SENSITIVE_KEY_MARKERS):
@@ -190,6 +215,8 @@ def _sanitize(value: Any, *, key: str | None = None) -> Any:
         return {"type": "bytes", "size": len(value)}
     if isinstance(value, str):
         redacted = _URL_SECRET_PATTERN.sub(r"\1[redacted]", value)
+        redacted = _AUTH_HEADER_SECRET_PATTERN.sub(r"\1[redacted]", redacted)
+        redacted = _INLINE_SECRET_PATTERN.sub(r"\1[redacted]", redacted)
         if len(redacted) <= _MAX_TEXT_LENGTH:
             return redacted
         return f"{redacted[:_MAX_TEXT_LENGTH]}..."

@@ -78,6 +78,67 @@ def test_run_logged_ai_call_wraps_llm_calls_in_langsmith_trace(monkeypatch) -> N
     assert captured["outputs"]["status"] == "success"
 
 
+def test_run_logged_ai_call_redacts_secret_bearing_error_strings(tmp_path, caplog, monkeypatch) -> None:
+    monkeypatch.setenv("NERDY_AI_LOG_PATH", str(tmp_path / "ai-calls.jsonl"))
+    perf_values = iter([20.0, 20.25])
+    monkeypatch.setattr("backend.ai.call_logging.time.perf_counter", lambda: next(perf_values))
+    caplog.set_level(logging.ERROR)
+    captured: dict[str, object] = {}
+
+    class _FakeTraceRun:
+        def end(self, *, outputs=None, error=None) -> None:
+            captured["outputs"] = outputs
+            captured["error"] = error
+
+    class _FakeTraceContext:
+        def __enter__(self):
+            return _FakeTraceRun()
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            captured["exit_exc_type"] = exc_type
+            captured["exit_exc"] = exc
+            return None
+
+    def _fake_trace_langsmith_run(**kwargs):
+        captured["trace_kwargs"] = kwargs
+        return _FakeTraceContext()
+
+    monkeypatch.setattr("backend.ai.call_logging.trace_langsmith_run", _fake_trace_langsmith_run)
+
+    def _boom() -> None:
+        raise RuntimeError(
+            "upstream failed https://api.example.test/generate?key=leaky-key&token=leaky-token "
+            "Authorization: Bearer leaky-bearer-value api_key=leaky-inline password=leaky-password"
+        )
+
+    with pytest.raises(RuntimeError, match="leaky-key"):
+        run_logged_ai_call(
+            logger=logging.getLogger("tests.ai.error-redaction"),
+            provider="gemini",
+            operation="llm.stream_response",
+            request_payload={"api_key": "request-secret"},
+            call=_boom,
+            langsmith_project="nerdy-runtime-llm",
+            langsmith_run_type="llm",
+        )
+
+    records = [json.loads(line) for line in (tmp_path / "ai-calls.jsonl").read_text().splitlines()]
+    assert len(records) == 1
+    assert records[0]["status"] == "error"
+    assert records[0]["request"]["api_key"] == "[redacted]"
+    for leaked in ("leaky-key", "leaky-token", "leaky-bearer-value", "leaky-inline", "leaky-password"):
+        assert leaked not in records[0]["error"]
+        assert leaked not in caplog.text
+    assert "key=[redacted]" in records[0]["error"]
+    assert "token=[redacted]" in records[0]["error"]
+    assert "Authorization: Bearer [redacted]" in records[0]["error"]
+    assert "api_key=[redacted]" in records[0]["error"]
+    assert "password=[redacted]" in records[0]["error"]
+    assert captured["error"] == records[0]["error"]
+    assert captured["exit_exc_type"] is None
+    assert captured["exit_exc"] is None
+
+
 @pytest.mark.asyncio
 async def test_run_logged_ai_call_async_records_failures(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("NERDY_AI_LOG_PATH", str(tmp_path / "ai-calls.jsonl"))
