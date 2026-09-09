@@ -1,8 +1,15 @@
 # AI Math Tutor
 
+> **Status: decommissioned 2026-09-08.** The hosted app (`https://aitutor.maxpetrusenko.com`)
+> has been taken offline. The code remains here as the record; secrets and the
+> exact restore recipe are preserved privately in the manager repo
+> (`manager/docs/ai-math-tutor-restore-info.md`). To bring it back, re-deploy
+> the Coolify apps and re-apply the stored env — see that file.
+
 Open source realtime voice tutoring with a visible avatar, interruption-safe playback, and swappable STT, LLM, TTS, and avatar providers.
 
-Live app: <https://aitutor.maxpetrusenko.com>
+Live app: <https://aitutor.maxpetrusenko.com> (currently offline)
+
 
 ![AI Math Tutor live lesson UI](docs/assets/readme-card.png)
 
