@@ -1,0 +1,50 @@
+# Dependabot version updates for ai-math-tutor production dependencies.
+#
+# Coverage is guarded by tests/runtime/test_dependabot_config.py:
+# every production image Dockerfile directory, the workflow action refs,
+# the frontend pnpm manifest, and the root PEP 621 pyproject.toml must
+# have an update entry here.
+#
+# Notes:
+# - The docker ecosystem checks a single directory per entry (no
+#   recursive scanning), so backend/ and frontend/ each get one entry.
+# - Update PRs only touch manifests/lockfiles; the Fast Coolify Deploy
+#   workflow runs on main pushes and workflow_dispatch only, so
+#   dependabot branches cannot trigger production deploys.
+
+version: 2
+updates:
+  # Workflow actions (floating tags and future SHA-pinned refs).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # Production images built from backend/Dockerfile + backend/Dockerfile.worker.
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # Production images built from frontend/Dockerfile.
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # Frontend npm dependencies (pnpm 8 lockfile).
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  # Backend Python dependencies (PEP 621 pyproject.toml at repo root).
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
