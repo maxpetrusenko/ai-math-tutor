@@ -1,0 +1,51 @@
+name: Production Health
+
+# Between-deploy production detector. Post-deploy smoke only runs after a
+# deploy; the 2026-09-10 outage (issue #75) sat silent for ~3 days because
+# nothing probed production between deploys. This workflow probes the canonical
+# endpoints hourly, fails loudly on outage, and keeps exactly one open
+# `production-health:` tracking issue (auto-closed on recovery).
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ai-math-tutor-production-health
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Probe canonical production endpoints
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Probe production health
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          python3 scripts/production_health.py \
+            --manage-issue \
+            --github-repo "$GITHUB_REPOSITORY" \
+            2>&1 | tee production-health-report.txt
+
+      - name: Attach probe report to the job summary
+        if: always()
+        run: |
+          {
+            echo "## Production health probe"
+            echo ""
+            echo '```'
+            cat production-health-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
