@@ -230,6 +230,14 @@ Hosted smoke:
 pnpm smoke:prod -- --frontend-url https://aitutor.maxpetrusenko.com --backend-url https://aitutor-session.maxpetrusenko.com/api/lessons
 ```
 
+Scheduled production health:
+
+[`.github/workflows/production-health.yml`](.github/workflows/production-health.yml) probes the canonical endpoints hourly (and on manual dispatch). A failing probe fails the workflow run and keeps a single open `production-health:` tracking issue until the endpoints recover.
+
+```bash
+python3 scripts/production_health.py
+```
+
 Deployment runbook: [`docs/coolify-fast-deploy.md`](docs/coolify-fast-deploy.md)
 
 Managed avatar notes: [`docs/livekit-managed-avatars.md`](docs/livekit-managed-avatars.md)
@@ -238,6 +246,7 @@ Managed avatar notes: [`docs/livekit-managed-avatars.md`](docs/livekit-managed-a
 
 | Failure | What happens | Recovery |
 | --- | --- | --- |
+| Canonical domains unreachable (502/503) | every web/session route fails between deploys; historically silent for days (issue #75) | hourly Production Health workflow fails and files a `production-health:` tracking issue; inspect the Coolify apps and recent deploy runs |
 | Missing STT key | mic path cannot open live transcription | add `DEEPGRAM_API_KEY` or use typed fixture path |
 | Missing TTS key | tutor text can stream but speech output cannot start | add `CARTESIA_API_KEY` or switch TTS provider |
 | LLM provider outage | primary provider can fail or slow the turn | use fallback provider env and inspect AI call JSONL |
