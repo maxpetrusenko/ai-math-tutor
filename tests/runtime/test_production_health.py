@@ -291,3 +291,34 @@ def test_production_health_ignores_pull_requests_when_deduping(monkeypatch, caps
     assert exit_code == 1
     assert len([call for call in calls if call[0] == "POST"]) == 1
     assert "filed alert issue #55" in capsys.readouterr().out
+
+
+def test_production_health_github_requests_declare_json_content_type(monkeypatch) -> None:
+    captured_requests = []
+
+    class FakeResponse:
+        def read(self) -> bytes:
+            return b"{}"
+
+        def getcode(self) -> int:
+            return 200
+
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *args) -> bool:
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        captured_requests.append(req)
+        return FakeResponse()
+
+    monkeypatch.setattr(production_health.request, "urlopen", fake_urlopen)
+
+    status, _ = production_health._github_request(
+        "POST", "/repos/o/r/issues", token="t", payload={"title": "x"}
+    )
+
+    assert status == 200
+    assert len(captured_requests) == 1
+    assert captured_requests[0].get_header("Content-type") == "application/json"

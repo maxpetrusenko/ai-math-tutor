@@ -145,16 +145,19 @@ def _github_request(
     payload: dict[str, Any] | None = None,
 ) -> tuple[int, Any]:
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "User-Agent": USER_AGENT,
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if data is not None:
+        headers["Content-Type"] = "application/json"
     req = request.Request(
         f"{GITHUB_API_ROOT}{path}",
         data=data,
         method=method,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {token}",
-            "User-Agent": USER_AGENT,
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
+        headers=headers,
     )
     try:
         with request.urlopen(req, timeout=DEFAULT_GITHUB_TIMEOUT_SECONDS) as response:
