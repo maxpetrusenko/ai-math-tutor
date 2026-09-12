@@ -6,6 +6,8 @@ import types
 from backend.livekit.avatar_bootstrap import (
     _describe_liveavatar_bootstrap_failure,
     _describe_simli_bootstrap_failure,
+    _validate_liveavatar_target,
+    _validate_simli_avatar_target,
     create_avatar_room_session,
     collect_avatar_bootstrap_errors,
     is_managed_avatar_provider_id,
@@ -93,6 +95,53 @@ def test_invalid_liveavatar_key_error_is_human_readable() -> None:
     assert "LIVEAVATAR_API_KEY" in message
     assert "HEYGEN_API_KEY" in message
     assert "not enough" in message
+
+
+def test_avatar_provider_validation_requests_use_bounded_timeout(monkeypatch) -> None:
+    from backend.livekit import avatar_bootstrap as avatar_bootstrap_module
+
+    captured_timeouts = []
+
+    class FakeResponse:
+        status = 200
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    class FakeSession:
+        def __init__(self, *args, timeout=None, **kwargs) -> None:
+            captured_timeouts.append(timeout)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def post(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(avatar_bootstrap_module.aiohttp, "ClientSession", FakeSession)
+    simli_target = resolve_managed_avatar_metadata("simli-b97a7777-live", {"SIMLI_FACE_ID": "compose-face"})
+    liveavatar_target = resolve_managed_avatar_metadata(
+        "heygen-liveavatar-default",
+        {"LIVEAVATAR_AVATAR_ID": "avatar-123"},
+    )
+
+    asyncio.run(_validate_simli_avatar_target(simli_target, {"SIMLI_API_KEY": "simli"}))
+    asyncio.run(
+        _validate_liveavatar_target(
+            liveavatar_target,
+            {"LIVEAVATAR_API_KEY": "liveavatar", "LIVEKIT_URL": "wss://example.livekit.cloud"},
+        )
+    )
+
+    assert len(captured_timeouts) == 2
+    assert all(timeout is not None for timeout in captured_timeouts)
+    assert [timeout.total for timeout in captured_timeouts] == [10, 10]
 
 
 def test_create_avatar_room_session_loads_local_env_when_explicit_env_missing(monkeypatch) -> None:
