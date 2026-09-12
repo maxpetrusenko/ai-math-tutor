@@ -16,6 +16,7 @@ LIVEKIT_AVATAR_AGENT_NAME = "nerdy-avatar-agent"
 DEFAULT_SIMLI_FACE_ID = "b97a7777-a82e-4925-ad14-861d62c32bec"
 DEFAULT_SIMLI_AVATAR_PARTICIPANT_IDENTITY = "avatar-simli"
 DEFAULT_LIVEAVATAR_PARTICIPANT_IDENTITY = "avatar-liveavatar"
+AVATAR_PROVIDER_VALIDATION_TIMEOUT_SECONDS = 10
 
 
 @dataclass(frozen=True)
@@ -155,6 +156,10 @@ def _describe_simli_bootstrap_failure(detail: str, *, face_id: str) -> str:
     return f"Simli session bootstrap failed: {normalized}"
 
 
+def _avatar_provider_validation_timeout() -> aiohttp.ClientTimeout:
+    return aiohttp.ClientTimeout(total=AVATAR_PROVIDER_VALIDATION_TIMEOUT_SECONDS)
+
+
 async def _validate_simli_avatar_target(target: ManagedAvatarTarget, env: Mapping[str, str]) -> None:
     compose_payload = {
         "faceId": target.avatar_id,
@@ -163,7 +168,7 @@ async def _validate_simli_avatar_target(target: ManagedAvatarTarget, env: Mappin
         "maxIdleTime": 30,
     }
 
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(timeout=_avatar_provider_validation_timeout()) as session:
         async with session.post(
             "https://api.simli.ai/compose/token",
             json=compose_payload,
@@ -199,7 +204,7 @@ async def _validate_liveavatar_target(target: ManagedAvatarTarget, env: Mapping[
         "livekit_url": env["LIVEKIT_URL"].strip(),
         "livekit_client_token": "probe",
     }
-    async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession(timeout=_avatar_provider_validation_timeout()) as session:
         payload = {
             "mode": "LITE",
             "avatar_id": target.avatar_id,
