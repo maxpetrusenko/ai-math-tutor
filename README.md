@@ -232,6 +232,8 @@ pnpm smoke:prod -- --frontend-url https://aitutor.maxpetrusenko.com --backend-ur
 
 Deployment runbook: [`docs/coolify-fast-deploy.md`](docs/coolify-fast-deploy.md)
 
+Production incident triage: [`docs/production-incident-triage.md`](docs/production-incident-triage.md)
+
 Managed avatar notes: [`docs/livekit-managed-avatars.md`](docs/livekit-managed-avatars.md)
 
 ## Failure Modes
