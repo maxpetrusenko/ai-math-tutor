@@ -1,8 +1,8 @@
 # Production Incident Triage
 
-Read-only triage for the canonical hosted deploys (`aitutor.maxpetrusenko.com`,
-`aitutor-session.maxpetrusenko.com`). Walk the request path one layer at a time and
-identify the failing layer before anything is restarted.
+Layer-by-layer triage for the canonical hosted deploys (`aitutor.maxpetrusenko.com`,
+`aitutor-session.maxpetrusenko.com`). Read-only until layer 3. Walk the request path one
+layer at a time and identify the failing layer before anything is restarted.
 
 ## When to use this runbook
 
@@ -31,8 +31,10 @@ curl -sS -o /dev/null -m 10 -w "options  %{http_code}\n" https://aitutor-session
 curl -sS -o /dev/null -m 10 -w "lessons  %{http_code}\n" https://aitutor-session.maxpetrusenko.com/api/lessons
 ```
 
-Healthy production: all four return `200`. Record the exact time of the first run; every
-later layer output is more useful with a timestamp.
+Healthy production: all four return `200`. A `000` result or `Could not resolve host`
+means the name did not resolve: that is a layer 1 (DNS) problem, not an app problem.
+Record the exact time of the first run; every later layer output is more useful with a
+timestamp.
 
 ## Layer 1: DNS
 
@@ -47,9 +49,9 @@ curl -sS "https://dns.google/resolve?name=aitutor.maxpetrusenko.com&type=A"
 
 Interpretation:
 
-- `status: 0` with an address (or CNAME) in `Answer`: the record exists, continue to
+- `Status: 0` with an address (or CNAME) in `Answer`: the record exists, continue to
   layer 2.
-- `status: 3` (NXDOMAIN) or no answer: the record is missing from the `maxpetrusenko.com`
+- `Status: 3` (NXDOMAIN) or no answer: the record is missing from the `maxpetrusenko.com`
   zone on Cloudflare. This must be fixed in DNS first; no app-side action can help while
   the name does not resolve. Check the Cloudflare audit log to see when and how the record
   disappeared.
@@ -80,9 +82,10 @@ Interpretation:
   but has no healthy app container to route to. Go to layer 3: the apps are down.
 - Origin `404` with body `page not found`: the proxy has no router for this hostname.
   Check the Coolify app domain configuration. (The legacy sslip aliases answer this way;
-  they are tracked in issue #11.)
-- Origin connection refused or timeout: the proxy itself is down; check the `coolify-proxy`
-  container on the host.
+  they are tracked in issue #11.) The port matters: the same hostname can answer `404`
+  on port 80 while `503` on port 443; compare on 443.
+- Origin connection refused or timeout: the proxy itself is down; check the host reverse
+  proxy container (`coolify-proxy` on current Coolify hosts).
 - Edge `522`/`523` but a working origin: Cloudflare cannot reach the origin; check host
   reachability and ports before touching the apps.
 - Edge failure with a working origin and correct DNS: the problem is at the CDN layer
@@ -93,7 +96,9 @@ Interpretation:
 Read-only inspection on the Coolify host (`vmi3203669`, `173.249.52.27`):
 
 - Open the Coolify dashboard (`http://173.249.52.27:8000`) and find the apps that serve
-  the canonical domains: `ai-math-tutor-web` (frontend) and `ai-math-tutor-session`.
+  the canonical domains: the frontend app behind `aitutor.maxpetrusenko.com` (sources
+  disagree on its name: `ai-math-tutor-web` vs `ai-math-tutor-frontend`) and the session
+  app (`ai-math-tutor-session`).
 - Verify the live app UUID inside Coolify before acting on it. Historically the repo
   docs, the fast deploy workflow matrix, and the fleet deployment catalog have disagreed
   on session/web UUIDs, so trust only what the dashboard shows.
@@ -121,8 +126,8 @@ pnpm smoke:prod -- --frontend-url https://aitutor.maxpetrusenko.com --backend-ur
 - `/api/runtime/status` returns JSON with a `sessionWsUrl` that must point at the session
   host.
 - `/api/runtime-options` returns 200; this is the Coolify health path for the session app.
-- The hosted smoke exercises the frontend, runtime metadata, the lessons API, and the
-  websocket handshake. Any failure there means the incident is not over.
+- The hosted smoke exercises the frontend, the runtime status, and the lessons API. Any
+  failure there means the incident is not over.
 
 ## Decision matrix
 

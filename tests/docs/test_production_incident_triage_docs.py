@@ -24,7 +24,7 @@ def test_production_incident_triage_runbook_exists_and_is_linked() -> None:
     assert "https://cloudflare-dns.com/dns-query" in doc
     assert "https://dns.google/resolve" in doc
     assert "NXDOMAIN" in doc
-    assert "status: 3" in doc
+    assert "Status: 3" in doc
 
     # Edge layer: origin-direct probe and reverse-proxy signatures.
     assert "--resolve" in doc
@@ -45,6 +45,8 @@ def test_production_incident_triage_runbook_exists_and_is_linked() -> None:
     assert "docs/coolify-fast-deploy.md" in doc
     assert "#75" in doc
 
-    # Decision matrix content.
+    # Decision matrix content (header plus separator row so the table cannot degrade to
+    # literal text).
     assert "| Symptom |" in doc
+    assert "| --- |" in doc
     assert "chatbox.maxpetrusenko.com" in doc
