@@ -1,6 +1,7 @@
 # Locked Python runtime dependencies for production image builds.
 #
-# Generated from pyproject.toml (linux/amd64, Python 3.11) with:
+# Generated from pyproject.toml (single platform: linux/amd64, CPython 3.11;
+# no environment markers) with:
 #   uv pip compile pyproject.toml --python-version 3.11 \
 #       --python-platform x86_64-unknown-linux-gnu --no-header -o constraints.txt
 #
@@ -8,8 +9,10 @@
 # `pip install -c constraints.txt .` so production image builds are reproducible
 # instead of resolving floating pyproject.toml ranges at build time.
 #
-# Bump procedure: re-run the generation command above in a dedicated PR; do not
-# hand-edit pins. The `.[dev]` test extras are intentionally not pinned here.
+# Bump procedure: run the generation command above in a dedicated PR; it rewrites
+# this file without the header, so restore this header block afterwards, then run
+# the runtime guard tests. Never hand-edit individual pins. The `.[dev]` test
+# extras are intentionally not pinned here.
 aiofiles==25.1.0
     # via
     #   livekit
