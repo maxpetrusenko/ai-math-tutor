@@ -10,7 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY pyproject.toml README.md /app/
+COPY pyproject.toml README.md constraints.txt /app/
 COPY backend /app/backend
 COPY eval /app/eval
 
@@ -19,7 +19,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN for attempt in 1 2 3 4 5; do \
-        pip install --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" . \
+        pip install --retries "$PIP_RETRIES" --timeout "$PIP_DEFAULT_TIMEOUT" -c constraints.txt . \
             && rm -rf /root/.cache/pip \
             && exit 0; \
         sleep "$((attempt * 15))"; \
