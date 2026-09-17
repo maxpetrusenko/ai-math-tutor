@@ -4,7 +4,8 @@ The session deployment serves health probes and lesson APIs before any tutor
 turn runs. Importing the LangChain provider SDKs at process boot adds ~1.7s to
 every start (deploys, restarts, crash recovery) for code paths the process may
 never use. These tests keep the heavy SDK stacks out of the boot import graph so
-they load lazily on first live model construction instead.
+they load on demand instead: provider SDKs when a live model is first
+constructed, LangSmith when a logged AI call first runs.
 """
 
 from __future__ import annotations
@@ -43,8 +44,11 @@ def _heavy_modules_after_import(target: str, heavy_modules: tuple[str, ...]) -> 
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
-        check=True,
     )
+    if completed.returncode != 0:
+        raise AssertionError(
+            f"import probe for {target!r} failed (exit {completed.returncode}):\n{completed.stderr}"
+        )
     return json.loads(completed.stdout.strip().splitlines()[-1])
 
 
