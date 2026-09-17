@@ -11,11 +11,10 @@ from backend.llm.langchain_bridge import (
     summarize_langchain_llm_input,
     summarize_langchain_llm_output,
 )
+from backend.llm.model_defaults import DEFAULT_GEMINI_MODEL
 from backend.llm.response_policy import shape_tutor_response
 from backend.monitoring.latency_tracker import LatencyTracker
-from langchain_google_genai import ChatGoogleGenerativeAI
 
-DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 DEFAULT_GEMINI_LIVE_TIMEOUT_SECONDS = 10.0
 MIN_GEMINI_LIVE_TIMEOUT_SECONDS = 10.0
 logger = logging.getLogger(__name__)
@@ -97,6 +96,8 @@ class GeminiFallbackClient:
         started_at = time.perf_counter()
         model = model.strip() or DEFAULT_GEMINI_MODEL
         prompt_value = build_langchain_prompt_value(messages)
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
         llm = ChatGoogleGenerativeAI(
             model=model,
             api_key=api_key,

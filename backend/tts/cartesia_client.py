@@ -10,11 +10,11 @@ from urllib import request
 
 from backend.ai.call_logging import run_logged_ai_call
 from backend.benchmarks.run_latency_benchmark import load_local_env
+from backend.llm.model_defaults import DEFAULT_CARTESIA_MODEL
 from backend.monitoring.latency_tracker import LatencyTracker
 
 CARTESIA_BYTES_URL = "https://api.cartesia.ai/tts/bytes"
 CARTESIA_VERSION = "2025-04-16"
-DEFAULT_CARTESIA_MODEL = "sonic-2"
 DEFAULT_CARTESIA_VOICE_ID = "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4"
 DEFAULT_CARTESIA_LANGUAGE = "en"
 DEFAULT_CARTESIA_SAMPLE_RATE = 22050

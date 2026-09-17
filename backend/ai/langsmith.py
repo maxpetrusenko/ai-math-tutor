@@ -4,8 +4,6 @@ from contextlib import contextmanager
 import os
 from typing import Any, Iterator, MutableMapping
 
-from langsmith.run_helpers import trace, tracing_context
-
 
 def enable_langsmith_tracing(project_name: str, *, env: MutableMapping[str, str] | None = None) -> bool:
     target_env = env if env is not None else os.environ
@@ -49,6 +47,10 @@ def trace_langsmith_run(
         or target_env.get("LANGCHAIN_PROJECT")
         or project_name
     ).strip()
+    # Imported on demand: session boot must not pay the LangSmith SDK import
+    # cost, and tracing is only needed once a logged AI call actually runs.
+    from langsmith.run_helpers import trace, tracing_context
+
     with tracing_context(project_name=resolved_project, enabled=enabled):
         with trace(
             run_name,
