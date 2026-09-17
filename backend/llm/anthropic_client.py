@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from backend.llm.langchain_chat_client import BaseLangChainChatClient
-from langchain_anthropic import ChatAnthropic
+from backend.llm.model_defaults import DEFAULT_ANTHROPIC_MODEL
 
-DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-0"
+if TYPE_CHECKING:
+    from langchain_anthropic import ChatAnthropic
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,6 +21,8 @@ class AnthropicClient(BaseLangChainChatClient):
         super().__init__(logger=logger)
 
     def _build_chat_model(self, *, model: str, api_key: str) -> ChatAnthropic:
+        from langchain_anthropic import ChatAnthropic
+
         return ChatAnthropic(
             model_name=model,
             api_key=api_key,

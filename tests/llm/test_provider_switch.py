@@ -87,7 +87,7 @@ def test_gemini_fallback_client_uses_live_api_when_key_present(monkeypatch) -> N
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-test")
     monkeypatch.setenv("NERDY_RUNTIME_LLM_MODEL", "gemini-3-flash-preview")
     monkeypatch.setattr("backend.llm.gemini_fallback_client.load_local_env", lambda: [])
-    monkeypatch.setattr("backend.llm.gemini_fallback_client.ChatGoogleGenerativeAI", _FakeModel)
+    monkeypatch.setattr("langchain_google_genai.ChatGoogleGenerativeAI", _FakeModel)
     monkeypatch.setattr("backend.llm.gemini_fallback_client.time.perf_counter", lambda: next(perf_values))
 
     result = client.stream_response(
@@ -124,7 +124,7 @@ def test_openai_client_uses_live_api_when_key_present(monkeypatch) -> None:
 
     monkeypatch.setenv("OPENAI_API_KEY", "openai-test")
     monkeypatch.setattr("backend.llm.langchain_chat_client.load_local_env", lambda: [])
-    monkeypatch.setattr("backend.llm.openai_client.ChatOpenAI", _FakeModel)
+    monkeypatch.setattr("langchain_openai.ChatOpenAI", _FakeModel)
     monkeypatch.setattr("backend.llm.langchain_chat_client.time.perf_counter", lambda: next(perf_values))
 
     result = client.stream_response(
@@ -161,7 +161,7 @@ def test_anthropic_client_uses_live_api_when_key_present(monkeypatch) -> None:
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-test")
     monkeypatch.setattr("backend.llm.langchain_chat_client.load_local_env", lambda: [])
-    monkeypatch.setattr("backend.llm.anthropic_client.ChatAnthropic", _FakeModel)
+    monkeypatch.setattr("langchain_anthropic.ChatAnthropic", _FakeModel)
     monkeypatch.setattr("backend.llm.langchain_chat_client.time.perf_counter", lambda: next(perf_values))
 
     result = client.stream_response(
@@ -200,7 +200,7 @@ def test_gemini_fallback_client_enforces_google_min_timeout(monkeypatch) -> None
     monkeypatch.setenv("GEMINI_API_KEY", "gemini-test")
     monkeypatch.setenv("NERDY_LIVE_LLM_TIMEOUT_SECONDS", "4")
     monkeypatch.setattr("backend.llm.gemini_fallback_client.load_local_env", lambda: [])
-    monkeypatch.setattr("backend.llm.gemini_fallback_client.ChatGoogleGenerativeAI", _FakeModel)
+    monkeypatch.setattr("langchain_google_genai.ChatGoogleGenerativeAI", _FakeModel)
     monkeypatch.setattr("backend.llm.gemini_fallback_client.time.perf_counter", lambda: next(perf_values))
 
     result = client.stream_response(

@@ -3,10 +3,12 @@ from __future__ import annotations
 import os
 from typing import TypedDict
 
-from backend.llm.anthropic_client import DEFAULT_ANTHROPIC_MODEL
-from backend.llm.gemini_fallback_client import DEFAULT_GEMINI_MODEL
-from backend.llm.openai_client import DEFAULT_OPENAI_MODEL
-from backend.tts.cartesia_client import DEFAULT_CARTESIA_MODEL
+from backend.llm.model_defaults import (
+    DEFAULT_ANTHROPIC_MODEL,
+    DEFAULT_CARTESIA_MODEL,
+    DEFAULT_GEMINI_MODEL,
+    DEFAULT_OPENAI_MODEL,
+)
 
 DEFAULT_MINIMAX_LLM_MODEL = "minimax-m2.5"
 DEFAULT_MINIMAX_TTS_MODEL = "minimax-speech"
