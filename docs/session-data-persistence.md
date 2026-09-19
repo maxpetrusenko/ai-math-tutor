@@ -13,8 +13,10 @@ The session store file is `session-store.json`. It holds:
 - the recent lesson archive (last 8 archived lessons)
 - per-session snapshots used to restore a session after a reconnect
 
-The session server also writes related runtime artifacts under the same
-directory. They are not required for correctness:
+The session server also writes related runtime artifacts. Their own env vars
+control their paths, and both default to the working-directory `.nerdy-data/`
+independently of `NERDY_SESSION_DATA_DIR`. They are not required for
+correctness:
 
 - AI call log (`NERDY_AI_LOG_PATH`, default `.nerdy-data/ai-calls.jsonl`)
 - session turn traces (debug artifacts)
@@ -26,9 +28,11 @@ directory. They are not required for correctness:
 2. otherwise `$CWD/.nerdy-data`
 
 The session image sets `WORKDIR /app` and starts the server from there, so the
-in-container default is `/app/.nerdy-data`. When `NERDY_SESSION_DATA_DIR` is
-not set, the server logs a warning at the first store access, so an unbacked
-store path is visible in deployment logs.
+in-container default is `/app/.nerdy-data`. Mounting persistent storage at the
+default path is sufficient; `NERDY_SESSION_DATA_DIR` is only needed when the
+storage lives at a different path. When the env var is not set, the server
+logs a warning at the first store access, so an unbacked store path is visible
+in deployment logs.
 
 ## Requirement for hosted deployments
 
@@ -39,7 +43,9 @@ at the resolved data directory (default `/app/.nerdy-data`):
   mount path equals the data directory. `ai-math-tutor-session` serves the
   lesson API; `ai-math-tutor-backend` runs the same session server image and
   needs the same mount if it serves lesson state (otherwise keep it out of the
-  lesson-serving path).
+  lesson-serving path). The frontend selects its lesson API host with
+  `NEXT_PUBLIC_LESSON_API_URL`; check that value to confirm which app must be
+  durable.
 - If `NERDY_SESSION_DATA_DIR` is set to a custom path, the Persistent Storage
   mount must use that exact path.
 

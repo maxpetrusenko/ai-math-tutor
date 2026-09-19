@@ -158,9 +158,10 @@ def _warn_once_about_default_store_dir(path: Path) -> None:
     _warned_about_default_store_dir = True
     logger.warning(
         "NERDY_SESSION_DATA_DIR is not set; the session store uses %s. Inside "
-        "containers this default path is not durable: lesson data resets when "
-        "the container is recreated. For hosted deployments, mount persistent "
-        "storage and set NERDY_SESSION_DATA_DIR to the mount path "
+        "containers this path is durable only when persistent storage is "
+        "mounted there: without a mount, lesson data resets when the container "
+        "is recreated. For hosted deployments, mount persistent storage at the "
+        "store directory, or set NERDY_SESSION_DATA_DIR to the mount path "
         "(see docs/session-data-persistence.md).",
         path,
     )
