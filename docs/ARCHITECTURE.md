@@ -58,7 +58,7 @@ Responsibilities:
 
 Responsibilities:
 
-- own session state
+- own session state (hosted durability: [Session Data Persistence](session-data-persistence.md))
 - own turn taking
 - create one STT session per websocket turn authority
 - stream STT through the provider-backed session contract

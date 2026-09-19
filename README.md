@@ -164,6 +164,12 @@ ANTHROPIC_API_KEY=
 LANGSMITH_API_KEY=
 ```
 
+Session lesson state is stored under `NERDY_SESSION_DATA_DIR` (default
+`.nerdy-data/` relative to the working directory). Hosted deployments must
+mount persistent storage at that path; otherwise saved lessons reset whenever
+the container is recreated. See
+[`docs/session-data-persistence.md`](docs/session-data-persistence.md).
+
 Frontend:
 
 ```bash
