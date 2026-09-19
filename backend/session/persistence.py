@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from threading import Lock
 from typing import TypedDict, cast
+
+
+logger = logging.getLogger(__name__)
+
+_warned_about_default_store_dir = False
 
 
 class SessionSnapshot(TypedDict):
@@ -145,6 +151,22 @@ def load_archived_lesson_thread(lesson_id: str, namespace: str | None = None) ->
         return None
 
 
+def _warn_once_about_default_store_dir(path: Path) -> None:
+    global _warned_about_default_store_dir
+    if _warned_about_default_store_dir:
+        return
+    _warned_about_default_store_dir = True
+    logger.warning(
+        "NERDY_SESSION_DATA_DIR is not set; the session store uses %s. Inside "
+        "containers this path is durable only when persistent storage is "
+        "mounted there: without a mount, lesson data resets when the container "
+        "is recreated. For hosted deployments, mount persistent storage at the "
+        "store directory, or set NERDY_SESSION_DATA_DIR to the mount path "
+        "(see docs/session-data-persistence.md).",
+        path,
+    )
+
+
 def _store_path() -> Path:
     base_dir = Path.cwd() / ".nerdy-data"
     configured = Path((Path.cwd() / ".nerdy-data").as_posix())
@@ -159,6 +181,7 @@ def _store_path() -> Path:
                 configured = (Path.cwd() / configured).resolve()
         else:
             configured = base_dir
+            _warn_once_about_default_store_dir(configured)
     except Exception:
         configured = base_dir
 
