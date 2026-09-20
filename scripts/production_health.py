@@ -20,8 +20,11 @@ import os
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
-from urllib import error, request
+from typing import Any, Callable, cast
+from urllib import error, parse, request
+
+from websockets.sync.client import connect as websocket_connect
+from websockets.typing import Origin
 
 DEFAULT_FRONTEND_URL = "https://aitutor.maxpetrusenko.com"
 DEFAULT_SESSION_URL = "https://aitutor-session.maxpetrusenko.com"
@@ -30,6 +33,10 @@ DEFAULT_GITHUB_TIMEOUT_SECONDS = 20.0
 GITHUB_API_ROOT = "https://api.github.com"
 ALERT_TITLE_PREFIX = "production-health:"
 USER_AGENT = "nerdy-production-health/1.0"
+WEBSOCKET_MAX_EVENT_BYTES = 65_536
+EXPECTED_SESSION_FIRST_EVENT = "session.started"
+
+SessionWebsocketProbe = Callable[..., "CheckResult | None"]
 
 
 @dataclass
@@ -80,11 +87,100 @@ def _fetch_json(url: str, *, timeout_seconds: float) -> tuple[int, dict[str, Any
     return status, parsed if isinstance(parsed, dict) else None
 
 
+def _origin_from_url(url: str) -> str:
+    """Return the browser-style origin (scheme://host[:port]) for a URL."""
+    parsed = parse.urlparse(url)
+    if not parsed.scheme or not parsed.netloc:
+        return url
+    return parse.urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+
+
+def _fetch_websocket_event(
+    url: str,
+    *,
+    origin: str,
+    timeout_seconds: float,
+) -> Any:
+    """Open the session websocket, return the first JSON event, then close.
+
+    The handshake only: no audio or session messages are sent, so the session
+    app starts nothing beyond its normal `session.started` opening event.
+    """
+    with websocket_connect(
+        url,
+        origin=cast(Origin, origin),
+        open_timeout=timeout_seconds,
+        close_timeout=min(timeout_seconds, 3.0),
+        max_size=WEBSOCKET_MAX_EVENT_BYTES,
+    ) as websocket:
+        payload = websocket.recv(timeout=timeout_seconds)
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError:
+        return payload
+
+
+def _probe_session_websocket(
+    session_ws_url: str | None,
+    *,
+    frontend_origin: str,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+) -> "CheckResult | None":
+    """Verify the advertised session websocket completes its opening handshake.
+
+    The session app lives on a different host than the frontend, so a non-empty
+    `sessionWsUrl` alone does not prove browser sessions can start. Returns None
+    when no websocket URL was advertised (already reported as a runtime-status
+    failure).
+    """
+    if not session_ws_url:
+        return None
+
+    parsed = parse.urlparse(session_ws_url)
+    if parsed.scheme not in {"ws", "wss"} or not parsed.netloc:
+        return CheckResult(
+            name="session-websocket",
+            ok=False,
+            detail=f"{session_ws_url} is not a ws:// or wss:// URL",
+        )
+
+    try:
+        event = _fetch_websocket_event(
+            session_ws_url,
+            origin=frontend_origin,
+            timeout_seconds=timeout_seconds,
+        )
+    except Exception as exc:  # noqa: BLE001 - any handshake failure is a failed probe
+        return CheckResult(
+            name="session-websocket",
+            ok=False,
+            detail=f"{session_ws_url} handshake failed ({type(exc).__name__})",
+        )
+
+    event_type = event.get("type") if isinstance(event, dict) else None
+    if event_type != EXPECTED_SESSION_FIRST_EVENT:
+        return CheckResult(
+            name="session-websocket",
+            ok=False,
+            detail=(
+                f"{session_ws_url} first event was {event_type!r}, "
+                f"expected {EXPECTED_SESSION_FIRST_EVENT!r}"
+            ),
+        )
+
+    return CheckResult(
+        name="session-websocket",
+        ok=True,
+        detail=f"{session_ws_url} completed the session handshake",
+    )
+
+
 def check_endpoints(
     frontend_url: str,
     session_url: str,
     *,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    session_websocket_probe: SessionWebsocketProbe = _probe_session_websocket,
 ) -> list[CheckResult]:
     frontend_url = frontend_url.rstrip("/")
     session_url = session_url.rstrip("/")
@@ -101,8 +197,9 @@ def check_endpoints(
 
     runtime_url = f"{frontend_url}/api/runtime/status"
     runtime_status, runtime_payload = _fetch_json(runtime_url, timeout_seconds=timeout_seconds)
-    session_ws = runtime_payload.get("sessionWsUrl") if isinstance(runtime_payload, dict) else None
-    has_session_ws = isinstance(session_ws, str) and bool(session_ws.strip())
+    raw_session_ws = runtime_payload.get("sessionWsUrl") if isinstance(runtime_payload, dict) else None
+    session_ws = raw_session_ws.strip() if isinstance(raw_session_ws, str) else ""
+    has_session_ws = bool(session_ws)
     runtime_detail = _status_text(runtime_url, runtime_status)
     if runtime_status == 200 and not has_session_ws:
         runtime_detail += " without a sessionWsUrl"
@@ -133,6 +230,15 @@ def check_endpoints(
             detail=_status_text(lessons_url, lessons_status),
         )
     )
+
+    advertised_session_ws = session_ws if has_session_ws else None
+    websocket_result = session_websocket_probe(
+        advertised_session_ws,
+        frontend_origin=_origin_from_url(frontend_url),
+        timeout_seconds=timeout_seconds,
+    )
+    if websocket_result is not None:
+        results.append(websocket_result)
 
     return results
 
@@ -262,7 +368,11 @@ def resolve_alert_issues(repo: str, token: str, results: list[CheckResult]) -> N
             print(f"production-health: warning: could not close alert issue #{number} (status {status})")
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    session_websocket_probe: SessionWebsocketProbe = _probe_session_websocket,
+) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv and argv[0] == "--":
         argv = argv[1:]
@@ -291,7 +401,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     results = check_endpoints(
-        args.frontend_url, args.session_url, timeout_seconds=args.timeout_seconds
+        args.frontend_url,
+        args.session_url,
+        timeout_seconds=args.timeout_seconds,
+        session_websocket_probe=session_websocket_probe,
     )
     for result in results:
         status_word = "ok" if result.ok else "fail"

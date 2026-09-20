@@ -50,3 +50,37 @@ def test_production_health_workflow_runs_the_probe_with_issue_permission() -> No
     assert len(probe_runs) == 1, "expected exactly one step to invoke the production health probe"
     assert "--manage-issue" in probe_runs[0]
     assert "--github-repo" in probe_runs[0]
+
+
+def test_production_health_workflow_installs_probe_dependencies_first() -> None:
+    """The probe imports `websockets`; the runner image does not ship it.
+
+    Without an install step the scheduled detector dies at import time, which
+    silently removes the only between-deploy outage alert (the exact failure
+    class this workflow exists to catch).
+    """
+    data = _workflow_data()
+    steps = data["jobs"]["probe"]["steps"]
+    run_steps = [str(step.get("run", "")) for step in steps]
+
+    probe_index = next(
+        (
+            index
+            for index, run in enumerate(run_steps)
+            if "scripts/production_health.py" in run
+        ),
+        None,
+    )
+    assert probe_index is not None
+
+    install_runs = [
+        run for run in run_steps if "pip install" in run and "websockets" in run
+    ]
+    assert install_runs, "expected the workflow to pip install the probe's websockets dependency"
+
+    install_index = next(
+        index
+        for index, run in enumerate(run_steps)
+        if "pip install" in run and "websockets" in run
+    )
+    assert install_index < probe_index, "dependencies must be installed before running the probe"
