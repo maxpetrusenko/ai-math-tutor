@@ -28,6 +28,17 @@ def _healthy_json(url: str, *, timeout_seconds: float):
     raise AssertionError(f"unexpected JSON probe: {url}")
 
 
+def _healthy_websocket_probe(session_ws_url, *, frontend_origin, timeout_seconds):
+    """Hermetic stand-in for the session websocket handshake probe."""
+    assert session_ws_url == "wss://aitutor-session.maxpetrusenko.com/ws/session"
+    assert frontend_origin == FRONTEND
+    return production_health.CheckResult(
+        name="session-websocket",
+        ok=True,
+        detail=f"{session_ws_url} completed the session handshake",
+    )
+
+
 def test_production_health_passes_when_all_canonical_endpoints_respond(monkeypatch, capsys) -> None:
     status_urls: list[str] = []
     json_urls: list[str] = []
@@ -53,12 +64,15 @@ def test_production_health_passes_when_all_canonical_endpoints_respond(monkeypat
     monkeypatch.setattr(production_health, "_fetch_json", fake_json)
     monkeypatch.setattr(production_health, "_github_request", fail_on_github_call)
 
-    exit_code = production_health.main(["--timeout-seconds", "7"])
+    exit_code = production_health.main(
+        ["--timeout-seconds", "7"],
+        session_websocket_probe=_healthy_websocket_probe,
+    )
 
     assert exit_code == 0
     assert status_urls == [f"{FRONTEND}/", f"{SESSION}/api/lessons"]
     assert json_urls == [f"{FRONTEND}/api/runtime/status", f"{SESSION}/api/runtime-options"]
-    assert "production-health: all 4 checks passed" in capsys.readouterr().out
+    assert "production-health: all 5 checks passed" in capsys.readouterr().out
 
 
 def test_production_health_fails_when_frontend_proxy_returns_503(monkeypatch, capsys) -> None:
@@ -86,7 +100,10 @@ def test_production_health_fails_when_session_runtime_options_unreachable(monkey
     monkeypatch.setattr(production_health, "_fetch_status", fake_status)
     monkeypatch.setattr(production_health, "_fetch_json", fake_json)
 
-    exit_code = production_health.main([])
+    exit_code = production_health.main(
+        [],
+        session_websocket_probe=_healthy_websocket_probe,
+    )
 
     assert exit_code == 1
     out = capsys.readouterr().out
@@ -122,10 +139,13 @@ def test_production_health_accepts_auth_gated_lessons_endpoint(monkeypatch, caps
     monkeypatch.setattr(production_health, "_fetch_status", fake_status)
     monkeypatch.setattr(production_health, "_fetch_json", _healthy_json)
 
-    exit_code = production_health.main(["--timeout-seconds", "7"])
+    exit_code = production_health.main(
+        ["--timeout-seconds", "7"],
+        session_websocket_probe=_healthy_websocket_probe,
+    )
 
     assert exit_code == 0
-    assert "production-health: all 4 checks passed" in capsys.readouterr().out
+    assert "production-health: all 5 checks passed" in capsys.readouterr().out
 
 
 def test_production_health_fails_when_lessons_endpoint_errors(monkeypatch, capsys) -> None:
@@ -137,7 +157,10 @@ def test_production_health_fails_when_lessons_endpoint_errors(monkeypatch, capsy
     monkeypatch.setattr(production_health, "_fetch_status", fake_status)
     monkeypatch.setattr(production_health, "_fetch_json", _healthy_json)
 
-    exit_code = production_health.main(["--timeout-seconds", "7"])
+    exit_code = production_health.main(
+        ["--timeout-seconds", "7"],
+        session_websocket_probe=_healthy_websocket_probe,
+    )
 
     assert exit_code == 1
     assert "fail session-lessons" in capsys.readouterr().out
@@ -217,7 +240,16 @@ def test_production_health_closes_alert_issue_after_recovery(monkeypatch, capsys
     monkeypatch.setattr(production_health, "_github_request", fake_github)
 
     exit_code = production_health.main(
-        ["--timeout-seconds", "7", "--manage-issue", "--github-repo", REPO, "--github-token", TOKEN]
+        [
+            "--timeout-seconds",
+            "7",
+            "--manage-issue",
+            "--github-repo",
+            REPO,
+            "--github-token",
+            TOKEN,
+        ],
+        session_websocket_probe=_healthy_websocket_probe,
     )
 
     assert exit_code == 0

@@ -29,6 +29,9 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v4
 
+      - name: Install probe dependencies
+        run: python3 -m pip install "websockets>=15,<16"
+
       - name: Probe production health
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
