@@ -16,6 +16,7 @@ from backend.llm.prompt_builder import build_tutor_messages
 from backend.llm.topic_shift import filter_history_for_latest_turn
 from backend.llm.provider_switch import ProviderSwitch
 from backend.providers import create_provider
+from backend.runtime.logging_setup import configure_logging
 from backend.session.learning_analytics import summarize_learning_analytics
 from backend.session.persistence import (
     archive_lesson_thread,
@@ -40,6 +41,10 @@ from backend.stt.provider import STTProviderFactory, StreamingSTTProvider, Strea
 from backend.tts.commit_manager import CommitManager
 from backend.tts.provider import TTSProviderFactory
 from backend.turn_taking.controller import SessionController
+
+# uvicorn only configures its own loggers; without this bootstrap the app's
+# INFO records never reach container output (root logger has no handlers).
+configure_logging()
 
 app = FastAPI(title="Nerdy Live Tutor Backend")
 logger = logging.getLogger(__name__)
