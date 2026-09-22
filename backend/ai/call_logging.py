@@ -168,11 +168,29 @@ def _record_and_log(
     log_method("ai call %s %s", status, _json_summary(record))
 
 
+logger = logging.getLogger(__name__)
+
+_write_failure_warned = False
+
+
 def _append_jsonl_record(record: dict[str, Any]) -> None:
-    path = Path(os.getenv("NERDY_AI_LOG_PATH", _DEFAULT_AI_LOG_PATH))
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(f"{json.dumps(record, sort_keys=True, default=str)}\n")
+    """Append one AI call record to the local JSONL log, best-effort.
+
+    A full disk, a read-only mount, or a misconfigured NERDY_AI_LOG_PATH must
+    never turn a successful provider call into a failure or mask the provider's
+    own error. The first write failure is warned about; repeats stay quiet.
+    """
+    global _write_failure_warned
+    try:
+        path = Path(os.getenv("NERDY_AI_LOG_PATH", _DEFAULT_AI_LOG_PATH))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{json.dumps(record, sort_keys=True, default=str)}\n")
+    except (OSError, ValueError) as error:
+        # OSError: unwritable path/parent. ValueError: invalid path or unserializable record.
+        if not _write_failure_warned:
+            _write_failure_warned = True
+            logger.warning("ai call log write failed; continuing without ai call logging: %s", error)
 
 
 def _sanitize(value: Any, *, key: str | None = None) -> Any:
