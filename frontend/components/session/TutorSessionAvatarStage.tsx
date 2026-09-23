@@ -1,9 +1,18 @@
 import React from "react";
 
 import { AvatarProvider } from "../AvatarProvider";
-import { ManagedAvatarSession, type ManagedAvatarSessionHandle, type ManagedAvatarSessionSnapshot } from "../ManagedAvatarSession";
+import type { ManagedAvatarSessionHandle, ManagedAvatarSessionSnapshot } from "../ManagedAvatarSession";
 import type { AvatarConfig, AvatarSpeechCue, AvatarVisualState, WordTimestamp } from "../../lib/avatar_contract";
 import type { LessonState } from "../../lib/lesson_catalog";
+
+// ManagedAvatarSession is the only module that pulls in livekit-client
+// (~107 kB gzip). Keep it behind React.lazy so the default local-avatar
+// session path never downloads that chunk. React.lazy is used instead of
+// next/dynamic because next/dynamic consumes the ref for its own `retry`
+// handle and would break the imperative handle in managedSessionRef.
+const ManagedAvatarSession = React.lazy(() =>
+  import("../ManagedAvatarSession").then((mod) => ({ default: mod.ManagedAvatarSession }))
+);
 
 type TutorSessionAvatarStageProps = {
   audioEnergy?: number;
@@ -58,13 +67,17 @@ export function TutorSessionAvatarStage({
         }`.trim()}
       >
         {isManagedAvatar ? (
-          <ManagedAvatarSession
-            autoStart
-            avatar={selectedAvatar}
-            microphoneMode="off"
-            onStateChange={onManagedSessionStateChange}
-            ref={managedSessionRef}
-          />
+          <React.Suspense
+            fallback={<div className="avatar-surface avatar-surface--managed avatar-surface--hero" />}
+          >
+            <ManagedAvatarSession
+              autoStart
+              avatar={selectedAvatar}
+              microphoneMode="off"
+              onStateChange={onManagedSessionStateChange}
+              ref={managedSessionRef}
+            />
+          </React.Suspense>
         ) : (
           <AvatarProvider
             audioEnergy={audioEnergy}
