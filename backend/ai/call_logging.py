@@ -14,6 +14,7 @@ from backend.ai.langsmith import trace_langsmith_run
 T = TypeVar("T")
 
 _DEFAULT_AI_LOG_PATH = ".nerdy-data/ai-calls.jsonl"
+_DEFAULT_AI_LOG_MAX_BYTES = 5_000_000
 _MAX_TEXT_LENGTH = 280
 _REDACTED = "[redacted]"
 _SENSITIVE_KEY_MARKERS = ("api_key", "authorization", "token", "secret", "password")
@@ -171,8 +172,41 @@ def _record_and_log(
 def _append_jsonl_record(record: dict[str, Any]) -> None:
     path = Path(os.getenv("NERDY_AI_LOG_PATH", _DEFAULT_AI_LOG_PATH))
     path.parent.mkdir(parents=True, exist_ok=True)
+    _rotate_ai_log_if_needed(path)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(f"{json.dumps(record, sort_keys=True, default=str)}\n")
+
+
+def _resolve_ai_log_max_bytes() -> int:
+    raw_value = os.getenv("NERDY_AI_LOG_MAX_BYTES", "").strip()
+    if not raw_value:
+        return _DEFAULT_AI_LOG_MAX_BYTES
+    try:
+        return int(raw_value)
+    except ValueError:
+        return _DEFAULT_AI_LOG_MAX_BYTES
+
+
+def _rotate_ai_log_if_needed(path: Path) -> None:
+    """Bound the AI call log to one file plus one backup generation.
+
+    The log takes one JSONL record per AI call, including one per audio chunk,
+    so it grows quickly in long-lived containers. When the file has reached
+    NERDY_AI_LOG_MAX_BYTES (default 5 MB; 0 or negative keeps an unbounded
+    log), it is renamed to <name>.1 before the next record is appended,
+    replacing any older backup. Rotation is best-effort: a log that cannot be
+    rotated must never block or fail an AI call.
+    """
+    max_bytes = _resolve_ai_log_max_bytes()
+    if max_bytes <= 0:
+        return
+
+    try:
+        if not path.is_file() or path.stat().st_size < max_bytes:
+            return
+        path.replace(path.with_name(path.name + ".1"))
+    except OSError:
+        return
 
 
 def _sanitize(value: Any, *, key: str | None = None) -> Any:
