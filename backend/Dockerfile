@@ -26,6 +26,14 @@ RUN for attempt in 1 2 3 4 5; do \
     done; \
     exit 1
 
+# Baked at image build time by .github/workflows/fast-coolify-deploy.yml
+# (`--build-arg NERDY_BACKEND_REVISION=sha-<commit>`) so the session app reports
+# the serving revision via /api/runtime-options. Empty for local builds.
+# Kept below the dependency layers so the per-commit value does not invalidate
+# the apt/pip caches on every deploy.
+ARG NERDY_BACKEND_REVISION=
+ENV NERDY_BACKEND_REVISION=$NERDY_BACKEND_REVISION
+
 EXPOSE 8080
 
 CMD ["uvicorn", "backend.session.server:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -37,7 +37,20 @@ def runtime_options_payload() -> dict[str, object]:
     return {
         "defaults": default_runtime_config(),
         "options": ALLOWED_RUNTIME_OPTIONS,
+        "revision": build_revision(),
     }
+
+
+def build_revision() -> str | None:
+    """Revision baked into the running image by the deploy workflow.
+
+    ``fast-coolify-deploy.yml`` builds backend/session images with
+    ``--build-arg NERDY_BACKEND_REVISION=sha-<commit>`` so operators and smoke
+    checks can verify which revision is serving without host access. Returns
+    ``None`` for images built outside the workflow (for example local builds).
+    """
+    revision = os.getenv("NERDY_BACKEND_REVISION", "").strip()
+    return revision or None
 
 
 def default_runtime_config() -> RuntimeConfig:

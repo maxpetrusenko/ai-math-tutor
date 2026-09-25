@@ -74,10 +74,12 @@ jobs:
             image: ai-math-tutor-backend
             dockerfile: backend/Dockerfile
             context: .
+            build_args: NERDY_BACKEND_REVISION=sha-${{ github.sha }}
           - app: session
             image: ai-math-tutor-session
             dockerfile: backend/Dockerfile
             context: .
+            build_args: NERDY_BACKEND_REVISION=sha-${{ github.sha }}
           - app: avatar-worker
             image: ai-math-tutor-avatar-worker
             dockerfile: backend/Dockerfile.worker
@@ -114,6 +116,7 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:${{ env.DOCKER_TAG }}
             ${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}:latest
+          build-args: ${{ matrix.build_args }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
 

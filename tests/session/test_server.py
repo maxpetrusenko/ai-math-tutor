@@ -433,6 +433,16 @@ def test_lessons_api_accepts_local_dev_origin_preflight() -> None:
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:3012"
 
 
+def test_runtime_options_route_reports_baked_build_revision(monkeypatch) -> None:
+    monkeypatch.setenv("NERDY_BACKEND_REVISION", "sha-cafebabe")
+    client = TestClient(app)
+
+    response = client.get("/api/runtime-options")
+
+    assert response.status_code == 200
+    assert response.json()["revision"] == "sha-cafebabe"
+
+
 def test_session_websocket_rejects_missing_origin() -> None:
     client = TestClient(app)
 
