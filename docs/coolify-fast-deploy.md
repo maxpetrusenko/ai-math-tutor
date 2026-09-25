@@ -30,6 +30,17 @@ Backend and session both build from `backend/Dockerfile`.
 The LiveKit avatar worker builds from `backend/Dockerfile.worker`.
 Frontend builds from `frontend/Dockerfile`.
 
+## Verify the Deployed Revision
+
+Backend and session images bake `NERDY_BACKEND_REVISION=sha-<commit>` at build time (`--build-arg NERDY_BACKEND_REVISION=sha-${{ github.sha }}`, the same value as the image tag), so the serving revision is queryable over HTTP without host access:
+
+```bash
+curl -s https://aitutor-session.maxpetrusenko.com/api/runtime-options | jq .revision
+# => "sha-<commit>"
+```
+
+An empty revision means the image was built outside this workflow (for example a local `docker build`), and a stale revision after a deploy means Coolify is still serving the previous image tag.
+
 ## Coolify Apps
 
 Covered by the workflow:
