@@ -2,12 +2,13 @@ import {
   archivePersistedLessonThread,
   clearPersistedLessonThread,
   hydrateLessonThreadStore,
+  LEGACY_LESSON_THREAD_STORAGE_KEY,
   listArchivedLessonThreads,
   persistActiveLessonThread,
   readPersistedLessonThread,
   writePersistedLessonThread,
 } from "./lesson_thread_store";
-import { denyStorageAccess, failStorageWrites } from "./storage_test_helpers";
+import { denyStorageAccess, failStorageReads, failStorageRemovals, failStorageWrites } from "./storage_test_helpers";
 import type { PersistedLessonThread } from "./lesson_thread_store";
 
 function buildLessonThread(
@@ -183,6 +184,49 @@ test("resolves when persisting the active thread without browser storage", async
 
   try {
     await expect(persistActiveLessonThread(buildLessonThread("blocked-async"))).resolves.toBeUndefined();
+  } finally {
+    restoreStorage();
+  }
+});
+
+test("hydrates to an empty store when browser storage reads fail", async () => {
+  const restoreStorage = failStorageReads();
+
+  try {
+    await expect(hydrateLessonThreadStore()).resolves.toEqual({ activeThread: null, archive: [], version: 2 });
+  } finally {
+    restoreStorage();
+  }
+});
+
+test("survives remove failures when persisting lesson threads", () => {
+  const restoreStorage = failStorageRemovals();
+
+  try {
+    expect(() => writePersistedLessonThread(buildLessonThread("blocked-remove"))).not.toThrow();
+    expect(readPersistedLessonThread()?.sessionId).toBe("blocked-remove");
+  } finally {
+    restoreStorage();
+  }
+});
+
+test("keeps the legacy lesson thread when the persisted write fails", () => {
+  window.localStorage.clear();
+  window.localStorage.setItem(
+    LEGACY_LESSON_THREAD_STORAGE_KEY,
+    JSON.stringify(
+      buildLessonThread("legacy-kept", {
+        conversation: [{ id: "1", transcript: "legacy lesson", tutorText: "reply" }],
+      })
+    )
+  );
+
+  const restoreStorage = failStorageWrites();
+
+  try {
+    expect(() => writePersistedLessonThread(buildLessonThread("blocked-write"))).not.toThrow();
+    expect(window.localStorage.getItem(LEGACY_LESSON_THREAD_STORAGE_KEY)).not.toBeNull();
+    expect(readPersistedLessonThread()?.sessionId).toBe("legacy-kept");
   } finally {
     restoreStorage();
   }

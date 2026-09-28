@@ -106,7 +106,7 @@ export type PersistedLessonThreadStore = {
 };
 
 const LESSON_THREAD_STORAGE_KEY = "nerdy.lesson-thread.v2";
-const LEGACY_LESSON_THREAD_STORAGE_KEY = "nerdy.lesson-thread.v1";
+export const LEGACY_LESSON_THREAD_STORAGE_KEY = "nerdy.lesson-thread.v1";
 const MAX_ARCHIVED_THREADS = 8;
 
 function isLessonState(value: unknown): value is LessonState {
@@ -315,8 +315,12 @@ function hasLessonContent(thread: PersistedLessonThread): boolean {
 }
 
 function writeStore(store: PersistedLessonThreadStore) {
-  writeStorageValue(LESSON_THREAD_STORAGE_KEY, JSON.stringify(store));
-  removeStorageValue(LEGACY_LESSON_THREAD_STORAGE_KEY);
+  const wrote = writeStorageValue(LESSON_THREAD_STORAGE_KEY, JSON.stringify(store));
+
+  // Keep the legacy copy when the new write fails so an unmigrated thread is never dropped.
+  if (wrote) {
+    removeStorageValue(LEGACY_LESSON_THREAD_STORAGE_KEY);
+  }
 }
 
 function readStore(): PersistedLessonThreadStore {

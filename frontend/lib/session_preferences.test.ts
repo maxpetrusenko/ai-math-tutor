@@ -5,7 +5,7 @@ import {
   type SessionPreferences,
   writeSessionPreferences,
 } from "./session_preferences";
-import { denyStorageAccess, failStorageWrites } from "./storage_test_helpers";
+import { denyStorageAccess, failStorageReads, failStorageWrites } from "./storage_test_helpers";
 
 afterEach(() => {
   window.localStorage.clear();
@@ -77,6 +77,17 @@ test("survives quota errors when saving preferences", () => {
       saved = writeSessionPreferences({ gradeBand: "9-10" });
     }).not.toThrow();
     expect(saved).toMatchObject({ gradeBand: "9-10" });
+  } finally {
+    restoreStorage();
+  }
+});
+
+test("falls back to defaults when storage reads throw", () => {
+  const restoreStorage = failStorageReads();
+
+  try {
+    expect(readSessionPreferences()).toEqual(DEFAULT_SESSION_PREFERENCES);
+    expect(writeSessionPreferences({ gradeBand: "9-10" })).toMatchObject({ gradeBand: "9-10" });
   } finally {
     restoreStorage();
   }

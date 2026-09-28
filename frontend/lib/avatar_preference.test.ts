@@ -3,7 +3,7 @@ import {
   readAvatarProviderPreference,
   writeAvatarProviderPreference,
 } from "./avatar_preference";
-import { denyStorageAccess, failStorageWrites } from "./storage_test_helpers";
+import { denyStorageAccess, failStorageReads, failStorageWrites } from "./storage_test_helpers";
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -40,6 +40,16 @@ test("survives quota errors when saving the avatar preference", () => {
 
   try {
     expect(() => writeAvatarProviderPreference("sage-svg-2d")).not.toThrow();
+  } finally {
+    restoreStorage();
+  }
+});
+
+test("reads null when storage reads fail", () => {
+  const restoreStorage = failStorageReads();
+
+  try {
+    expect(readAvatarProviderPreference()).toBeNull();
   } finally {
     restoreStorage();
   }

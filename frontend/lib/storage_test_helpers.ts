@@ -35,3 +35,25 @@ export function failStorageWrites(): () => void {
     spy.mockRestore();
   };
 }
+
+/** Makes every storage read throw while the storage object stays reachable. */
+export function failStorageReads(): () => void {
+  const spy = vi.spyOn(window.localStorage, "getItem").mockImplementation(() => {
+    throw new DOMException("The operation is insecure.", "SecurityError");
+  });
+
+  return () => {
+    spy.mockRestore();
+  };
+}
+
+/** Makes every storage removal throw while the storage object stays reachable. */
+export function failStorageRemovals(): () => void {
+  const spy = vi.spyOn(window.localStorage, "removeItem").mockImplementation(() => {
+    throw new DOMException("The operation is insecure.", "SecurityError");
+  });
+
+  return () => {
+    spy.mockRestore();
+  };
+}
