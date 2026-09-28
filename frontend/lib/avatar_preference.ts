@@ -1,16 +1,15 @@
 import { DEFAULT_AVATAR_ID, isSelectableAvatarId, migrateAvatarProviderId } from "./avatar_manifest";
+import { readStorageValue, writeStorageValue } from "./safe_storage";
 
 export const AVATAR_PROVIDER_COOKIE_NAME = "nerdy_avatar_provider";
 export const AVATAR_PROVIDER_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 export const AVATAR_PROVIDER_STORAGE_KEY = "nerdy_avatar_provider_preference";
 
 export function readAvatarProviderPreference(): string | null {
-  if (typeof window !== "undefined") {
-    const storedValue = window.localStorage.getItem(AVATAR_PROVIDER_STORAGE_KEY);
-    if (storedValue) {
-      const migratedValue = migrateAvatarProviderId(storedValue);
-      return isSelectableAvatarId(migratedValue) ? migratedValue : DEFAULT_AVATAR_ID;
-    }
+  const storedValue = readStorageValue(AVATAR_PROVIDER_STORAGE_KEY);
+  if (storedValue) {
+    const migratedValue = migrateAvatarProviderId(storedValue);
+    return isSelectableAvatarId(migratedValue) ? migratedValue : DEFAULT_AVATAR_ID;
   }
 
   if (typeof document === "undefined") {
@@ -36,9 +35,7 @@ export function writeAvatarProviderPreference(providerId: string) {
 
   const migratedProviderId = migrateAvatarProviderId(providerId);
 
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(AVATAR_PROVIDER_STORAGE_KEY, migratedProviderId);
-  }
+  writeStorageValue(AVATAR_PROVIDER_STORAGE_KEY, migratedProviderId);
 
   document.cookie = `${AVATAR_PROVIDER_COOKIE_NAME}=${encodeURIComponent(migratedProviderId)}; path=/; max-age=${AVATAR_PROVIDER_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`;
 }

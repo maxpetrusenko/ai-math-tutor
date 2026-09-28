@@ -1,10 +1,37 @@
 import {
   archivePersistedLessonThread,
   clearPersistedLessonThread,
+  hydrateLessonThreadStore,
   listArchivedLessonThreads,
+  persistActiveLessonThread,
   readPersistedLessonThread,
   writePersistedLessonThread,
 } from "./lesson_thread_store";
+import { denyStorageAccess, failStorageWrites } from "./storage_test_helpers";
+import type { PersistedLessonThread } from "./lesson_thread_store";
+
+function buildLessonThread(
+  sessionId: string,
+  overrides: Partial<PersistedLessonThread> = {}
+): PersistedLessonThread {
+  return {
+    avatarProviderId: "sage-svg-2d",
+    conversation: [],
+    gradeBand: "6-8",
+    llmModel: "gpt-realtime-mini",
+    llmProvider: "openai-realtime",
+    preference: "",
+    sessionId,
+    studentPrompt: "",
+    subject: "math",
+    transcript: "",
+    ttsModel: "gpt-realtime-mini",
+    ttsProvider: "openai-realtime",
+    tutorText: "",
+    version: 1,
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -111,4 +138,52 @@ test("normalizes duplicate persisted conversation ids on read", () => {
   });
 
   expect(readPersistedLessonThread()?.conversation.map((turn) => turn.id)).toEqual(["1", "1-2"]);
+});
+
+test("survives unavailable browser storage when persisting the active thread", () => {
+  const restoreStorage = denyStorageAccess();
+
+  try {
+    expect(() => writePersistedLessonThread(buildLessonThread("blocked-storage"))).not.toThrow();
+    expect(readPersistedLessonThread()).toBeNull();
+  } finally {
+    restoreStorage();
+  }
+});
+
+test("survives quota errors when persisting lesson threads", () => {
+  const restoreStorage = failStorageWrites();
+
+  try {
+    expect(() => writePersistedLessonThread(buildLessonThread("quota-storage"))).not.toThrow();
+    expect(() =>
+      archivePersistedLessonThread(
+        buildLessonThread("quota-archive", {
+          conversation: [{ id: "1", transcript: "persist this lesson", tutorText: "reply" }],
+        })
+      )
+    ).not.toThrow();
+  } finally {
+    restoreStorage();
+  }
+});
+
+test("hydrates to an empty store when browser storage is unavailable", async () => {
+  const restoreStorage = denyStorageAccess();
+
+  try {
+    await expect(hydrateLessonThreadStore()).resolves.toEqual({ activeThread: null, archive: [], version: 2 });
+  } finally {
+    restoreStorage();
+  }
+});
+
+test("resolves when persisting the active thread without browser storage", async () => {
+  const restoreStorage = denyStorageAccess();
+
+  try {
+    await expect(persistActiveLessonThread(buildLessonThread("blocked-async"))).resolves.toBeUndefined();
+  } finally {
+    restoreStorage();
+  }
 });

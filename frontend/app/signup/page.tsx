@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { writeStorageValue } from "../../lib/safe_storage";
+
 type SignupStep = "email" | "birthday" | "complete";
 
 export default function SignupPage() {
@@ -26,7 +28,7 @@ export default function SignupPage() {
       return;
     }
 
-    localStorage.setItem("nerdy_grade_band", calculateGradeBand(new Date(birthday)));
+    writeStorageValue("nerdy_grade_band", calculateGradeBand(new Date(birthday)));
     setStep("complete");
     setTimeout(() => router.push("/dashboard"), 1500);
   };

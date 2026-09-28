@@ -13,6 +13,7 @@ import {
   DEFAULT_TTS_PROVIDER,
 } from "./runtime_options";
 import { migrateAvatarProviderId } from "./avatar_manifest";
+import { readStorageValue, removeStorageValue, writeStorageValue } from "./safe_storage";
 import type { LessonState } from "./lesson_catalog";
 import type { SessionActivityLogEntry } from "./session_activity_log";
 
@@ -184,14 +185,6 @@ function isPersistedLessonThreadStore(value: unknown): value is PersistedLessonT
   return candidate.version === 2 && Array.isArray(candidate.archive) && "activeThread" in candidate;
 }
 
-function getStorage(): Storage | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  return window.localStorage;
-}
-
 function emptyStore(): PersistedLessonThreadStore {
   return {
     activeThread: null,
@@ -322,22 +315,12 @@ function hasLessonContent(thread: PersistedLessonThread): boolean {
 }
 
 function writeStore(store: PersistedLessonThreadStore) {
-  const storage = getStorage();
-  if (!storage) {
-    return;
-  }
-
-  storage.setItem(LESSON_THREAD_STORAGE_KEY, JSON.stringify(store));
-  storage.removeItem(LEGACY_LESSON_THREAD_STORAGE_KEY);
+  writeStorageValue(LESSON_THREAD_STORAGE_KEY, JSON.stringify(store));
+  removeStorageValue(LEGACY_LESSON_THREAD_STORAGE_KEY);
 }
 
 function readStore(): PersistedLessonThreadStore {
-  const storage = getStorage();
-  if (!storage) {
-    return emptyStore();
-  }
-
-  const rawValue = storage.getItem(LESSON_THREAD_STORAGE_KEY);
+  const rawValue = readStorageValue(LESSON_THREAD_STORAGE_KEY);
   if (rawValue) {
     try {
       const parsed = JSON.parse(rawValue) as unknown;
@@ -349,7 +332,7 @@ function readStore(): PersistedLessonThreadStore {
     }
   }
 
-  const legacyValue = storage.getItem(LEGACY_LESSON_THREAD_STORAGE_KEY);
+  const legacyValue = readStorageValue(LEGACY_LESSON_THREAD_STORAGE_KEY);
   if (!legacyValue) {
     return emptyStore();
   }

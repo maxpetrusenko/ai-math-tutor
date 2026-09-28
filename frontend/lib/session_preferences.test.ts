@@ -2,8 +2,10 @@ import {
   DEFAULT_SESSION_PREFERENCES,
   readSessionPreferences,
   SESSION_PREFERENCES_STORAGE_KEY,
+  type SessionPreferences,
   writeSessionPreferences,
 } from "./session_preferences";
+import { denyStorageAccess, failStorageWrites } from "./storage_test_helpers";
 
 afterEach(() => {
   window.localStorage.clear();
@@ -52,4 +54,30 @@ test("recovers from invalid stored preferences", () => {
   window.localStorage.setItem(SESSION_PREFERENCES_STORAGE_KEY, "{bad json");
 
   expect(readSessionPreferences()).toEqual(DEFAULT_SESSION_PREFERENCES);
+});
+
+test("falls back to defaults when browser storage is unavailable", () => {
+  const restoreStorage = denyStorageAccess();
+
+  try {
+    expect(readSessionPreferences()).toEqual(DEFAULT_SESSION_PREFERENCES);
+    expect(() => writeSessionPreferences({ gradeBand: "9-10" })).not.toThrow();
+    expect(writeSessionPreferences({ gradeBand: "9-10" })).toMatchObject({ gradeBand: "9-10" });
+  } finally {
+    restoreStorage();
+  }
+});
+
+test("survives quota errors when saving preferences", () => {
+  const restoreStorage = failStorageWrites();
+
+  try {
+    let saved: SessionPreferences | null = null;
+    expect(() => {
+      saved = writeSessionPreferences({ gradeBand: "9-10" });
+    }).not.toThrow();
+    expect(saved).toMatchObject({ gradeBand: "9-10" });
+  } finally {
+    restoreStorage();
+  }
 });

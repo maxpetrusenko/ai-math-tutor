@@ -6,6 +6,7 @@ import {
   normalizeRuntimeSelection,
   type RuntimeSelection,
 } from "./runtime_options";
+import { readStorageValue, writeStorageValue } from "./safe_storage";
 
 export const SESSION_PREFERENCES_STORAGE_KEY = "nerdy_session_preferences";
 
@@ -72,14 +73,6 @@ function normalizeLanguage(candidate: unknown) {
   return DEFAULT_SESSION_PREFERENCES.interfaceLanguage;
 }
 
-function resolveStorage(): Storage | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  return window.localStorage;
-}
-
 function normalizeSessionPreferences(candidate: Partial<SessionPreferences> | null | undefined): SessionPreferences {
   const runtimeSelection = normalizeRuntimeSelection({
     llmModel: candidate?.llmModel ?? DEFAULT_SESSION_PREFERENCES.llmModel,
@@ -104,12 +97,7 @@ function normalizeSessionPreferences(candidate: Partial<SessionPreferences> | nu
 }
 
 export function readSessionPreferences(): SessionPreferences {
-  const storage = resolveStorage();
-  if (!storage) {
-    return DEFAULT_SESSION_PREFERENCES;
-  }
-
-  const rawValue = storage.getItem(SESSION_PREFERENCES_STORAGE_KEY);
+  const rawValue = readStorageValue(SESSION_PREFERENCES_STORAGE_KEY);
   if (!rawValue) {
     return DEFAULT_SESSION_PREFERENCES;
   }
@@ -124,19 +112,17 @@ export function readSessionPreferences(): SessionPreferences {
 export function writeSessionPreferences(
   nextPreferences: Partial<SessionPreferences> | SessionPreferences
 ): SessionPreferences {
-  const storage = resolveStorage();
   const merged = normalizeSessionPreferences({
     ...readSessionPreferences(),
     ...nextPreferences,
   });
 
-  storage?.setItem(SESSION_PREFERENCES_STORAGE_KEY, JSON.stringify(merged));
+  writeStorageValue(SESSION_PREFERENCES_STORAGE_KEY, JSON.stringify(merged));
 
   return merged;
 }
 
 export function resetSessionPreferences(): SessionPreferences {
-  const storage = resolveStorage();
-  storage?.setItem(SESSION_PREFERENCES_STORAGE_KEY, JSON.stringify(DEFAULT_SESSION_PREFERENCES));
+  writeStorageValue(SESSION_PREFERENCES_STORAGE_KEY, JSON.stringify(DEFAULT_SESSION_PREFERENCES));
   return DEFAULT_SESSION_PREFERENCES;
 }
