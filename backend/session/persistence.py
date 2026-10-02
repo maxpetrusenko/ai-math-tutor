@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from threading import Lock
 from typing import TypedDict, cast
@@ -58,9 +59,13 @@ class PersistedLessonStore(TypedDict):
     version: int
 
 
+class RetainedSessionSnapshot(SessionSnapshot):
+    updatedAt: float
+
+
 class PersistedNamespaceData(TypedDict):
     lessons: PersistedLessonStore
-    snapshots: dict[str, SessionSnapshot]
+    snapshots: dict[str, RetainedSessionSnapshot]
 
 
 class PersistedSessionData(TypedDict):
@@ -70,6 +75,13 @@ class PersistedSessionData(TypedDict):
 
 _PERSISTENCE_LOCK = Lock()
 _CURRENT_VERSION = 2
+
+# Upper bound on retained session snapshots per namespace.  Every snapshot save
+# rewrites the whole store file, and snapshots are only removed on an explicit
+# session reset, so an unbounded snapshots map grows the store file (and the
+# per-turn write cost that scales with it) for the lifetime of a deployment.
+# Beyond this limit the least-recently-written snapshots are evicted first.
+SESSION_SNAPSHOT_RETENTION_LIMIT = 100
 
 
 def load_session_snapshot(session_id: str, namespace: str | None = None) -> SessionSnapshot | None:
@@ -84,7 +96,7 @@ def load_session_snapshot(session_id: str, namespace: str | None = None) -> Sess
 def save_session_snapshot(session_id: str, snapshot: SessionSnapshot, namespace: str | None = None) -> None:
     with _PERSISTENCE_LOCK:
         store = _read_store()
-        _namespace_data(store, namespace)["snapshots"][session_id] = _clone_session_snapshot(snapshot)
+        _namespace_data(store, namespace)["snapshots"][session_id] = _stamp_session_snapshot(snapshot)
         _write_store(store)
 
 
@@ -235,10 +247,45 @@ def _read_store() -> PersistedSessionData:
 
 
 def _write_store(store: PersistedSessionData) -> None:
+    _enforce_snapshot_retention(store)
     path = _store_path()
     temp_path = path.with_suffix(".tmp")
     temp_path.write_text(json.dumps(store, indent=2, sort_keys=True))
     temp_path.replace(path)
+
+
+def _enforce_snapshot_retention(store: PersistedSessionData) -> None:
+    for namespace in store["namespaces"].values():
+        snapshots = namespace["snapshots"]
+        excess = len(snapshots) - SESSION_SNAPSHOT_RETENTION_LIMIT
+        if excess <= 0:
+            continue
+        least_recent_first = sorted(
+            snapshots.items(),
+            key=lambda item: (_session_snapshot_recency(item[1]), item[0]),
+        )
+        for session_id, _snapshot in least_recent_first[:excess]:
+            del snapshots[session_id]
+
+
+def _stamp_session_snapshot(snapshot: SessionSnapshot) -> RetainedSessionSnapshot:
+    stamped = cast(RetainedSessionSnapshot, _clone_session_snapshot(snapshot))
+    stamped["updatedAt"] = _now()
+    return stamped
+
+
+def _session_snapshot_recency(snapshot: RetainedSessionSnapshot) -> float:
+    return _coerce_updated_at(snapshot.get("updatedAt"))
+
+
+def _coerce_updated_at(value: object) -> float:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return 0.0
+
+
+def _now() -> float:
+    return time.time()
 
 
 def _namespace_key(namespace: str | None) -> str:
@@ -273,9 +320,15 @@ def _coerce_namespace(value: dict[object, object]) -> PersistedNamespaceData:
     }
 
 
-def _coerce_session_snapshot(value: object) -> SessionSnapshot:
+def _coerce_session_snapshot(value: object) -> RetainedSessionSnapshot:
     if not isinstance(value, dict):
-        return {"grade_band": "6-8", "history": [], "student_profile": {}, "subject": "general"}
+        return {
+            "grade_band": "6-8",
+            "history": [],
+            "student_profile": {},
+            "subject": "general",
+            "updatedAt": 0.0,
+        }
 
     history = value.get("history", [])
     return {
@@ -296,6 +349,7 @@ def _coerce_session_snapshot(value: object) -> SessionSnapshot:
         if isinstance(value.get("student_profile"), dict)
         else {},
         "subject": str(value.get("subject") or "general"),
+        "updatedAt": _coerce_updated_at(value.get("updatedAt")),
     }
 
 
