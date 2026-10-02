@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from pathlib import Path
 from threading import Lock
@@ -279,7 +280,7 @@ def _session_snapshot_recency(snapshot: RetainedSessionSnapshot) -> float:
 
 
 def _coerce_updated_at(value: object) -> float:
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
         return float(value)
     return 0.0
 

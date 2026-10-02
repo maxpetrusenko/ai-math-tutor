@@ -114,7 +114,7 @@ def test_retention_applies_per_namespace(monkeypatch, tmp_path) -> None:
     for index in range(3):
         save_session_snapshot(f"alpha-{index}", _snapshot(f"alpha-{index}"), namespace="alpha-ns")
         time.sleep(0.01)
-    for index in range(2):
+    for index in range(3):
         save_session_snapshot(f"beta-{index}", _snapshot(f"beta-{index}"), namespace="beta-ns")
         time.sleep(0.01)
 
@@ -122,7 +122,7 @@ def test_retention_applies_per_namespace(monkeypatch, tmp_path) -> None:
     alpha_ids = sorted(store["namespaces"]["alpha-ns"]["snapshots"].keys())
     beta_ids = sorted(store["namespaces"]["beta-ns"]["snapshots"].keys())
     assert alpha_ids == ["alpha-1", "alpha-2"]
-    assert beta_ids == ["beta-0", "beta-1"]
+    assert beta_ids == ["beta-1", "beta-2"]
 
 
 def test_legacy_store_without_recency_metadata_is_trimmed_deterministically(monkeypatch, tmp_path) -> None:
@@ -155,3 +155,35 @@ def test_legacy_store_without_recency_metadata_is_trimmed_deterministically(monk
     save_session_snapshot("zeta", _snapshot("zeta"))
 
     assert sorted(_stored_snapshot_ids(tmp_path)) == ["delta", "zeta"]
+
+
+def test_non_finite_recency_values_are_treated_as_oldest(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("NERDY_SESSION_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(persistence, "SESSION_SNAPSHOT_RETENTION_LIMIT", 1)
+
+    (tmp_path / "session-store.json").write_text(
+        json.dumps(
+            {
+                "namespaces": {
+                    "default": {
+                        "lessons": {"activeThread": None, "archive": [], "version": 2},
+                        "snapshots": {
+                            "pinned": {
+                                "grade_band": "6-8",
+                                "history": [],
+                                "student_profile": {},
+                                "subject": "math",
+                                "updatedAt": float("inf"),
+                            }
+                        },
+                    }
+                },
+                "version": 2,
+            }
+        )
+    )
+
+    save_session_snapshot("fresh", _snapshot("fresh"))
+
+    assert sorted(_stored_snapshot_ids(tmp_path)) == ["fresh"]
+    assert load_session_snapshot("fresh") == _snapshot("fresh")
